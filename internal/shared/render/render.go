@@ -1,0 +1,128 @@
+// Package render wraps html/template parsing and provides helpers for writing
+// HTML and 422 form-error responses (htmx-friendly).
+//
+// Templates are organised as one file per page plus a shared base.html. Each
+// page declares a {{define "content"}} block that base.html renders. Because
+// html/template's template set is global per *Template, we parse a fresh
+// (base + page) set every time a page is rendered, keyed by page filename.
+// This is slightly slower than caching one mega-set but it's the only way to
+// keep "content" overrides isolated per page.
+package render
+
+import (
+	"bytes"
+	"embed"
+	"fmt"
+	"html/template"
+	"io/fs"
+	"net/http"
+	"sync"
+)
+
+type Renderer struct {
+	fs    fs.FS
+	dev   bool
+	mu    sync.RWMutex
+	cache map[string]*template.Template
+}
+
+func New(templates fs.FS, dev bool) (*Renderer, error) {
+	r := &Renderer{fs: templates, dev: dev, cache: map[string]*template.Template{}}
+	if !dev {
+		if err := r.warm(); err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
+}
+
+func NewFromEmbed(efs embed.FS, root string, dev bool) (*Renderer, error) {
+	sub, err := fs.Sub(efs, root)
+	if err != nil {
+		return nil, err
+	}
+	return New(sub, dev)
+}
+
+func (r *Renderer) warm() error {
+	return fs.WalkDir(r.fs, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || path == "base.html" {
+			return err
+		}
+		_, perr := r.parsePage(path)
+		return perr
+	})
+}
+
+func (r *Renderer) parsePage(name string) (*template.Template, error) {
+	t := template.New("").Funcs(funcMap())
+	baseSrc, err := fs.ReadFile(r.fs, "base.html")
+	if err == nil {
+		if _, err := t.New("base.html").Parse(string(baseSrc)); err != nil {
+			return nil, fmt.Errorf("render: parse base.html: %w", err)
+		}
+	}
+	pageSrc, err := fs.ReadFile(r.fs, name)
+	if err != nil {
+		return nil, fmt.Errorf("render: read %s: %w", name, err)
+	}
+	if _, err := t.New(name).Parse(string(pageSrc)); err != nil {
+		return nil, fmt.Errorf("render: parse %s: %w", name, err)
+	}
+	if !r.dev {
+		r.mu.Lock()
+		r.cache[name] = t
+		r.mu.Unlock()
+	}
+	return t, nil
+}
+
+func (r *Renderer) lookup(name string) (*template.Template, error) {
+	if !r.dev {
+		r.mu.RLock()
+		t, ok := r.cache[name]
+		r.mu.RUnlock()
+		if ok {
+			return t, nil
+		}
+	}
+	return r.parsePage(name)
+}
+
+func (r *Renderer) HTML(w http.ResponseWriter, name string, data any) {
+	r.Status(w, http.StatusOK, name, data)
+}
+
+func (r *Renderer) Status(w http.ResponseWriter, status int, name string, data any) {
+	t, err := r.lookup(name)
+	if err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+		return
+	}
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, name, data); err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// Error renders the generic error page. Never leaks stack traces.
+func (r *Renderer) Error(w http.ResponseWriter, status int) {
+	t, err := r.lookup("error.html")
+	if err != nil {
+		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_ = t.ExecuteTemplate(w, "error.html", map[string]any{"Status": status, "Message": http.StatusText(status)})
+}
+
+func funcMap() template.FuncMap {
+	return template.FuncMap{
+		"safe": func(s string) template.HTML { return template.HTML(s) }, //nolint:gosec
+	}
+}
