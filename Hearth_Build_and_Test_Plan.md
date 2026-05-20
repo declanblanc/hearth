@@ -27,17 +27,17 @@ These apply throughout the build. Documenting once to avoid repetition.
 
 These are not specified in the Technical Plan but a developer will need numbers. Treat as defaults; tune as needed.
 
-| Setting | Default |
-|---|---|
-| Username | 3–30 chars, `[a-z0-9_]`, lowercase, unique, immutable |
-| Display name | 1–50 chars |
-| Bio | 0–1000 chars |
-| Pronouns | 0–50 chars |
-| Password | minimum 12 chars, hashed with argon2id (no other complexity rules per NIST guidance) |
-| Session lifetime | 30 days, refreshed on activity |
-| Email verification token lifetime | 24 hours |
-| Password reset token lifetime | 1 hour |
-| Soft-delete retention before hard delete | 30 days |
+| Setting                                  | Default                                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------ |
+| Username                                 | 3–30 chars, `[a-z0-9_]`, lowercase, unique, immutable                                |
+| Display name                             | 1–50 chars                                                                           |
+| Bio                                      | 0–1000 chars                                                                         |
+| Pronouns                                 | 0–50 chars                                                                           |
+| Password                                 | minimum 12 chars, hashed with argon2id (no other complexity rules per NIST guidance) |
+| Session lifetime                         | 30 days, refreshed on activity                                                       |
+| Email verification token lifetime        | 24 hours                                                                             |
+| Password reset token lifetime            | 1 hour                                                                               |
+| Soft-delete retention before hard delete | 30 days                                                                              |
 
 ### Logging and errors
 
@@ -97,10 +97,12 @@ Establish the deployment pipeline, the database, and the authentication system. 
 ### Testing plan
 
 **Automated**
+
 - CI runs lint, vet, and tests on every PR; merges blocked on red CI.
 - Smoke test post-deploy: `GET /healthz` returns 200.
 
 **Manual**
+
 - Deploy a trivial change end-to-end (branch → PR → merge → deploy → verify in prod).
 - Confirm Fly.io TLS cert auto-renewal is configured.
 - Confirm R2 bucket credentials work via a one-off upload script.
@@ -127,10 +129,12 @@ Establish the deployment pipeline, the database, and the authentication system. 
 ### Testing plan
 
 **Automated**
+
 - Test that runs all migrations against a fresh in-memory DB and asserts expected tables/columns/indexes exist.
 - Per-migration rollback test: apply, roll back, confirm DB state matches pre-application.
 
 **Manual**
+
 - Force a write, watch Litestream upload WAL segments to R2.
 - Simulate disaster recovery: spin up a new instance, restore from Litestream, confirm the test write is present.
 
@@ -155,6 +159,7 @@ Establish the deployment pipeline, the database, and the authentication system. 
 ### Testing plan
 
 **Automated**
+
 - Unit tests for input validation (each rule, both pass and fail cases).
 - Integration test: full signup flow with stubbed email; assert exactly one email queued with the right token.
 - Integration test: duplicate email/username returns 422 with field-level error.
@@ -162,6 +167,7 @@ Establish the deployment pipeline, the database, and the authentication system. 
 - Integration test: expired token returns expected error and resend option.
 
 **Manual**
+
 - Sign up with a real email; confirm delivery to inbox (not spam) in Gmail and a non-Gmail provider.
 - Try malformed inputs (empty fields, oversize bio, invalid email shapes); confirm UI errors are clear.
 - Sign up flow on mobile Safari and mobile Chrome.
@@ -187,6 +193,7 @@ Establish the deployment pipeline, the database, and the authentication system. 
 ### Testing plan
 
 **Automated**
+
 - Unit test for password hash verification (correct, incorrect, malformed hash).
 - Integration test: login → access protected route → logout → access protected route should redirect.
 - Integration test: wrong password and wrong email return identical body and headers.
@@ -194,6 +201,7 @@ Establish the deployment pipeline, the database, and the authentication system. 
 - Test: 11th failed login attempt from one IP within window returns 429.
 
 **Manual**
+
 - Log in from two browsers; confirm both sessions work independently.
 - Log in, manually clear cookies, confirm redirect to login on next request.
 
@@ -216,6 +224,7 @@ Establish the deployment pipeline, the database, and the authentication system. 
 ### Testing plan
 
 **Automated**
+
 - Integration test: full reset flow happy path.
 - Test: forgot-password for unknown email returns success but no email queued.
 - Test: token expiry enforced.
@@ -223,6 +232,7 @@ Establish the deployment pipeline, the database, and the authentication system. 
 - Test: rate limit triggers.
 
 **Manual**
+
 - Run the flow with a real email; confirm clarity of UI copy at every step.
 
 ## 0.6 Profile view and edit
@@ -243,12 +253,14 @@ Establish the deployment pipeline, the database, and the authentication system. 
 ### Testing plan
 
 **Automated**
+
 - Integration test: profile update persists across requests.
 - Test: oversized images rejected.
 - Test: non-image mime types rejected via mime sniff (not just by extension).
 - Test: old photo is deleted from R2 when replaced.
 
 **Manual**
+
 - Upload from iPhone camera roll (HEIC), Android gallery (JPEG), desktop (PNG).
 - Test extreme inputs: very long bio, emoji, RTL text, mixed scripts.
 - Verify photo persists across logout/login.
@@ -273,12 +285,14 @@ Establish the deployment pipeline, the database, and the authentication system. 
 ### Testing plan
 
 **Automated**
+
 - Integration test: soft-delete renders the account inaccessible.
 - Test: hard-delete sweep finds expired soft-deleted users and removes them.
 - Test: hard-delete cascades to posts, post_edits, comments, media.
 - Test: connection rows referencing the deleted user are gone.
 
 **Manual**
+
 - Soft-delete an account; from a connected account, verify they vanish.
 - Verify R2 media is actually removed (inspect the bucket).
 - Run the sweep manually against a record older than 30 days; confirm clean removal.
@@ -308,12 +322,14 @@ Two users can connect via invite, post text content, and see each other's posts 
 ### Testing plan
 
 **Automated**
+
 - Integration test: invite creation, link format, persistence.
 - Test: rate limit enforced at exactly 20 (the 20th succeeds, the 21st fails).
 - Test: rolling window — generate 20 invites 7 days and 1 second ago + 1 today succeeds (the old ones fall out of the window).
 - Test: token entropy sanity check (statistical).
 
 **Manual**
+
 - Generate an invite, open the link in a private window, confirm it works.
 - Generate 20 invites quickly, confirm 21st is blocked with a useful message.
 
@@ -325,13 +341,13 @@ This is the most user-facing fragile path in the product. Test it thoroughly.
 
 Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine over (token state) × (auth state):
 
-| Token state | Auth state | Result |
-|---|---|---|
-| Not found / expired / consumed | any | "This invite is no longer valid" page |
-| Valid | not signed in | Set `pending_invite` cookie, redirect to `/welcome?invite={token}` |
-| Valid | signed in as sender | "You can't connect to yourself" error |
-| Valid | signed in, already connected | "You're already connected with {name}" page |
-| Valid | signed in, not connected | "Request to connect with {name}" page (shows sender's display name and photo) |
+| Token state                    | Auth state                   | Result                                                                        |
+| ------------------------------ | ---------------------------- | ----------------------------------------------------------------------------- |
+| Not found / expired / consumed | any                          | "This invite is no longer valid" page                                         |
+| Valid                          | not signed in                | Set `pending_invite` cookie, redirect to `/welcome?invite={token}`            |
+| Valid                          | signed in as sender          | "You can't connect to yourself" error                                         |
+| Valid                          | signed in, already connected | "You're already connected with {name}" page                                   |
+| Valid                          | signed in, not connected     | "Request to connect with {name}" page (shows sender's display name and photo) |
 
 - `pending_invite` cookie: signed (HMAC), 30-minute expiry, contains the token.
 - `/welcome?invite={token}`: two buttons — "I have an account → Log in" and "I'm new → Sign up". Both targets carry the invite param forward.
@@ -345,6 +361,7 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 ### Testing plan
 
 **Automated**
+
 - Unit test of the state-machine resolver: every (token state, auth state) combination produces the expected outcome.
 - Integration test: full unauthenticated → signup → email verify → invite page flow, with the email verification opened in a fresh client (simulating the different-browser case).
 - Test: invite-to-self correctly rejected.
@@ -354,6 +371,7 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 - Test: invalid HMAC on `pending_invite` cookie causes it to be ignored.
 
 **Manual (high priority)**
+
 - Open the invite link in a private window, sign up, click the verification link in a different browser tab as if from email, return to the original window or log in fresh, and confirm landing on the correct invite page. This must be smooth.
 - Repeat with an existing-user flow (login instead of signup).
 - Try on mobile, where the email link opens in the system browser (which may or may not have the cookie).
@@ -378,6 +396,7 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 ### Testing plan
 
 **Automated**
+
 - Integration test: request → accept produces canonically-ordered connections row.
 - Test: accept at rate limit returns 429.
 - Test: deny does not insert into connections and does not create a notification.
@@ -385,6 +404,7 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 - Test: notification row created on accept with correct `actor_id` and type.
 
 **Manual**
+
 - Two-user test: A invites B, B accepts; A sees notification, both see each other on profile.
 - Two-user test: A invites B, B denies; A is not notified; B no longer sees the request.
 
@@ -404,11 +424,13 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 ### Testing plan
 
 **Automated**
+
 - Integration test: disconnect removes the row.
 - Test: post-disconnect feed query for either side does not return the other's posts.
 - Test: post-disconnect profile route returns 404.
 
 **Manual**
+
 - Two-user disconnect; verify clean removal across feed, profile, and connection list.
 
 ## 1.5 Posts (text only)
@@ -429,12 +451,14 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 ### Testing plan
 
 **Automated**
+
 - Integration test: create, read, delete.
 - Test: content length validation at boundaries (0, 1, 1000, 1001).
 - Test: non-author cannot delete (403).
 - Test: deleted post excluded from feed and profile.
 
 **Manual**
+
 - Post emoji, RTL text, mixed scripts, code blocks, very long content.
 - Verify rendering matches input exactly.
 
@@ -461,6 +485,7 @@ Implements Technical Plan §4.1 exactly.
 ### Testing plan
 
 **Automated**
+
 - Integration test: feed returns only posts from connected users with `status = 'active'`.
 - Test: the new/old split correctly reflects `last_feed_loaded_at` at the moment of the query.
 - Test: `last_feed_loaded_at` is updated after the query, not before (set up a scenario where this would matter and assert the result).
@@ -468,6 +493,7 @@ Implements Technical Plan §4.1 exactly.
 - Test: archived and deleted posts do not appear.
 
 **Manual**
+
 - Multi-device test: load feed on phone, then on laptop. Posts seen on phone appear in "old" on laptop (since `last_feed_loaded_at` is global per user).
 - Set up several connections, have them post, verify chronological ordering.
 - Visit feed, scroll, leave, come back; new posts since last visit appear in the new section.
@@ -493,12 +519,14 @@ Implements Technical Plan §4.1 exactly.
 ### Testing plan
 
 **Automated**
+
 - Integration test: connection request creates the right notification with the right metadata.
 - Test: connection accept creates a notification for the original requester.
 - Test: visiting `/notifications` clears `read_at`.
 - Test: header indicator helper returns the right state for various unread counts.
 
 **Manual**
+
 - Two-user flow: A invites, B sees the dot, opens `/notifications`, sees the request, dot clears.
 - Visit `/notifications` with none present; verify the empty state copy.
 
@@ -532,6 +560,7 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 ### Testing plan
 
 **Automated**
+
 - Unit test: server-side mime sniffing rejects mismatched content (HTML pretending to be JPEG).
 - Integration test: 6 files in one post is rejected.
 - Integration test: file size limit enforced after compression.
@@ -539,6 +568,7 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 - Integration test: post deletion removes all `post_media` files from R2.
 
 **Manual**
+
 - iPhone Safari: upload from camera roll (HEIC); verify it shows up correctly.
 - Android Chrome: same.
 - Various aspect ratios including very tall (9:16) and very wide (panorama).
@@ -571,6 +601,7 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 ### Testing plan
 
 **Automated**
+
 - Integration test: top-level comment creation and rendering.
 - Test: reply creation references the correct parent.
 - Test: deletion by neither author nor post owner returns 403.
@@ -581,6 +612,7 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 - Test: reply creates a notification for the parent comment author (and only them).
 
 **Manual**
+
 - Build a multi-level thread (4–5 deep); test rendering.
 - Delete a parent comment with replies; verify children survive as `[deleted]` placeholder threads.
 - Delete a leaf; verify it disappears entirely.
@@ -604,12 +636,14 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 ### Testing plan
 
 **Automated**
+
 - Integration test: editing produces a `post_edits` row.
 - Test: history endpoint returns all versions in correct order.
 - Test: non-author edit attempt returns 403.
 - Test: non-connected user requesting history returns 404.
 
 **Manual**
+
 - Edit a post 5–6 times; verify each version captured.
 - Verify history rendering with long content.
 - Verify "edited" indicator copy and link target.
@@ -633,12 +667,14 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 ### Testing plan
 
 **Automated**
+
 - Integration test: archived post excluded from feed and profile.
 - Test: archive → unarchive restores the post to feed.
 - Test: delete cascades to `post_edits`, `post_media`, and `comments`.
 - Test: delete removes R2 objects (verify with a mock or test bucket).
 
 **Manual**
+
 - Archive several posts; verify they vanish from feed.
 - Visit `/settings/archived`; confirm they're listed.
 - Unarchive one; confirm it reappears in chronological position.
@@ -672,11 +708,13 @@ Make Hearth feel like a finished product. PWA installable. Email notifications w
 ### Testing plan
 
 **Automated**
+
 - Manifest validation against the W3C PWA spec.
 - Playwright test for service worker registration on a fresh session.
 - Lighthouse PWA audit in CI; target score ≥ 90.
 
 **Manual**
+
 - Install on iPhone (iOS 16+); launch from home screen; verify standalone mode (no browser chrome).
 - Install on Android; same.
 - Toggle airplane mode mid-session; verify shell still loads with a sensible message.
@@ -702,6 +740,7 @@ Make Hearth feel like a finished product. PWA installable. Email notifications w
 ### Testing plan
 
 **Automated**
+
 - Unit test: `shouldEmail(user, type)` helper returns the right answer for each combination.
 - Integration test: connection-accept with email flag on → mock Resend called with the right payload.
 - Integration test: same with flag off → mock Resend not called.
@@ -709,6 +748,7 @@ Make Hearth feel like a finished product. PWA installable. Email notifications w
 - Integration test: Resend failure does not roll back the in-app notification.
 
 **Manual**
+
 - End-to-end: toggle "email me about new comments" on, post, have someone comment, confirm email arrives.
 - Verify email rendering in Gmail web, Apple Mail, and Outlook web.
 - Click unsubscribe in a logged-out browser; confirm it works and shows confirmation.
@@ -718,6 +758,7 @@ Make Hearth feel like a finished product. PWA installable. Email notifications w
 ### Implementation
 
 Empty state copy:
+
 - New user with zero connections (feed): "Generate an invite link to connect with someone."
 - New user with connections but empty feed: "Your feed will fill up as your connections post."
 - `/notifications` empty: "Nothing here yet."
@@ -725,6 +766,7 @@ Empty state copy:
 - `/{username}` (connected, no posts): "{Name} hasn't posted yet."
 
 Error pages:
+
 - 404: friendly page with link back to feed.
 - 500: generic apology + retry guidance.
 - 429: explain the rate limit and when it'll lift (using the actual lift time from the rate-limit logic).
@@ -738,10 +780,12 @@ Error pages:
 ### Testing plan
 
 **Automated**
+
 - Test: each error code renders the styled page, not the default.
 - Test: htmx error swap shows the inline retry component.
 
 **Manual**
+
 - Visit `/notifications` as a new user; check copy.
 - Trigger each error class manually:
   - Visit a nonexistent `/{username}` → 404.
@@ -767,11 +811,13 @@ Error pages:
 ### Testing plan
 
 **Automated**
+
 - Per-IP signup rate limit test: 5 succeed, 6th returns 429.
 - Login brute-force test: 10 wrong passwords, 11th returns 429.
 - Test: report stores the row and triggers an email.
 
 **Manual**
+
 - Verify admin report emails arrive at the configured address.
 - Try to legitimately sign up two accounts from the same IP (e.g., a household); confirm the limit isn't so tight as to be a problem.
 

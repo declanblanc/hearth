@@ -13,7 +13,7 @@ When asked to scaffold the project, follow the decisions in the Technical Plan's
 
 ## Product in one paragraph
 
-Hearth is a private, invite-only, donation-funded social app for close connections. Hard constraints shape every decision: **<$15/month hosting for ~1,000 users**, **single-developer maintainability**, **privacy enforced at the data layer**. Many social-architecture assumptions don't apply — no fanout, no ranking, no discovery, no celebrities. It's closer to a private group blog with permissions than to Twitter.
+Hearth is a private, invite-only, donation-funded social app for close connections. Hard constraints shape every decision: **<$15/month hosting for ~1,000 users**, **privacy enforced at the data layer**. Many social-architecture assumptions don't apply — no fanout, no ranking, no discovery, no celebrities. It's closer to a private group blog with permissions than to Twitter.
 
 ## Planned stack (from Technical Plan §2, §9)
 
@@ -39,12 +39,12 @@ These are load-bearing — many features in the plan assume them:
 6. **Media access control is per-request.** Signed R2 URLs are generated at render time, only after verifying the viewer is connected to the post author. URLs expire in ~1 hour. Object keys must not embed `user_id` or `post_id`.
 7. **Rate limits** (20 invites / 7d, 10 accepted connections / 7d) are enforced inside the write transaction with `BEGIN IMMEDIATE` to avoid boundary races.
 8. **Notifications fan out in two steps:** always insert into `notifications` (in-app is universal); send email only if the recipient's `notification_preferences` flag for that category is true. All preference flags default to `false`.
-9. **Post edits snapshot the *old* content** into `post_edits` before overwriting `posts.content`. The current version always lives on `posts`.
+9. **Post edits snapshot the _old_ content** into `post_edits` before overwriting `posts.content`. The current version always lives on `posts`.
 10. **Delete vs. archive:** archive sets `status='archived'` and preserves rows; delete sets `status='deleted'`, nulls content, removes R2 media, and deletes `post_edits` rows.
 
 ## Anti-features (do not build)
 
-No likes/reactions, no user search/discovery, no algorithmic ranking, no messaging, no visible counts, no public profiles. Enforced by *not having the tables, endpoints, or UI* — not by hiding things in the frontend.
+No likes/reactions, no user search/discovery, no algorithmic ranking, no messaging, no visible counts, no public profiles. Enforced by _not having the tables, endpoints, or UI_ — not by hiding things in the frontend.
 
 ## Conventions called out in the Build & Test Plan
 

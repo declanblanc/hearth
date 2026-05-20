@@ -9,7 +9,7 @@ This document translates the product description and technical brainstorm into c
 Three constraints drive every decision:
 
 - **Cheap to run.** Donation-funded means runaway costs are existential. Target hosting cost at MVP: **under $15/month** for up to 1,000 users.
-- **Simple to maintain.** A single developer should be able to operate this without a pager. Prefer boring, well-documented tech over clever-and-cutting-edge.
+- **Simple to maintain.** Prefer boring, well-documented tech over clever-and-cutting-edge.
 - **Privacy by default.** No content is publicly visible. All access is gated on an active connection. This is enforced at the data layer, not just the UI.
 
 A useful frame: many "social media architecture" assumptions can be discarded outright. There is no fanout problem (small connection counts, no real-time delivery), no ranking problem (chronological), no discovery problem (no discovery), and no celebrity problem (no celebrities). This is closer to a private group blog with permissions than to Twitter.
@@ -23,12 +23,13 @@ A useful frame: many "social media architecture" assumptions can be discarded ou
 Rationale: React/Vue exist to manage complex client-side state with real-time updates. Hearth has neither. Plain HTML works but gets unwieldy once you have threaded comments, post composition, edit modals, etc. **htmx is the sweet spot**: the server renders HTML, htmx adds Ajax interactivity via attributes like `hx-post` and `hx-target`. Bundle size is ~14KB. No build step. No virtual DOM to debug.
 
 Why this fits Hearth specifically:
+
 - Pages are mostly static lists of content. htmx's "swap a chunk of HTML into the page" model maps directly onto "load more posts" and "post a comment."
 - Server-rendered means SEO and accessibility are essentially free.
 - Works without JavaScript for basic flows (progressive enhancement).
 - PWA-friendly via a small service worker for caching static assets and the most recent feed.
 
-*Alternatives considered: SvelteKit (good but adds build pipeline), Astro (server-render with interactive islands, more setup), plain HTML/JS (you'll reinvent half of htmx by week three).*
+_Alternatives considered: SvelteKit (good but adds build pipeline), Astro (server-render with interactive islands, more setup), plain HTML/JS (you'll reinvent half of htmx by week three)._
 
 ### Backend: Go
 
@@ -37,6 +38,7 @@ Chosen for the cost angle: single static binary, ~20–50 MB memory footprint, n
 ### Database: SQLite (with Litestream for backups)
 
 For <1,000 users, SQLite isn't a compromise — it's the right answer:
+
 - No separate database process to run, patch, or pay for.
 - Reads are microseconds (it's in-process).
 - A backup is a single file copy.
@@ -68,14 +70,14 @@ Alternative: a Hetzner CX11 VPS at €4/month is cheaper if you're comfortable m
 
 ### Estimated monthly cost at MVP scale
 
-| Item | Cost |
-|---|---|
-| Fly.io app + 3GB volume | ~$5 |
-| Cloudflare R2 (100 GB media) | ~$1.50 |
-| Litestream backups to R2 | ~$1 |
-| Resend email | $0 |
-| Domain | ~$1 amortized |
-| **Total** | **~$8–10/month** |
+| Item                         | Cost             |
+| ---------------------------- | ---------------- |
+| Fly.io app + 3GB volume      | ~$5              |
+| Cloudflare R2 (100 GB media) | ~$1.50           |
+| Litestream backups to R2     | ~$1              |
+| Resend email                 | $0               |
+| Domain                       | ~$1 amortized    |
+| **Total**                    | **~$8–10/month** |
 
 ---
 
@@ -84,114 +86,126 @@ Alternative: a Hetzner CX11 VPS at €4/month is cheaper if you're comfortable m
 Tables below use generic SQL types; adapt to your chosen ORM/driver.
 
 ### `users`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| username | TEXT UNIQUE | immutable after signup, used in `/{username}` URLs |
-| email | TEXT UNIQUE | |
-| password_hash | TEXT | argon2id |
-| display_name | TEXT | editable |
-| photo_key | TEXT | R2 object key, nullable |
-| bio | TEXT | nullable |
-| pronouns | TEXT | nullable |
-| created_at | TIMESTAMP | |
-| email_verified_at | TIMESTAMP | nullable |
-| last_feed_loaded_at | TIMESTAMP | the "seen" timestamp |
+
+| column              | type        | notes                                              |
+| ------------------- | ----------- | -------------------------------------------------- |
+| id                  | INTEGER PK  |                                                    |
+| username            | TEXT UNIQUE | immutable after signup, used in `/{username}` URLs |
+| email               | TEXT UNIQUE |                                                    |
+| password_hash       | TEXT        | argon2id                                           |
+| display_name        | TEXT        | editable                                           |
+| photo_key           | TEXT        | R2 object key, nullable                            |
+| bio                 | TEXT        | nullable                                           |
+| pronouns            | TEXT        | nullable                                           |
+| created_at          | TIMESTAMP   |                                                    |
+| email_verified_at   | TIMESTAMP   | nullable                                           |
+| last_feed_loaded_at | TIMESTAMP   | the "seen" timestamp                               |
 
 ### `sessions`
+
 Standard session table (id, user_id, token_hash, created_at, expires_at, last_seen_at). Cookies, not JWTs — simpler for server-rendered apps.
 
 ### `connections`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| user_a_id | INTEGER FK | always the lower of the two IDs |
-| user_b_id | INTEGER FK | always the higher |
-| created_at | TIMESTAMP | |
+
+| column     | type       | notes                           |
+| ---------- | ---------- | ------------------------------- |
+| id         | INTEGER PK |                                 |
+| user_a_id  | INTEGER FK | always the lower of the two IDs |
+| user_b_id  | INTEGER FK | always the higher               |
+| created_at | TIMESTAMP  |                                 |
 
 Storing `(min_id, max_id)` avoids duplicate rows for the same pair. Unique index on `(user_a_id, user_b_id)`.
 
 ### `invites`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| sender_id | INTEGER FK | |
-| token | TEXT UNIQUE | URL-safe random, ~32 bytes |
-| created_at | TIMESTAMP | |
-| expires_at | TIMESTAMP | created_at + 72h |
-| consumed_at | TIMESTAMP | nullable; set when used |
+
+| column      | type        | notes                      |
+| ----------- | ----------- | -------------------------- |
+| id          | INTEGER PK  |                            |
+| sender_id   | INTEGER FK  |                            |
+| token       | TEXT UNIQUE | URL-safe random, ~32 bytes |
+| created_at  | TIMESTAMP   |                            |
+| expires_at  | TIMESTAMP   | created_at + 72h           |
+| consumed_at | TIMESTAMP   | nullable; set when used    |
 
 ### `connection_requests`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| invite_id | INTEGER FK | the invite the requester arrived via |
-| requester_id | INTEGER FK | |
-| recipient_id | INTEGER FK | |
-| status | TEXT | 'pending' \| 'accepted' \| 'denied' |
-| created_at | TIMESTAMP | |
-| resolved_at | TIMESTAMP | nullable |
+
+| column       | type       | notes                                |
+| ------------ | ---------- | ------------------------------------ |
+| id           | INTEGER PK |                                      |
+| invite_id    | INTEGER FK | the invite the requester arrived via |
+| requester_id | INTEGER FK |                                      |
+| recipient_id | INTEGER FK |                                      |
+| status       | TEXT       | 'pending' \| 'accepted' \| 'denied'  |
+| created_at   | TIMESTAMP  |                                      |
+| resolved_at  | TIMESTAMP  | nullable                             |
 
 ### `posts`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| author_id | INTEGER FK | |
-| content | TEXT | max 1000 chars |
-| status | TEXT | 'active' \| 'archived' \| 'deleted' |
-| created_at | TIMESTAMP | the immutable original creation time |
-| updated_at | TIMESTAMP | last edit |
+
+| column     | type       | notes                                |
+| ---------- | ---------- | ------------------------------------ |
+| id         | INTEGER PK |                                      |
+| author_id  | INTEGER FK |                                      |
+| content    | TEXT       | max 1000 chars                       |
+| status     | TEXT       | 'active' \| 'archived' \| 'deleted'  |
+| created_at | TIMESTAMP  | the immutable original creation time |
+| updated_at | TIMESTAMP  | last edit                            |
 
 Index: `(author_id, created_at DESC)` for profile views. For the feed query, see "Performance notes" below.
 
 ### `post_edits`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| post_id | INTEGER FK | |
-| content | TEXT | snapshot of content *before* the edit |
-| edited_at | TIMESTAMP | when this version was replaced |
 
-On edit, we insert a snapshot of the *old* content before overwriting the post. The current version always lives on `posts`.
+| column    | type       | notes                                 |
+| --------- | ---------- | ------------------------------------- |
+| id        | INTEGER PK |                                       |
+| post_id   | INTEGER FK |                                       |
+| content   | TEXT       | snapshot of content _before_ the edit |
+| edited_at | TIMESTAMP  | when this version was replaced        |
+
+On edit, we insert a snapshot of the _old_ content before overwriting the post. The current version always lives on `posts`.
 
 ### `post_media`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| post_id | INTEGER FK | |
-| object_key | TEXT | R2 key |
-| order | INTEGER | 0–4 |
-| mime_type | TEXT | |
+
+| column     | type       | notes  |
+| ---------- | ---------- | ------ |
+| id         | INTEGER PK |        |
+| post_id    | INTEGER FK |        |
+| object_key | TEXT       | R2 key |
+| order      | INTEGER    | 0–4    |
+| mime_type  | TEXT       |        |
 
 ### `comments`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| post_id | INTEGER FK | |
+
+| column            | type       | notes                       |
+| ----------------- | ---------- | --------------------------- |
+| id                | INTEGER PK |                             |
+| post_id           | INTEGER FK |                             |
 | parent_comment_id | INTEGER FK | nullable, enables threading |
-| author_id | INTEGER FK | |
-| content | TEXT | |
-| status | TEXT | 'active' \| 'deleted' |
-| created_at | TIMESTAMP | |
+| author_id         | INTEGER FK |                             |
+| content           | TEXT       |                             |
+| status            | TEXT       | 'active' \| 'deleted'       |
+| created_at        | TIMESTAMP  |                             |
 
 ### `notification_preferences`
+
 One row per user, all flags default to `false`. Categories at MVP: connection requests, comments on your posts, replies to your comments. These flags only control whether **email** is sent — in-app notifications (below) are always created.
 
 ### `notifications`
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK | |
-| user_id | INTEGER FK | recipient |
-| type | TEXT | 'connection_request' \| 'connection_accepted' \| 'comment_on_post' \| 'reply_to_comment' |
-| actor_id | INTEGER FK | user who triggered it, nullable |
-| post_id | INTEGER FK | nullable; set for comment-related notifications |
-| comment_id | INTEGER FK | nullable; set for comment-related notifications |
-| created_at | TIMESTAMP | |
-| read_at | TIMESTAMP | nullable; set when user visits `/notifications` |
+
+| column     | type       | notes                                                                                    |
+| ---------- | ---------- | ---------------------------------------------------------------------------------------- |
+| id         | INTEGER PK |                                                                                          |
+| user_id    | INTEGER FK | recipient                                                                                |
+| type       | TEXT       | 'connection_request' \| 'connection_accepted' \| 'comment_on_post' \| 'reply_to_comment' |
+| actor_id   | INTEGER FK | user who triggered it, nullable                                                          |
+| post_id    | INTEGER FK | nullable; set for comment-related notifications                                          |
+| comment_id | INTEGER FK | nullable; set for comment-related notifications                                          |
+| created_at | TIMESTAMP  |                                                                                          |
+| read_at    | TIMESTAMP  | nullable; set when user visits `/notifications`                                          |
 
 Indexes: `(user_id, created_at DESC)` for the notifications view, `(user_id) WHERE read_at IS NULL` for the unread indicator.
 
 ### Counters
+
 Deliberately absent: any `likes` table, any aggregate count columns (connection_count, comment_count). The product is defined by what it doesn't have.
 
 ---
@@ -215,7 +229,7 @@ GET /
 5. Older posts paginate via cursor (?before=<post_id>).
 ```
 
-Note: step 4 happens *after* the query in step 2, so the same load doesn't re-classify its own results.
+Note: step 4 happens _after_ the query in step 2, so the same load doesn't re-classify its own results.
 
 ### 4.2 Connection flow
 
@@ -243,7 +257,7 @@ Note: step 4 happens *after* the query in step 2, so the same load doesn't re-cl
 
    **Notes:**
    - The cookie matters even though the token is in the URL, because email verification typically happens in a different browser session (user clicks the link in their email client). The cookie is what carries the pending invite across that gap.
-   - The invite is *consumed* only when B submits the connection request (step 4), not when the link is opened. Opening `/i/{token}` multiple times during signup doesn't burn the invite.
+   - The invite is _consumed_ only when B submits the connection request (step 4), not when the link is opened. Opening `/i/{token}` multiple times during signup doesn't burn the invite.
 
 4. B clicks "Request to connect": insert `connection_requests` row (pending), mark invite consumed.
 5. A sees pending requests in their notifications inbox.
@@ -268,7 +282,7 @@ Note: step 4 happens *after* the query in step 2, so the same load doesn't re-cl
 
 - **Upload**: client compresses images using `browser-image-compression` library before posting. Targets: max 1600px on the long edge, 80% JPEG quality. Result is typically 100–400KB even for high-quality photos.
 - **Accepted formats** at MVP: JPEG, PNG, WebP. GIFs accepted but treated as static images (no animation playback). HEIC converted client-side to JPEG via Canvas API.
-- **Server validation**: max 5 files per post, max 5MB per file *after* client compression (generous ceiling), mime sniff to confirm it's actually an image.
+- **Server validation**: max 5 files per post, max 5MB per file _after_ client compression (generous ceiling), mime sniff to confirm it's actually an image.
 - **Storage**: random key like `posts/2026/05/{uuid}.jpg`. Never expose the user_id or post_id in the key.
 - **Access**: every image URL is a signed R2 URL with 1-hour expiry, generated server-side at render time. Server first verifies the requesting user is connected to the post author.
 
@@ -325,16 +339,16 @@ For <1,000 users this is mostly belt-and-suspenders, but the patterns are worth 
 
 ## 6. Anti-features: how they're enforced
 
-These are the things the product *doesn't* do, with a note on how that's enforced architecturally:
+These are the things the product _doesn't_ do, with a note on how that's enforced architecturally:
 
-| Anti-feature | How it's enforced |
-|---|---|
-| No likes/reactions | No tables, no endpoints, no UI |
-| No discovery | No user search endpoint. `/{username}` returns 404 unless the requesting user is connected. No "people you may know." |
-| No algorithm | Feed query is `ORDER BY created_at DESC`. Period. |
-| Notifications off by default | All flags in `notification_preferences` default to `false` |
-| No visible counts | Connection list endpoint returns names only, not a count. Comment thread endpoint returns comments, never `count` |
-| No messaging | No `messages` table, no endpoints |
+| Anti-feature                 | How it's enforced                                                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| No likes/reactions           | No tables, no endpoints, no UI                                                                                        |
+| No discovery                 | No user search endpoint. `/{username}` returns 404 unless the requesting user is connected. No "people you may know." |
+| No algorithm                 | Feed query is `ORDER BY created_at DESC`. Period.                                                                     |
+| Notifications off by default | All flags in `notification_preferences` default to `false`                                                            |
+| No visible counts            | Connection list endpoint returns names only, not a count. Comment thread endpoint returns comments, never `count`     |
+| No messaging                 | No `messages` table, no endpoints                                                                                     |
 
 ---
 
@@ -355,16 +369,16 @@ Things I made a judgment call on while drafting. Each is worth a sanity check.
 
 ## 8. Phased build plan
 
-Rough estimates assume part-time solo work.
+### Phase 0 — Foundation
 
-### Phase 0 — Foundation (1 week)
 - Project skeleton, deploy pipeline, TLS
 - `users` table, signup, email verification, login, logout, password reset
 - Session management
 - Basic profile view & edit (display name, bio, pronouns, photo)
 - Account deletion flow
 
-### Phase 1 — Core social loop (2 weeks)
+### Phase 1 — Core social loop
+
 - Invites, connection requests, accept/deny
 - Disconnect
 - Rate limiting (20 invites/week, 10 accepts/week)
@@ -375,19 +389,22 @@ Rough estimates assume part-time solo work.
 
 **End of Phase 1: usable for friends-and-family beta.**
 
-### Phase 2 — Richer content (2 weeks)
+### Phase 2 — Richer content
+
 - Image uploads (client compression, R2 storage, signed URLs)
 - Threaded comments (extends the notifications system to comment events)
 - Post editing + history view
 - Archive + delete
 
-### Phase 3 — Polish (1 week)
+### Phase 3 — Polish
+
 - PWA manifest + service worker
 - Email delivery for notifications (Resend integration) + per-category preferences UI in account settings
 - Empty-state and error-state polish
 - Basic abuse mitigations (per-IP signup rate limit, content reporting → email to you)
 
 ### Out of scope for v1
+
 - Video uploads
 - Donations + donor badge
 - Public FAQ page
