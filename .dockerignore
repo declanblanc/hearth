@@ -1,0 +1,11 @@
+.git
+.github
+data/
+*.db
+*.db-shm
+*.db-wal
+tests/e2e/node_modules
+tests/e2e/test-results
+tests/e2e/playwright-report
+.env
+.env.local

@@ -1,0 +1,13 @@
+/hearth
+/bin/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+/data/
+/coverage.out
+.DS_Store
+node_modules/
+/tests/e2e/test-results/
+/tests/e2e/playwright-report/
