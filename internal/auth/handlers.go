@@ -37,17 +37,18 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /password/reset", h.resetSubmit)
 }
 
-// ---- signup ----
-
-type signupForm struct {
-	Username    string
-	Email       string
-	DisplayName string
-	Errors      FieldErrors
+// user returns the authenticated user from context, or nil. Used to populate
+// the User key in every render.Page call so base.html nav always renders.
+func user(r *http.Request) *middleware.User {
+	return middleware.UserFrom(r.Context())
 }
 
-func (h *Handlers) signupForm(w http.ResponseWriter, _ *http.Request) {
-	h.Renderer.HTML(w, "signup.html", signupForm{Errors: FieldErrors{}})
+// ---- signup ----
+
+func (h *Handlers) signupForm(w http.ResponseWriter, r *http.Request) {
+	h.Renderer.HTML(w, "signup.html", render.Page(user(r), render.M{
+		"Errors": FieldErrors{},
+	}))
 }
 
 func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
@@ -75,9 +76,9 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 		errs.Add("display_name", m)
 	}
 	if errs.Has() {
-		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", signupForm{
-			Username: in.Username, Email: in.Email, DisplayName: in.DisplayName, Errors: errs,
-		})
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", render.Page(user(r), render.M{
+			"Username": in.Username, "Email": in.Email, "DisplayName": in.DisplayName, "Errors": errs,
+		}))
 		return
 	}
 
@@ -92,27 +93,27 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 			h.Renderer.Error(w, http.StatusInternalServerError)
 			return
 		}
-		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", signupForm{
-			Username: in.Username, Email: in.Email, DisplayName: in.DisplayName, Errors: errs,
-		})
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", render.Page(user(r), render.M{
+			"Username": in.Username, "Email": in.Email, "DisplayName": in.DisplayName, "Errors": errs,
+		}))
 		return
 	}
-	h.Renderer.HTML(w, "signup_check_email.html", map[string]any{"Email": in.Email})
+	h.Renderer.HTML(w, "signup_check_email.html", render.Page(user(r), render.M{"Email": in.Email}))
 }
 
 func (h *Handlers) verify(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
-		h.Renderer.Status(w, http.StatusBadRequest, "verify_invalid.html", nil)
+		h.Renderer.Status(w, http.StatusBadRequest, "verify_invalid.html", render.Page(user(r), nil))
 		return
 	}
 	userID, err := h.Svc.VerifyEmail(r.Context(), token)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrTokenExpired):
-			h.Renderer.Status(w, http.StatusGone, "verify_expired.html", nil)
+			h.Renderer.Status(w, http.StatusGone, "verify_expired.html", render.Page(user(r), nil))
 		case errors.Is(err, ErrTokenInvalid):
-			h.Renderer.Status(w, http.StatusBadRequest, "verify_invalid.html", nil)
+			h.Renderer.Status(w, http.StatusBadRequest, "verify_invalid.html", render.Page(user(r), nil))
 		default:
 			h.Renderer.Error(w, http.StatusInternalServerError)
 		}
@@ -138,20 +139,15 @@ func (h *Handlers) resendVerification(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.Renderer.HTML(w, "verify_resent.html", nil)
+	h.Renderer.HTML(w, "verify_resent.html", render.Page(u, nil))
 }
 
 // ---- login ----
 
-type loginForm struct {
-	Email  string
-	Next   string
-	Error  string
-	Locked bool
-}
-
 func (h *Handlers) loginForm(w http.ResponseWriter, r *http.Request) {
-	h.Renderer.HTML(w, "login.html", loginForm{Next: r.URL.Query().Get("next")})
+	h.Renderer.HTML(w, "login.html", render.Page(user(r), render.M{
+		"Next": r.URL.Query().Get("next"),
+	}))
 }
 
 func (h *Handlers) loginSubmit(w http.ResponseWriter, r *http.Request) {
@@ -167,13 +163,15 @@ func (h *Handlers) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	sess, err := h.Svc.Authenticate(r.Context(), emailIn, password, ip)
 	if err != nil {
 		status := http.StatusUnauthorized
-		form := loginForm{Email: emailIn, Next: next, Error: "Email or password is incorrect."}
+		data := render.Page(user(r), render.M{
+			"Email": emailIn, "Next": next, "Error": "Email or password is incorrect.",
+		})
 		if errors.Is(err, ErrTooMany) {
 			status = http.StatusTooManyRequests
-			form.Locked = true
-			form.Error = "Too many failed attempts. Try again in 15 minutes."
+			data["Error"] = "Too many failed attempts. Try again in 15 minutes."
+			data["Locked"] = true
 		}
-		h.Renderer.Status(w, status, "login.html", form)
+		h.Renderer.Status(w, status, "login.html", data)
 		return
 	}
 	SetSessionCookie(w, sess.Token, sess.ExpiresAt, h.Secure)
@@ -196,8 +194,8 @@ func (h *Handlers) logout(w http.ResponseWriter, r *http.Request) {
 
 // ---- password reset ----
 
-func (h *Handlers) forgotForm(w http.ResponseWriter, _ *http.Request) {
-	h.Renderer.HTML(w, "password_forgot.html", nil)
+func (h *Handlers) forgotForm(w http.ResponseWriter, r *http.Request) {
+	h.Renderer.HTML(w, "password_forgot.html", render.Page(user(r), nil))
 }
 
 func (h *Handlers) forgotSubmit(w http.ResponseWriter, r *http.Request) {
@@ -211,22 +209,18 @@ func (h *Handlers) forgotSubmit(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.Renderer.HTML(w, "password_forgot_sent.html", nil)
-}
-
-type resetForm struct {
-	Token  string
-	Error  string
-	Errors FieldErrors
+	h.Renderer.HTML(w, "password_forgot_sent.html", render.Page(user(r), nil))
 }
 
 func (h *Handlers) resetForm(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
-		h.Renderer.Status(w, http.StatusBadRequest, "password_reset_invalid.html", nil)
+		h.Renderer.Status(w, http.StatusBadRequest, "password_reset_invalid.html", render.Page(user(r), nil))
 		return
 	}
-	h.Renderer.HTML(w, "password_reset.html", resetForm{Token: token, Errors: FieldErrors{}})
+	h.Renderer.HTML(w, "password_reset.html", render.Page(user(r), render.M{
+		"Token": token, "Errors": FieldErrors{},
+	}))
 }
 
 func (h *Handlers) resetSubmit(w http.ResponseWriter, r *http.Request) {
@@ -241,20 +235,22 @@ func (h *Handlers) resetSubmit(w http.ResponseWriter, r *http.Request) {
 		errs.Add("password", m)
 	}
 	if errs.Has() {
-		h.Renderer.Status(w, http.StatusUnprocessableEntity, "password_reset.html", resetForm{Token: token, Errors: errs})
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "password_reset.html", render.Page(user(r), render.M{
+			"Token": token, "Errors": errs,
+		}))
 		return
 	}
 	err := h.Svc.ConsumePasswordReset(r.Context(), token, password)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrTokenInvalid):
-			h.Renderer.Status(w, http.StatusBadRequest, "password_reset_invalid.html", nil)
+			h.Renderer.Status(w, http.StatusBadRequest, "password_reset_invalid.html", render.Page(user(r), nil))
 		case errors.Is(err, ErrTokenExpired):
-			h.Renderer.Status(w, http.StatusGone, "password_reset_expired.html", nil)
+			h.Renderer.Status(w, http.StatusGone, "password_reset_expired.html", render.Page(user(r), nil))
 		default:
 			h.Renderer.Error(w, http.StatusInternalServerError)
 		}
 		return
 	}
-	h.Renderer.HTML(w, "password_reset_done.html", nil)
+	h.Renderer.HTML(w, "password_reset_done.html", render.Page(user(r), nil))
 }

@@ -21,20 +21,12 @@ func NewHandlers(svc *Service, authSvc *auth.Service, r *render.Renderer, secure
 	return &Handlers{Svc: svc, Auth: authSvc, Renderer: r, Secure: secure}
 }
 
-// Mount registers profile routes. Routes requiring auth are wrapped at the
-// router level — see cmd/server.
 func (h *Handlers) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings/profile", h.editForm)
 	mux.HandleFunc("POST /settings/profile", h.editSubmit)
 	mux.HandleFunc("GET /settings/account", h.accountForm)
 	mux.HandleFunc("POST /settings/account/delete", h.deleteAccount)
 	mux.HandleFunc("GET /{username}", h.viewProfile)
-}
-
-type editForm struct {
-	Profile *Profile
-	Errors  auth.FieldErrors
-	Saved   bool
 }
 
 func (h *Handlers) editForm(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +36,9 @@ func (h *Handlers) editForm(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.Renderer.HTML(w, "profile_edit.html", editForm{Profile: p, Errors: auth.FieldErrors{}})
+	h.Renderer.HTML(w, "profile_edit.html", render.Page(u, render.M{
+		"Profile": p, "Errors": auth.FieldErrors{},
+	}))
 }
 
 func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
@@ -70,13 +64,14 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	if errs.Has() {
 		p, _ := h.Svc.Get(r.Context(), u.ID)
-		// Overlay the user's edits so they're not lost on re-render.
 		if p != nil {
 			p.DisplayName = in.DisplayName
 			p.Bio = in.Bio
 			p.Pronouns = in.Pronouns
 		}
-		h.Renderer.Status(w, http.StatusUnprocessableEntity, "profile_edit.html", editForm{Profile: p, Errors: errs})
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "profile_edit.html", render.Page(u, render.M{
+			"Profile": p, "Errors": errs,
+		}))
 		return
 	}
 	if err := h.Svc.Update(r.Context(), u.ID, in); err != nil {
@@ -84,15 +79,15 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := h.Svc.Get(r.Context(), u.ID)
-	h.Renderer.HTML(w, "profile_edit.html", editForm{Profile: p, Errors: auth.FieldErrors{}, Saved: true})
+	h.Renderer.HTML(w, "profile_edit.html", render.Page(u, render.M{
+		"Profile": p, "Errors": auth.FieldErrors{}, "Saved": true,
+	}))
 }
 
-func (h *Handlers) accountForm(w http.ResponseWriter, _ *http.Request) {
-	h.Renderer.HTML(w, "account.html", nil)
+func (h *Handlers) accountForm(w http.ResponseWriter, r *http.Request) {
+	h.Renderer.HTML(w, "account.html", render.Page(middleware.UserFrom(r.Context()), nil))
 }
 
-// deleteAccount requires the user to re-enter their password. On success the
-// account is soft-deleted and the session is cleared.
 func (h *Handlers) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	if err := r.ParseForm(); err != nil {
@@ -101,7 +96,9 @@ func (h *Handlers) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	password := r.FormValue("password")
 	if password == "" {
-		h.Renderer.Status(w, http.StatusUnprocessableEntity, "account.html", map[string]any{"Error": "Password is required to delete your account."})
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "account.html", render.Page(u, render.M{
+			"Error": "Password is required to delete your account.",
+		}))
 		return
 	}
 	ok, err := h.Auth.CheckPassword(r.Context(), u.ID, password)
@@ -110,7 +107,9 @@ func (h *Handlers) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		h.Renderer.Status(w, http.StatusUnprocessableEntity, "account.html", map[string]any{"Error": "Password is incorrect."})
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "account.html", render.Page(u, render.M{
+			"Error": "Password is incorrect.",
+		}))
 		return
 	}
 	if err := h.Svc.SoftDelete(r.Context(), u.ID); err != nil {
@@ -118,16 +117,14 @@ func (h *Handlers) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	auth.ClearSessionCookie(w, h.Secure)
-	h.Renderer.HTML(w, "account_deleted.html", nil)
+	h.Renderer.HTML(w, "account_deleted.html", render.Page(nil, nil))
 }
 
 // viewProfile handles /{username}. In Phase 0 only the user's own profile is
 // viewable; non-owners get a 404 (privacy by non-existence). Phase 1 extends
-// this to connected viewers.
+// this to connected viewers via IsConnected.
 func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
-	// Reserved paths are routed before this; if we end up here with an
-	// unknown user, return 404.
 	p, err := h.Svc.GetByUsername(r.Context(), username)
 	if errors.Is(err, ErrNotFound) {
 		h.Renderer.Error(w, http.StatusNotFound)
@@ -143,5 +140,7 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusNotFound)
 		return
 	}
-	h.Renderer.HTML(w, "profile_view.html", map[string]any{"Profile": p, "Owner": true})
+	h.Renderer.HTML(w, "profile_view.html", render.Page(u, render.M{
+		"Profile": p, "Owner": true,
+	}))
 }

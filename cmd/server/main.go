@@ -76,7 +76,7 @@ func main() {
 			http.Redirect(w, req, "/login", http.StatusSeeOther)
 			return
 		}
-		r.HTML(w, "home.html", map[string]any{"User": u})
+		r.HTML(w, "home.html", render.Page(u, nil))
 	})
 
 	// Static assets.
