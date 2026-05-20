@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"sync"
 )
@@ -96,11 +97,13 @@ func (r *Renderer) HTML(w http.ResponseWriter, name string, data any) {
 func (r *Renderer) Status(w http.ResponseWriter, status int, name string, data any) {
 	t, err := r.lookup(name)
 	if err != nil {
+		slog.Error("render: lookup", "template", name, "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 		return
 	}
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, name, data); err != nil {
+		slog.Error("render: execute", "template", name, "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 		return
 	}
