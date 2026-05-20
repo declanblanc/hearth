@@ -10,7 +10,6 @@ import (
 	"github.com/dblanc/hearth/internal/shared/render"
 )
 
-
 type Handlers struct {
 	Svc      *Service
 	Auth     *auth.Service

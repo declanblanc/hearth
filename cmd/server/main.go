@@ -127,12 +127,12 @@ func main() {
 	_ = srv.Shutdown(ctx)
 }
 
-func mustSub(efs embed.FS, dir string) http.FileSystem {
+func mustSub(efs embed.FS, dir string) fs.FS {
 	sub, err := fs.Sub(efs, dir)
 	if err != nil {
 		panic(err)
 	}
-	return http.FS(sub)
+	return sub
 }
 
 // devEmailLogger prints email payloads to the logger instead of sending them.

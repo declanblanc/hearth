@@ -14,13 +14,13 @@ import (
 )
 
 const (
-	SessionLifetime           = 30 * 24 * time.Hour
-	VerificationTokenLifetime = 24 * time.Hour
+	SessionLifetime            = 30 * 24 * time.Hour
+	VerificationTokenLifetime  = 24 * time.Hour
 	PasswordResetTokenLifetime = 1 * time.Hour
-	FailedLoginWindow         = 15 * time.Minute
-	FailedLoginLimit          = 10
-	ResendVerificationLimit   = 3
-	ResendVerificationWindow  = time.Hour
+	FailedLoginWindow          = 15 * time.Minute
+	FailedLoginLimit           = 10
+	ResendVerificationLimit    = 3
+	ResendVerificationWindow   = time.Hour
 )
 
 type Service struct {
@@ -323,13 +323,13 @@ func (s *Service) LoadSession(ctx context.Context, token string) (*SessionUser, 
 	}
 	hash := HashToken(token)
 	var (
-		sid          int64
-		userID       int64
-		expiresAt    time.Time
-		username     string
-		displayName  string
+		sid           int64
+		userID        int64
+		expiresAt     time.Time
+		username      string
+		displayName   string
 		emailVerified sql.NullTime
-		deletedAt    sql.NullTime
+		deletedAt     sql.NullTime
 	)
 	err := s.DB.QueryRowContext(ctx, `
 		SELECT s.id, s.user_id, s.expires_at, u.username, u.display_name, u.email_verified_at, u.deleted_at

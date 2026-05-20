@@ -1,5 +1,5 @@
 # Fly.io app config. Replace `app` with the real app name after `flyctl launch`.
-app = "hearth"
+app = "the-hearth"
 primary_region = "iad"
 
 [build]
