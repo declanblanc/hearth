@@ -1,0 +1,8 @@
+{{define "profile_view.html"}}{{template "base" .}}{{end}}
+{{define "title"}}{{.Profile.DisplayName}} — Hearth{{end}}
+{{define "content"}}
+<h1>{{.Profile.DisplayName}}</h1>
+<p class="muted">@{{.Profile.Username}}{{if .Profile.Pronouns}} · {{.Profile.Pronouns}}{{end}}</p>
+{{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
+{{if .Owner}}<p><a href="/settings/profile">Edit profile</a></p>{{end}}
+{{end}}

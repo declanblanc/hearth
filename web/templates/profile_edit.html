@@ -1,0 +1,23 @@
+{{define "profile_edit.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Edit profile — Hearth{{end}}
+{{define "content"}}
+<h1>Edit profile</h1>
+{{if .Saved}}<div class="banner">Saved.</div>{{end}}
+<form method="post" action="/settings/profile">
+  <label>Display name
+    <input name="display_name" value="{{.Profile.DisplayName}}" required>
+    {{with index .Errors "display_name"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Pronouns
+    <input name="pronouns" value="{{.Profile.Pronouns}}">
+    {{with index .Errors "pronouns"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Bio
+    <textarea name="bio" rows="4" maxlength="1000">{{.Profile.Bio}}</textarea>
+    {{with index .Errors "bio"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <button type="submit">Save</button>
+</form>
+<p><a href="/{{.Profile.Username}}">View your profile</a> · <a href="/settings/account">Account settings</a></p>
+<p class="muted">Profile photo upload arrives once media storage is wired up.</p>
+{{end}}

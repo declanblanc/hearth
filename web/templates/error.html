@@ -1,0 +1,7 @@
+{{define "error.html"}}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{{.Status}} — Hearth</title>
+<link rel="stylesheet" href="/static/app.css"></head>
+<body><main class="container">
+<h1>{{.Status}} {{.Message}}</h1>
+<p>Something went wrong. <a href="/">Return home</a>.</p>
+</main></body></html>{{end}}

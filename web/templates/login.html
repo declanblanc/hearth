@@ -1,0 +1,14 @@
+{{define "login.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Log in — Hearth{{end}}
+{{define "content"}}
+<h1>Log in</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form method="post" action="/login">
+  <input type="hidden" name="next" value="{{.Next}}">
+  <label>Email <input name="email" type="email" value="{{.Email}}" autocomplete="email" required></label>
+  <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+  <button type="submit"{{if .Locked}} disabled{{end}}>Log in</button>
+</form>
+<p><a href="/password/forgot">Forgot your password?</a></p>
+<p><a href="/signup">Create an account</a></p>
+{{end}}

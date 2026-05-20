@@ -1,0 +1,25 @@
+{{define "signup.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Sign up — Hearth{{end}}
+{{define "content"}}
+<h1>Create your account</h1>
+<form method="post" action="/signup" novalidate>
+  <label>Username
+    <input name="username" value="{{.Username}}" autocomplete="username" required>
+    {{with index .Errors "username"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Display name
+    <input name="display_name" value="{{.DisplayName}}" required>
+    {{with index .Errors "display_name"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Email
+    <input name="email" type="email" value="{{.Email}}" autocomplete="email" required>
+    {{with index .Errors "email"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Password
+    <input name="password" type="password" autocomplete="new-password" minlength="12" required>
+    {{with index .Errors "password"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <button type="submit">Sign up</button>
+</form>
+<p><a href="/login">Already have an account? Log in.</a></p>
+{{end}}
