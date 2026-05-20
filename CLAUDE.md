@@ -63,4 +63,29 @@ No likes/reactions, no user search/discovery, no algorithmic ranking, no messagi
 
 ## Commands
 
-None yet — no code, no `go.mod`, no Makefile, no scripts. When scaffolding begins, add the actual commands here (build, test, run a single test, lint, migrate, dev server) rather than guessing them.
+```sh
+make run          # dev server on :8080 (email printed to stdout, no R2 needed)
+make build        # compile to bin/hearth (CGO_ENABLED=0)
+make test         # go test ./...
+make fmt          # gofmt -w .
+make vet          # go vet ./...
+make tidy         # go mod tidy
+```
+
+Run a single test package:
+```sh
+go test ./internal/auth/...
+go test ./internal/shared/db/...
+```
+
+Run a single test by name:
+```sh
+go test ./internal/auth/... -run TestAuthenticate
+```
+
+Deploy to Fly.io:
+```sh
+flyctl deploy            # builds and deploys; migrations run at startup
+flyctl logs              # tail production logs
+flyctl secrets set KEY=VALUE   # add/update an env secret
+```
