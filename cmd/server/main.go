@@ -70,7 +70,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		u := middleware.UserFrom(req.Context())
 		if u == nil {
 			http.Redirect(w, req, "/login", http.StatusSeeOther)
