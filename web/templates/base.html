@@ -12,7 +12,7 @@
   <a href="/" class="brand">Hearth</a>
   <nav>
     {{if .User}}
-      <a href="/settings/profile">Profile</a>
+      <a href="/{{.User.Username}}">Profile</a>
       <form method="post" action="/logout" style="display:inline">
         <button type="submit" class="linklike">Log out</button>
       </form>

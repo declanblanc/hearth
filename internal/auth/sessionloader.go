@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/dblanc/hearth/internal/shared/middleware"
 )
@@ -15,8 +16,9 @@ func SessionLoader(svc *Service) func(http.Handler) http.Handler {
 			token := ReadSessionCookie(r)
 			if token != "" {
 				if su, err := svc.LoadSession(r.Context(), token); err == nil && su != nil {
+					name := strings.TrimSpace(su.FirstName + " " + su.LastName)
 					ctx := middleware.WithUser(r.Context(), &middleware.User{
-						ID: su.ID, Username: su.Username, DisplayName: su.DisplayName, Verified: su.Verified,
+						ID: su.ID, Username: su.Username, DisplayName: name, Verified: su.Verified,
 					})
 					r = r.WithContext(ctx)
 				}

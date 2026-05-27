@@ -46,16 +46,18 @@ var (
 )
 
 type SignupInput struct {
-	Username    string
-	Email       string
-	Password    string
-	DisplayName string
+	Username  string
+	Email     string
+	Password  string
+	FirstName string
+	LastName  string
 }
 
 func (s *Service) Signup(ctx context.Context, in SignupInput) (int64, error) {
 	in.Username = NormaliseUsername(in.Username)
 	in.Email = NormaliseEmail(in.Email)
-	in.DisplayName = strings.TrimSpace(in.DisplayName)
+	in.FirstName = strings.TrimSpace(in.FirstName)
+	in.LastName = strings.TrimSpace(in.LastName)
 
 	hash, err := HashPassword(in.Password)
 	if err != nil {
@@ -69,8 +71,8 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (int64, error) {
 	defer tx.Rollback() //nolint:errcheck
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO users (username, email, password_hash, display_name) VALUES (?, ?, ?, ?)`,
-		in.Username, in.Email, hash, in.DisplayName)
+		`INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)`,
+		in.Username, in.Email, hash, in.FirstName, in.LastName)
 	if err != nil {
 		if isUniqueViolation(err, "username") {
 			return 0, ErrUsernameTaken
@@ -94,7 +96,7 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (int64, error) {
 		return 0, err
 	}
 
-	if err := s.sendVerificationEmail(ctx, in.Email, in.DisplayName, token); err != nil {
+	if err := s.sendVerificationEmail(ctx, in.Email, in.FirstName, token); err != nil {
 		return userID, fmt.Errorf("auth: send verification: %w", err)
 	}
 	return userID, nil
@@ -188,12 +190,12 @@ func (s *Service) ResendVerification(ctx context.Context, userID int64) error {
 		return ErrTooMany
 	}
 	var (
-		email, displayName string
-		verifiedAt         sql.NullTime
+		emailAddr, firstName string
+		verifiedAt           sql.NullTime
 	)
 	if err := s.DB.QueryRowContext(ctx,
-		`SELECT email, display_name, email_verified_at FROM users WHERE id = ? AND deleted_at IS NULL`,
-		userID).Scan(&email, &displayName, &verifiedAt); err != nil {
+		`SELECT email, first_name, email_verified_at FROM users WHERE id = ? AND deleted_at IS NULL`,
+		userID).Scan(&emailAddr, &firstName, &verifiedAt); err != nil {
 		return err
 	}
 	if verifiedAt.Valid {
@@ -211,7 +213,7 @@ func (s *Service) ResendVerification(ctx context.Context, userID int64) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.sendVerificationEmail(ctx, email, displayName, token)
+	return s.sendVerificationEmail(ctx, emailAddr, firstName, token)
 }
 
 // ---- login / logout / sessions ----
@@ -327,16 +329,17 @@ func (s *Service) LoadSession(ctx context.Context, token string) (*SessionUser, 
 		userID        int64
 		expiresAt     time.Time
 		username      string
-		displayName   string
+		firstName     string
+		lastName      string
 		emailVerified sql.NullTime
 		deletedAt     sql.NullTime
 	)
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT s.id, s.user_id, s.expires_at, u.username, u.display_name, u.email_verified_at, u.deleted_at
+		SELECT s.id, s.user_id, s.expires_at, u.username, u.first_name, u.last_name, u.email_verified_at, u.deleted_at
 		  FROM sessions s
 		  JOIN users u ON u.id = s.user_id
 		 WHERE s.token_hash = ?`, hash,
-	).Scan(&sid, &userID, &expiresAt, &username, &displayName, &emailVerified, &deletedAt)
+	).Scan(&sid, &userID, &expiresAt, &username, &firstName, &lastName, &emailVerified, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -349,16 +352,17 @@ func (s *Service) LoadSession(ctx context.Context, token string) (*SessionUser, 
 	}
 	_, _ = s.DB.ExecContext(ctx, `UPDATE sessions SET last_seen_at = ? WHERE id = ?`, s.Now(), sid)
 	return &SessionUser{
-		ID: userID, Username: username, DisplayName: displayName, Verified: emailVerified.Valid,
+		ID: userID, Username: username, FirstName: firstName, LastName: lastName, Verified: emailVerified.Valid,
 	}, nil
 }
 
 // SessionUser is the subset of user fields needed for request-context purposes.
 type SessionUser struct {
-	ID          int64
-	Username    string
-	DisplayName string
-	Verified    bool
+	ID        int64
+	Username  string
+	FirstName string
+	LastName  string
+	Verified  bool
 }
 
 func (s *Service) DeleteSession(ctx context.Context, token string) error {
@@ -382,12 +386,12 @@ func (s *Service) DeleteAllSessionsFor(ctx context.Context, userID int64) error 
 func (s *Service) RequestPasswordReset(ctx context.Context, emailIn, ip string) error {
 	emailIn = NormaliseEmail(emailIn)
 	var (
-		userID      int64
-		displayName string
+		userID    int64
+		firstName string
 	)
 	err := s.DB.QueryRowContext(ctx,
-		`SELECT id, display_name FROM users WHERE email = ? AND deleted_at IS NULL`, emailIn,
-	).Scan(&userID, &displayName)
+		`SELECT id, first_name FROM users WHERE email = ? AND deleted_at IS NULL`, emailIn,
+	).Scan(&userID, &firstName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -432,7 +436,7 @@ Use the link below to reset your Hearth password. It expires in 1 hour.
 %s
 
 If you didn't request this, you can safely ignore the email.
-`, displayName, link)
+`, firstName, link)
 	return s.Email.Send(ctx, email.Message{To: emailIn, Subject: "Reset your Hearth password", TextBody: body})
 }
 

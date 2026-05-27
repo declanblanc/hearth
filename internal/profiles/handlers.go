@@ -59,13 +59,17 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := UpdateInput{
-		DisplayName: strings.TrimSpace(r.FormValue("display_name")),
-		Bio:         strings.TrimSpace(r.FormValue("bio")),
-		Pronouns:    strings.TrimSpace(r.FormValue("pronouns")),
+		FirstName: strings.TrimSpace(r.FormValue("first_name")),
+		LastName:  strings.TrimSpace(r.FormValue("last_name")),
+		Bio:       strings.TrimSpace(r.FormValue("bio")),
+		Pronouns:  strings.TrimSpace(r.FormValue("pronouns")),
 	}
 	errs := auth.FieldErrors{}
-	if m := auth.ValidateDisplayName(in.DisplayName); m != "" {
-		errs.Add("display_name", m)
+	if m := auth.ValidateFirstName(in.FirstName); m != "" {
+		errs.Add("first_name", m)
+	}
+	if m := auth.ValidateLastName(in.LastName); m != "" {
+		errs.Add("last_name", m)
 	}
 	if m := auth.ValidateBio(in.Bio); m != "" {
 		errs.Add("bio", m)
@@ -112,7 +116,8 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 	if errs.Has() {
 		p, _ := h.Svc.Get(r.Context(), u.ID)
 		if p != nil {
-			p.DisplayName = in.DisplayName
+			p.FirstName = in.FirstName
+			p.LastName = in.LastName
 			p.Bio = in.Bio
 			p.Pronouns = in.Pronouns
 		}

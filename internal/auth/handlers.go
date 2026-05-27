@@ -57,10 +57,11 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := SignupInput{
-		Username:    NormaliseUsername(r.FormValue("username")),
-		Email:       NormaliseEmail(r.FormValue("email")),
-		Password:    r.FormValue("password"),
-		DisplayName: strings.TrimSpace(r.FormValue("display_name")),
+		Username:  NormaliseUsername(r.FormValue("username")),
+		Email:     NormaliseEmail(r.FormValue("email")),
+		Password:  r.FormValue("password"),
+		FirstName: strings.TrimSpace(r.FormValue("first_name")),
+		LastName:  strings.TrimSpace(r.FormValue("last_name")),
 	}
 	errs := FieldErrors{}
 	if m := ValidateUsername(in.Username); m != "" {
@@ -72,12 +73,16 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 	if m := ValidatePassword(in.Password); m != "" {
 		errs.Add("password", m)
 	}
-	if m := ValidateDisplayName(in.DisplayName); m != "" {
-		errs.Add("display_name", m)
+	if m := ValidateFirstName(in.FirstName); m != "" {
+		errs.Add("first_name", m)
+	}
+	if m := ValidateLastName(in.LastName); m != "" {
+		errs.Add("last_name", m)
 	}
 	if errs.Has() {
 		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", render.Page(user(r), render.M{
-			"Username": in.Username, "Email": in.Email, "DisplayName": in.DisplayName, "Errors": errs,
+			"Username": in.Username, "Email": in.Email,
+			"FirstName": in.FirstName, "LastName": in.LastName, "Errors": errs,
 		}))
 		return
 	}
@@ -94,7 +99,8 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", render.Page(user(r), render.M{
-			"Username": in.Username, "Email": in.Email, "DisplayName": in.DisplayName, "Errors": errs,
+			"Username": in.Username, "Email": in.Email,
+			"FirstName": in.FirstName, "LastName": in.LastName, "Errors": errs,
 		}))
 		return
 	}

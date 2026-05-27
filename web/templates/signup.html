@@ -3,13 +3,17 @@
 {{define "content"}}
 <h1>Create your account</h1>
 <form method="post" action="/signup" novalidate>
+  <label>First name
+    <input name="first_name" value="{{.FirstName}}" autocomplete="given-name" required>
+    {{with index .Errors "first_name"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Last name
+    <input name="last_name" value="{{.LastName}}" autocomplete="family-name" required>
+    {{with index .Errors "last_name"}}<small class="error">{{.}}</small>{{end}}
+  </label>
   <label>Username
     <input name="username" value="{{.Username}}" autocomplete="username" required>
     {{with index .Errors "username"}}<small class="error">{{.}}</small>{{end}}
-  </label>
-  <label>Display name
-    <input name="display_name" value="{{.DisplayName}}" required>
-    {{with index .Errors "display_name"}}<small class="error">{{.}}</small>{{end}}
   </label>
   <label>Email
     <input name="email" type="email" value="{{.Email}}" autocomplete="email" required>

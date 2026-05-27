@@ -20,12 +20,21 @@ type Service struct {
 func New(db *sql.DB) *Service { return &Service{DB: db, Now: time.Now} }
 
 type Profile struct {
-	ID          int64
-	Username    string
-	DisplayName string
-	Bio         string
-	Pronouns    string
-	PhotoKey    string
+	ID        int64
+	Username  string
+	FirstName string
+	LastName  string
+	Bio       string
+	Pronouns  string
+	PhotoKey  string
+}
+
+// FullName returns the display name shown to users.
+func (p *Profile) FullName() string {
+	if p.LastName == "" {
+		return p.FirstName
+	}
+	return p.FirstName + " " + p.LastName
 }
 
 var ErrNotFound = errors.New("profiles: not found")
@@ -37,9 +46,9 @@ func (s *Service) Get(ctx context.Context, userID int64) (*Profile, error) {
 		photo    sql.NullString
 	)
 	err := s.DB.QueryRowContext(ctx,
-		`SELECT id, username, display_name, bio, pronouns, photo_key
+		`SELECT id, username, first_name, last_name, bio, pronouns, photo_key
 		   FROM users WHERE id = ? AND deleted_at IS NULL`, userID,
-	).Scan(&p.ID, &p.Username, &p.DisplayName, &bio, &pro, &photo)
+	).Scan(&p.ID, &p.Username, &p.FirstName, &p.LastName, &bio, &pro, &photo)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -59,9 +68,9 @@ func (s *Service) GetByUsername(ctx context.Context, username string) (*Profile,
 		photo    sql.NullString
 	)
 	err := s.DB.QueryRowContext(ctx,
-		`SELECT id, username, display_name, bio, pronouns, photo_key
+		`SELECT id, username, first_name, last_name, bio, pronouns, photo_key
 		   FROM users WHERE username = ? AND deleted_at IS NULL`, username,
-	).Scan(&p.ID, &p.Username, &p.DisplayName, &bio, &pro, &photo)
+	).Scan(&p.ID, &p.Username, &p.FirstName, &p.LastName, &bio, &pro, &photo)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -75,15 +84,16 @@ func (s *Service) GetByUsername(ctx context.Context, username string) (*Profile,
 }
 
 type UpdateInput struct {
-	DisplayName string
-	Bio         string
-	Pronouns    string
+	FirstName string
+	LastName  string
+	Bio       string
+	Pronouns  string
 }
 
 func (s *Service) Update(ctx context.Context, userID int64, in UpdateInput) error {
 	_, err := s.DB.ExecContext(ctx,
-		`UPDATE users SET display_name = ?, bio = ?, pronouns = ? WHERE id = ? AND deleted_at IS NULL`,
-		in.DisplayName, nullable(in.Bio), nullable(in.Pronouns), userID,
+		`UPDATE users SET first_name = ?, last_name = ?, bio = ?, pronouns = ? WHERE id = ? AND deleted_at IS NULL`,
+		in.FirstName, in.LastName, nullable(in.Bio), nullable(in.Pronouns), userID,
 	)
 	return err
 }
@@ -129,7 +139,8 @@ func (s *Service) SoftDelete(ctx context.Context, userID int64) error {
 		UPDATE users
 		   SET deleted_at = ?,
 		       email = ?,
-		       display_name = '[deleted user]',
+		       first_name = '[deleted]',
+		       last_name = '',
 		       bio = NULL,
 		       pronouns = NULL,
 		       photo_key = NULL

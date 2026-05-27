@@ -4,9 +4,13 @@
 <h1>Edit profile</h1>
 {{if .Saved}}<div class="banner">Saved.</div>{{end}}
 <form method="post" action="/settings/profile" enctype="multipart/form-data">
-  <label>Display name
-    <input name="display_name" value="{{.Profile.DisplayName}}" required>
-    {{with index .Errors "display_name"}}<small class="error">{{.}}</small>{{end}}
+  <label>First name
+    <input name="first_name" value="{{.Profile.FirstName}}" required>
+    {{with index .Errors "first_name"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Last name
+    <input name="last_name" value="{{.Profile.LastName}}" required>
+    {{with index .Errors "last_name"}}<small class="error">{{.}}</small>{{end}}
   </label>
   <label>Pronouns
     <input name="pronouns" value="{{.Profile.Pronouns}}">
@@ -24,5 +28,5 @@
   </label>
   <button type="submit">Save</button>
 </form>
-<p><a href="/{{.Profile.Username}}">View your profile</a> · <a href="/settings/account">Account settings</a></p>
+<p><a href="/settings/account">Account settings</a></p>
 {{end}}

@@ -29,7 +29,7 @@ func TestSignupAndVerify(t *testing.T) {
 	ctx := context.Background()
 
 	uid, err := svc.Signup(ctx, SignupInput{
-		Username: "declan", Email: "d@example.com", Password: "very-long-password", DisplayName: "Declan",
+		Username: "declan", Email: "d@example.com", Password: "very-long-password", FirstName: "Declan", LastName: "Blanc",
 	})
 	if err != nil {
 		t.Fatalf("signup: %v", err)
@@ -56,14 +56,14 @@ func TestSignupAndVerify(t *testing.T) {
 func TestSignupDuplicates(t *testing.T) {
 	svc, _, _ := newTestSvc(t)
 	ctx := context.Background()
-	if _, err := svc.Signup(ctx, SignupInput{Username: "a", Email: "a@example.com", Password: "very-long-password", DisplayName: "A"}); err != nil {
+	if _, err := svc.Signup(ctx, SignupInput{Username: "a", Email: "a@example.com", Password: "very-long-password", FirstName: "A", LastName: "A"}); err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	_, err := svc.Signup(ctx, SignupInput{Username: "a", Email: "b@example.com", Password: "very-long-password", DisplayName: "B"})
+	_, err := svc.Signup(ctx, SignupInput{Username: "a", Email: "b@example.com", Password: "very-long-password", FirstName: "B", LastName: "B"})
 	if !errors.Is(err, ErrUsernameTaken) {
 		t.Fatalf("want ErrUsernameTaken, got %v", err)
 	}
-	_, err = svc.Signup(ctx, SignupInput{Username: "b", Email: "a@example.com", Password: "very-long-password", DisplayName: "B"})
+	_, err = svc.Signup(ctx, SignupInput{Username: "b", Email: "a@example.com", Password: "very-long-password", FirstName: "B", LastName: "B"})
 	if !errors.Is(err, ErrEmailTaken) {
 		t.Fatalf("want ErrEmailTaken, got %v", err)
 	}
@@ -73,7 +73,7 @@ func TestAuthenticate(t *testing.T) {
 	svc, _, _ := newTestSvc(t)
 	ctx := context.Background()
 	_, err := svc.Signup(ctx, SignupInput{
-		Username: "c", Email: "c@example.com", Password: "very-long-password", DisplayName: "C",
+		Username: "c", Email: "c@example.com", Password: "very-long-password", FirstName: "C", LastName: "C",
 	})
 	if err != nil {
 		t.Fatalf("signup: %v", err)
@@ -99,7 +99,7 @@ func TestAuthenticate(t *testing.T) {
 func TestPasswordResetTerminatesSessions(t *testing.T) {
 	svc, _, _ := newTestSvc(t)
 	ctx := context.Background()
-	uid, err := svc.Signup(ctx, SignupInput{Username: "r", Email: "r@example.com", Password: "very-long-password", DisplayName: "R"})
+	uid, err := svc.Signup(ctx, SignupInput{Username: "r", Email: "r@example.com", Password: "very-long-password", FirstName: "R", LastName: "R"})
 	if err != nil {
 		t.Fatalf("signup: %v", err)
 	}

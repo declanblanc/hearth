@@ -75,10 +75,11 @@ func newTestRenderer(t *testing.T) *render.Renderer {
 func createUser(t *testing.T, authSvc *auth.Service, username string) int64 {
 	t.Helper()
 	uid, err := authSvc.Signup(context.Background(), auth.SignupInput{
-		Username:    username,
-		Email:       username + "@example.com",
-		Password:    "password-is-very-long",
-		DisplayName: "Test User",
+		Username:  username,
+		Email:     username + "@example.com",
+		Password:  "password-is-very-long",
+		FirstName: "Test",
+		LastName:  "User",
 	})
 	if err != nil {
 		t.Fatalf("Signup(%s): %v", username, err)
@@ -236,9 +237,10 @@ func TestEditProfile_TextPersistsAcrossRequests(t *testing.T) {
 	uid := createUser(t, authSvc, "alice")
 
 	body := url.Values{
-		"display_name": {"Alice A"},
-		"bio":          {"Hello world"},
-		"pronouns":     {"she/her"},
+		"first_name": {"Alice"},
+		"last_name":  {"Anderson"},
+		"bio":        {"Hello world"},
+		"pronouns":   {"she/her"},
 	}
 	req := authedRequest(http.MethodPost, "/settings/profile",
 		strings.NewReader(body.Encode()), uid, "alice")
@@ -254,8 +256,8 @@ func TestEditProfile_TextPersistsAcrossRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if p.DisplayName != "Alice A" {
-		t.Errorf("DisplayName: got %q, want %q", p.DisplayName, "Alice A")
+	if p.FirstName != "Alice" || p.LastName != "Anderson" {
+		t.Errorf("Name: got %q %q, want Alice Anderson", p.FirstName, p.LastName)
 	}
 	if p.Bio != "Hello world" {
 		t.Errorf("Bio: got %q, want %q", p.Bio, "Hello world")
@@ -271,9 +273,10 @@ func TestEditProfile_ValidationError(t *testing.T) {
 	uid := createUser(t, authSvc, "bob")
 
 	body := url.Values{
-		"display_name": {""}, // too short — validation should fail
-		"bio":          {""},
-		"pronouns":     {""},
+		"first_name": {""}, // too short — validation should fail
+		"last_name":  {""},
+		"bio":        {""},
+		"pronouns":   {""},
 	}
 	req := authedRequest(http.MethodPost, "/settings/profile",
 		strings.NewReader(body.Encode()), uid, "bob")
@@ -292,7 +295,7 @@ func TestEditProfile_PhotoUploaded(t *testing.T) {
 	uid := createUser(t, authSvc, "cam")
 
 	buf, ct := buildMultipartForm(t, map[string]string{
-		"display_name": "Cam",
+		"first_name": "Cam", "last_name": "C",
 		"bio":          "",
 		"pronouns":     "",
 	}, "photo.jpg", jpegHeader())
@@ -329,7 +332,7 @@ func TestEditProfile_PhotoTooLarge(t *testing.T) {
 	copy(oversized, jpegHeader())
 
 	buf, ct := buildMultipartForm(t, map[string]string{
-		"display_name": "Dana",
+		"first_name": "Dana", "last_name": "D",
 		"bio":          "",
 		"pronouns":     "",
 	}, "big.jpg", oversized)
@@ -358,7 +361,7 @@ func TestEditProfile_NonImageRejected(t *testing.T) {
 	// Submit a text file with a .jpg extension — type sniff should catch it.
 	textContent := []byte("this is not an image, no matter the extension")
 	buf, ct := buildMultipartForm(t, map[string]string{
-		"display_name": "Evan",
+		"first_name": "Evan", "last_name": "E",
 		"bio":          "",
 		"pronouns":     "",
 	}, "fake.jpg", textContent)
@@ -391,7 +394,7 @@ func TestEditProfile_OldPhotoDeletedOnReplacement(t *testing.T) {
 
 	// Upload a new photo.
 	buf, ct := buildMultipartForm(t, map[string]string{
-		"display_name": "Fern",
+		"first_name": "Fern", "last_name": "F",
 		"bio":          "",
 		"pronouns":     "",
 	}, "new.jpg", jpegHeader())

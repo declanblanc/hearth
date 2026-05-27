@@ -7,13 +7,13 @@ import (
 )
 
 const (
-	UsernameMinLen    = 3
-	UsernameMaxLen    = 30
-	DisplayNameMinLen = 1
-	DisplayNameMaxLen = 50
-	PasswordMinLen    = 12
-	BioMaxLen         = 1000
-	PronounsMaxLen    = 50
+	UsernameMinLen = 3
+	UsernameMaxLen = 30
+	NameMinLen     = 1
+	NameMaxLen     = 50
+	PasswordMinLen = 12
+	BioMaxLen      = 1000
+	PronounsMaxLen = 50
 )
 
 var usernameRe = regexp.MustCompile(`^[a-z0-9_]+$`)
@@ -66,10 +66,18 @@ func ValidatePassword(p string) string {
 	return ""
 }
 
-func ValidateDisplayName(d string) string {
-	d = strings.TrimSpace(d)
-	if len(d) < DisplayNameMinLen || len(d) > DisplayNameMaxLen {
-		return "Display name must be 1–50 characters."
+func ValidateFirstName(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) < NameMinLen || len(s) > NameMaxLen {
+		return "First name must be 1–50 characters."
+	}
+	return ""
+}
+
+func ValidateLastName(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) < NameMinLen || len(s) > NameMaxLen {
+		return "Last name must be 1–50 characters."
 	}
 	return ""
 }
