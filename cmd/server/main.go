@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dblanc/hearth/internal/auth"
+	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/profiles"
 	"github.com/dblanc/hearth/internal/shared/config"
 	"github.com/dblanc/hearth/internal/shared/db"
@@ -60,10 +61,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	var mediaStore media.Store
+	if cfg.R2Configured() {
+		mediaStore = media.NewR2(cfg.R2AccountID, cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Bucket, cfg.R2PublicHost)
+		logger.Info("media: R2 configured", "bucket", cfg.R2Bucket)
+	} else {
+		logger.Warn("media: R2 not configured — photo uploads disabled")
+	}
+
 	authSvc := auth.New(database, sender, cfg.BaseURL)
 	profileSvc := profiles.New(database)
+	profileSvc.Media = mediaStore
 	authH := auth.NewHandlers(authSvc, r, cfg.IsProd())
-	profileH := profiles.NewHandlers(profileSvc, authSvc, r, cfg.IsProd())
+	profileH := profiles.NewHandlers(profileSvc, authSvc, r, mediaStore, cfg.IsProd())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

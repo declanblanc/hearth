@@ -3,7 +3,7 @@
 {{define "content"}}
 <h1>Edit profile</h1>
 {{if .Saved}}<div class="banner">Saved.</div>{{end}}
-<form method="post" action="/settings/profile">
+<form method="post" action="/settings/profile" enctype="multipart/form-data">
   <label>Display name
     <input name="display_name" value="{{.Profile.DisplayName}}" required>
     {{with index .Errors "display_name"}}<small class="error">{{.}}</small>{{end}}
@@ -16,8 +16,13 @@
     <textarea name="bio" rows="4" maxlength="1000">{{.Profile.Bio}}</textarea>
     {{with index .Errors "bio"}}<small class="error">{{.}}</small>{{end}}
   </label>
+  <label>Profile photo
+    {{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="Current profile photo" style="display:block;max-width:80px;max-height:80px;border-radius:50%;margin-bottom:.5rem">{{end}}
+    <input type="file" name="photo" accept="image/jpeg,image/png,image/webp">
+    {{with index .Errors "photo"}}<small class="error">{{.}}</small>{{end}}
+    <small class="muted">JPEG, PNG, or WebP · max 5 MB</small>
+  </label>
   <button type="submit">Save</button>
 </form>
 <p><a href="/{{.Profile.Username}}">View your profile</a> · <a href="/settings/account">Account settings</a></p>
-<p class="muted">Profile photo upload arrives once media storage is wired up.</p>
 {{end}}

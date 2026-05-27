@@ -1,6 +1,4 @@
 // Package profiles handles profile read/edit and account deletion.
-// Photo upload (R2) is intentionally deferred until media storage is wired up
-// in Phase 2 — see internal/media.
 package profiles
 
 import (
@@ -9,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/dblanc/hearth/internal/media"
 )
 
 type Service struct {
-	DB  *sql.DB
-	Now func() time.Time
+	DB    *sql.DB
+	Now   func() time.Time
+	Media media.Store // may be nil in dev/test
 }
 
 func New(db *sql.DB) *Service { return &Service{DB: db, Now: time.Now} }
@@ -87,9 +88,35 @@ func (s *Service) Update(ctx context.Context, userID int64, in UpdateInput) erro
 	return err
 }
 
-// SoftDelete anonymises the user and terminates their sessions. A nightly
-// sweep performs the hard delete after 30 days.
+// UpdatePhoto swaps the stored photo_key for userID and returns the previous
+// key (empty string if none). The caller is responsible for deleting the old
+// key from R2 after this returns successfully.
+func (s *Service) UpdatePhoto(ctx context.Context, userID int64, newKey string) (string, error) {
+	var old sql.NullString
+	if err := s.DB.QueryRowContext(ctx,
+		`SELECT photo_key FROM users WHERE id = ? AND deleted_at IS NULL`, userID,
+	).Scan(&old); err != nil {
+		return "", err
+	}
+	if _, err := s.DB.ExecContext(ctx,
+		`UPDATE users SET photo_key = ? WHERE id = ? AND deleted_at IS NULL`,
+		newKey, userID,
+	); err != nil {
+		return "", err
+	}
+	return old.String, nil
+}
+
+// SoftDelete anonymises the user, terminates their sessions, and removes their
+// profile photo from R2 (if Media is set). A nightly sweep performs the hard
+// delete after 30 days.
 func (s *Service) SoftDelete(ctx context.Context, userID int64) error {
+	// Fetch photo key before the transaction so we can clean up R2 after commit.
+	var photoKey sql.NullString
+	_ = s.DB.QueryRowContext(ctx,
+		`SELECT photo_key FROM users WHERE id = ? AND deleted_at IS NULL`, userID,
+	).Scan(&photoKey)
+
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -112,12 +139,22 @@ func (s *Service) SoftDelete(ctx context.Context, userID int64) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Best-effort R2 cleanup after commit — per spec §0.7, photo removed at soft-delete time.
+	if s.Media != nil && photoKey.Valid && photoKey.String != "" {
+		_ = s.Media.Delete(ctx, photoKey.String)
+	}
+	return nil
 }
 
 // HardDeleteExpired removes users whose soft-delete is older than 30 days.
 // Returns the count removed. The Technical Plan calls for this to run hourly
 // (cron or Fly scheduled machine).
+// Profile photos are already removed from R2 at soft-delete time, so no R2
+// cleanup is needed here. Post/comment media cleanup will be added in Phase 1/2.
 func (s *Service) HardDeleteExpired(ctx context.Context) (int64, error) {
 	cutoff := s.Now().Add(-30 * 24 * time.Hour)
 	// ON DELETE CASCADE on sessions handles cleanup; posts/comments/media will
