@@ -37,12 +37,13 @@ func New(db *sql.DB, e email.Sender, baseURL string) *Service {
 // ---- signup ----
 
 var (
-	ErrUsernameTaken = errors.New("auth: username taken")
-	ErrEmailTaken    = errors.New("auth: email taken")
-	ErrInvalidLogin  = errors.New("auth: invalid email or password")
-	ErrTooMany       = errors.New("auth: too many attempts")
-	ErrTokenInvalid  = errors.New("auth: token not found or already used")
-	ErrTokenExpired  = errors.New("auth: token expired")
+	ErrUsernameTaken    = errors.New("auth: username taken")
+	ErrEmailTaken       = errors.New("auth: email taken")
+	ErrInvalidLogin     = errors.New("auth: invalid email or password")
+	ErrTooMany          = errors.New("auth: too many attempts")
+	ErrTokenInvalid     = errors.New("auth: token not found or already used")
+	ErrTokenExpired     = errors.New("auth: token expired")
+	ErrSendVerification = errors.New("auth: send verification email failed")
 )
 
 type SignupInput struct {
@@ -97,7 +98,10 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (int64, error) {
 	}
 
 	if err := s.sendVerificationEmail(ctx, in.Email, in.FirstName, token); err != nil {
-		return userID, fmt.Errorf("auth: send verification: %w", err)
+		// Roll back by deleting the just-created user so the email address is
+		// free to try again. Best-effort — ignore delete error.
+		_, _ = s.DB.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
+		return 0, fmt.Errorf("%w: %w", ErrSendVerification, err)
 	}
 	return userID, nil
 }

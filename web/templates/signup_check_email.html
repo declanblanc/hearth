@@ -3,4 +3,7 @@
 {{define "content"}}
 <h1>Check your email</h1>
 <p>We sent a verification link to <strong>{{.Email}}</strong>. Open it to finish signing up.</p>
+<form method="post" action="/verify/resend">
+  <button type="submit">Resend verification email</button>
+</form>
 {{end}}

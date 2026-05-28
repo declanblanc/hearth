@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -94,15 +95,22 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 			errs.Add("username", "That username is taken.")
 		case errors.Is(err, ErrEmailTaken):
 			errs.Add("email", "An account already exists for that email.")
+		case errors.Is(err, ErrSendVerification):
+			// Account was cleaned up — user can retry.
+			slog.Error("signup: send verification email", "email", in.Email, "err", err)
+			errs.Add("email", "We couldn't send a verification email to that address. Please try again.")
 		default:
+			slog.Error("signup", "err", err)
 			h.Renderer.Error(w, http.StatusInternalServerError)
 			return
 		}
-		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", render.Page(user(r), render.M{
-			"Username": in.Username, "Email": in.Email,
-			"FirstName": in.FirstName, "LastName": in.LastName, "Errors": errs,
-		}))
-		return
+		if errs.Has() {
+			h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", render.Page(user(r), render.M{
+				"Username": in.Username, "Email": in.Email,
+				"FirstName": in.FirstName, "LastName": in.LastName, "Errors": errs,
+			}))
+			return
+		}
 	}
 	h.Renderer.HTML(w, "signup_check_email.html", render.Page(user(r), render.M{"Email": in.Email}))
 }
