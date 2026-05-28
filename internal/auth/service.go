@@ -17,7 +17,7 @@ const (
 	SessionLifetime            = 30 * 24 * time.Hour
 	VerificationTokenLifetime  = 24 * time.Hour
 	PasswordResetTokenLifetime = 1 * time.Hour
-	FailedLoginWindow          = 15 * time.Minute
+	FailedLoginWindow          = 15 * time.Second
 	FailedLoginLimit           = 10
 	ResendVerificationLimit    = 3
 	ResendVerificationWindow   = time.Hour
@@ -322,7 +322,7 @@ func (s *Service) recordFailedLogin(ctx context.Context, ip string) {
 	if ip == "" {
 		return
 	}
-	_, _ = s.DB.ExecContext(ctx, `INSERT INTO failed_logins (ip) VALUES (?)`, ip)
+	_, _ = s.DB.ExecContext(ctx, `INSERT INTO failed_logins (ip, attempted_at) VALUES (?, ?)`, ip, s.Now())
 }
 
 func (s *Service) CreateSession(ctx context.Context, userID int64) (*Session, error) {
