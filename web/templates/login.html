@@ -3,13 +3,41 @@
 {{define "content"}}
 <h1>Log in</h1>
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
-<form method="post" action="/login">
+<form id="login-form" method="post" action="/login" novalidate>
   <input type="hidden" name="next" value="{{.Next}}">
-  <label>Email <input name="email" type="text" value="{{.Email}}" autocomplete="email"></label>
-  {{if .EmailError}}<span class="field-error">{{.EmailError}}</span>{{end}}
-  <label>Password <input name="password" type="password" autocomplete="current-password"></label>
+  <label>Email <input id="login-email" name="email" type="email" value="{{.Email}}" autocomplete="email" required></label>
+  <span class="field-error" id="login-email-error">{{.EmailError}}</span>
+  <label>Password <input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+  <span class="field-error" id="login-password-error"></span>
   <button type="submit"{{if .Locked}} disabled{{end}}>Log in</button>
 </form>
+<script>
+  document.getElementById('login-form').addEventListener('submit', function(e) {
+    var email = document.getElementById('login-email');
+    var password = document.getElementById('login-password');
+    var emailError = document.getElementById('login-email-error');
+    var passwordError = document.getElementById('login-password-error');
+    var valid = true;
+
+    emailError.textContent = '';
+    passwordError.textContent = '';
+
+    if (email.validity.valueMissing) {
+      emailError.textContent = 'Email is required.';
+      valid = false;
+    } else if (email.validity.typeMismatch) {
+      emailError.textContent = 'That doesn\'t look like a valid email address.';
+      valid = false;
+    }
+
+    if (password.validity.valueMissing) {
+      passwordError.textContent = 'Password is required.';
+      valid = false;
+    }
+
+    if (!valid) e.preventDefault();
+  });
+</script>
 <p><a href="/password/forgot">Forgot your password?</a></p>
 <p><a href="/signup">Create an account</a></p>
 {{end}}
