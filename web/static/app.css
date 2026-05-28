@@ -21,3 +21,4 @@ button[type=submit]:disabled { opacity: 0.5; cursor: not-allowed; }
 .muted { color: var(--muted); }
 .banner { padding: 0.75rem; background: #fff3e0; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 1rem; }
 .banner.error { background: #fde7e9; border-color: var(--error); color: var(--error); }
+.field-error { display: block; margin-top: -0.5rem; margin-bottom: 0.75rem; font-size: 0.875rem; color: var(--error); }
