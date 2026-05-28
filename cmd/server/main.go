@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dblanc/hearth/internal/auth"
+	"github.com/lmittmann/tint"
 	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/profiles"
 	"github.com/dblanc/hearth/internal/shared/config"
@@ -26,14 +27,22 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Error("config load", "err", err)
+		// Bootstrap logger before config is fully valid so we can report the error.
+		slog.New(slog.NewTextHandler(os.Stderr, nil)).Error("config load", "err", err)
 		os.Exit(1)
 	}
+
+	var handler slog.Handler
+	if cfg.IsProd() {
+		handler = slog.NewJSONHandler(os.Stdout, nil)
+	} else {
+		handler = tint.NewHandler(os.Stdout, &tint.Options{TimeFormat: "15:04:05"})
+	}
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
 	logger.Info("starting", "env", cfg.Env, "addr", cfg.Addr)
 
 	database, err := db.Open(cfg.DBPath)
