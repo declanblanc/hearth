@@ -175,10 +175,17 @@ func (h *Handlers) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusBadRequest)
 		return
 	}
-	emailIn := r.FormValue("email")
+	emailIn := NormaliseEmail(r.FormValue("email"))
 	password := r.FormValue("password")
 	next := r.FormValue("next")
 	ip := middleware.ClientIP(r)
+
+	if msg := ValidateEmail(emailIn); msg != "" {
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "login.html", render.Page(user(r), render.M{
+			"Email": emailIn, "Next": next, "EmailError": msg,
+		}))
+		return
+	}
 
 	sess, err := h.Svc.Authenticate(r.Context(), emailIn, password, ip)
 	if err != nil {
