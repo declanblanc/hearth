@@ -119,10 +119,11 @@ func (s *Service) issueVerificationToken(ctx context.Context, tx *sql.Tx, userID
 	if err != nil {
 		return "", err
 	}
-	expires := s.Now().Add(VerificationTokenLifetime)
+	now := s.Now()
+	expires := now.Add(VerificationTokenLifetime)
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO email_verifications (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
-		userID, HashToken(token), expires)
+		`INSERT INTO email_verifications (user_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+		userID, HashToken(token), now, expires)
 	if err != nil {
 		return "", err
 	}
@@ -450,9 +451,10 @@ func (s *Service) RequestPasswordReset(ctx context.Context, emailIn, ip string) 
 	if err != nil {
 		return err
 	}
+	now := s.Now()
 	_, err = s.DB.ExecContext(ctx,
-		`INSERT INTO password_resets (user_id, token_hash, expires_at, requester_ip) VALUES (?, ?, ?, ?)`,
-		userID, HashToken(token), s.Now().Add(PasswordResetTokenLifetime), ip,
+		`INSERT INTO password_resets (user_id, token_hash, created_at, expires_at, requester_ip) VALUES (?, ?, ?, ?, ?)`,
+		userID, HashToken(token), now, now.Add(PasswordResetTokenLifetime), ip,
 	)
 	if err != nil {
 		return err
