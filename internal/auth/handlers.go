@@ -88,7 +88,7 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.Svc.Signup(r.Context(), in)
+	uid, err := h.Svc.Signup(r.Context(), in)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUsernameTaken):
@@ -112,6 +112,16 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	// Issue a session immediately so the user can hit "Resend verification email"
+	// without being redirected to login. SessionUser.Verified will be false until
+	// they click the link.
+	sess, err := h.Svc.CreateSession(r.Context(), uid)
+	if err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	SetSessionCookie(w, sess.Token, sess.ExpiresAt, h.Secure)
 	h.Renderer.HTML(w, "signup_check_email.html", render.Page(user(r), render.M{"Email": in.Email}))
 }
 
