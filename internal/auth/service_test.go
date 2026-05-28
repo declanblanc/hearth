@@ -54,18 +54,48 @@ func TestSignupAndVerify(t *testing.T) {
 }
 
 func TestSignupDuplicates(t *testing.T) {
-	svc, _, _ := newTestSvc(t)
+	svc, _, db := newTestSvc(t)
 	ctx := context.Background()
-	if _, err := svc.Signup(ctx, SignupInput{Username: "a", Email: "a@example.com", Password: "very-long-password", FirstName: "A", LastName: "A"}); err != nil {
+	uid, err := svc.Signup(ctx, SignupInput{Username: "a", Email: "a@example.com", Password: "very-long-password", FirstName: "A", LastName: "A"})
+	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	_, err := svc.Signup(ctx, SignupInput{Username: "a", Email: "b@example.com", Password: "very-long-password", FirstName: "B", LastName: "B"})
+
+	// Username conflict is always rejected, verified or not.
+	_, err = svc.Signup(ctx, SignupInput{Username: "a", Email: "b@example.com", Password: "very-long-password", FirstName: "B", LastName: "B"})
 	if !errors.Is(err, ErrUsernameTaken) {
 		t.Fatalf("want ErrUsernameTaken, got %v", err)
 	}
+
+	// Email conflict with a *verified* account is rejected.
+	if _, err := db.Exec(`UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = ?`, uid); err != nil {
+		t.Fatalf("mark verified: %v", err)
+	}
 	_, err = svc.Signup(ctx, SignupInput{Username: "b", Email: "a@example.com", Password: "very-long-password", FirstName: "B", LastName: "B"})
 	if !errors.Is(err, ErrEmailTaken) {
-		t.Fatalf("want ErrEmailTaken, got %v", err)
+		t.Fatalf("want ErrEmailTaken for verified account, got %v", err)
+	}
+}
+
+func TestSignupUnverifiedEmailCanBeReclaimed(t *testing.T) {
+	svc, _, _ := newTestSvc(t)
+	ctx := context.Background()
+
+	// First signup — never verified.
+	if _, err := svc.Signup(ctx, SignupInput{Username: "first", Email: "shared@example.com", Password: "very-long-password", FirstName: "First", LastName: "User"}); err != nil {
+		t.Fatalf("first signup: %v", err)
+	}
+
+	// Second signup with same email but different username — should succeed.
+	uid2, err := svc.Signup(ctx, SignupInput{Username: "second", Email: "shared@example.com", Password: "very-long-password", FirstName: "Second", LastName: "User"})
+	if err != nil {
+		t.Fatalf("second signup with unverified email: %v", err)
+	}
+
+	// The new account should be the one that exists.
+	sess, err := svc.Authenticate(ctx, "shared@example.com", "very-long-password", "")
+	if err != nil || sess.UserID != uid2 {
+		t.Fatalf("want new account, got sess=%v err=%v", sess, err)
 	}
 }
 

@@ -71,6 +71,14 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (int64, error) {
 	}
 	defer tx.Rollback() //nolint:errcheck
 
+	// Free the email so it can be re-registered. ON DELETE CASCADE cleans up
+	// verification tokens and any other rows for this user.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM users WHERE email = ? AND email_verified_at IS NULL AND deleted_at IS NULL`,
+		in.Email); err != nil {
+		return 0, err
+	}
+
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)`,
 		in.Username, in.Email, hash, in.FirstName, in.LastName)
