@@ -88,7 +88,7 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uid, err := h.Svc.Signup(r.Context(), in)
+	_, err := h.Svc.Signup(r.Context(), in)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUsernameTaken):
@@ -113,15 +113,6 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Issue a session immediately so the user can hit "Resend verification email"
-	// without being redirected to login. SessionUser.Verified will be false until
-	// they click the link.
-	sess, err := h.Svc.CreateSession(r.Context(), uid)
-	if err != nil {
-		h.Renderer.Error(w, http.StatusInternalServerError)
-		return
-	}
-	SetSessionCookie(w, sess.Token, sess.ExpiresAt, h.Secure)
 	h.Renderer.HTML(w, "signup_check_email.html", render.Page(user(r), render.M{"Email": in.Email}))
 }
 
@@ -154,16 +145,21 @@ func (h *Handlers) verify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) resendVerification(w http.ResponseWriter, r *http.Request) {
-	u := middleware.UserFrom(r.Context())
-	if u == nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	if err := r.ParseForm(); err != nil {
+		h.Renderer.Error(w, http.StatusBadRequest)
 		return
 	}
-	if err := h.Svc.ResendVerification(r.Context(), u.ID); err != nil && !errors.Is(err, ErrTooMany) {
+	emailIn := NormaliseEmail(r.FormValue("email"))
+	if emailIn == "" {
+		h.Renderer.Status(w, http.StatusBadRequest, "verify_invalid.html", render.Page(user(r), nil))
+		return
+	}
+	if err := h.Svc.ResendVerificationByEmail(r.Context(), emailIn); err != nil && !errors.Is(err, ErrTooMany) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.Renderer.HTML(w, "verify_resent.html", render.Page(u, nil))
+	// Always show the same confirmation page — don't reveal whether the email exists.
+	h.Renderer.HTML(w, "verify_resent.html", render.Page(user(r), nil))
 }
 
 // ---- login ----

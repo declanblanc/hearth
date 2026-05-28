@@ -4,6 +4,7 @@
 <h1>Check your email</h1>
 <p>We sent a verification link to <strong>{{.Email}}</strong>. Open it to finish signing up.</p>
 <form method="post" action="/verify/resend">
+  <input type="hidden" name="email" value="{{.Email}}">
   <button type="submit">Resend verification email</button>
 </form>
 {{end}}

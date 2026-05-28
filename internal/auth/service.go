@@ -189,6 +189,23 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) (int64, error) 
 	return userID, nil
 }
 
+// ResendVerificationByEmail looks up a user by email and resends their
+// verification token. Silently no-ops if the email is unknown or already
+// verified, so callers don't learn whether the address exists.
+func (s *Service) ResendVerificationByEmail(ctx context.Context, emailIn string) error {
+	var userID int64
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT id FROM users WHERE email = ? AND email_verified_at IS NULL AND deleted_at IS NULL`, emailIn,
+	).Scan(&userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // unknown or already verified — silent no-op
+	}
+	if err != nil {
+		return err
+	}
+	return s.ResendVerification(ctx, userID)
+}
+
 // ResendVerification issues a fresh token (rate-limited per user).
 func (s *Service) ResendVerification(ctx context.Context, userID int64) error {
 	windowStart := s.Now().Add(-ResendVerificationWindow)
