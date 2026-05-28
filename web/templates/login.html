@@ -5,9 +5,9 @@
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 <form method="post" action="/login">
   <input type="hidden" name="next" value="{{.Next}}">
-  <label>Email <input name="email" type="email" value="{{.Email}}" autocomplete="email" required></label>
+  <label>Email <input name="email" type="text" value="{{.Email}}" autocomplete="email"></label>
   {{if .EmailError}}<span class="field-error">{{.EmailError}}</span>{{end}}
-  <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+  <label>Password <input name="password" type="password" autocomplete="current-password"></label>
   <button type="submit"{{if .Locked}} disabled{{end}}>Log in</button>
 </form>
 <p><a href="/password/forgot">Forgot your password?</a></p>
