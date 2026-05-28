@@ -54,7 +54,7 @@ func ValidateEmail(e string) string {
 		return "Email is required."
 	}
 	if _, err := mail.ParseAddress(e); err != nil {
-		return "That doesn't look like a valid email address."
+		return "Must be a valid email address."
 	}
 	return ""
 }
