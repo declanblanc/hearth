@@ -37,20 +37,21 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusBadRequest)
 		return
 	}
+	profileURL := "/" + u.Username
 	_, err := h.Svc.Create(r.Context(), u.ID, r.FormValue("content"))
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEmpty):
-			http.Redirect(w, r, "/?post_error=empty", http.StatusSeeOther)
+			http.Redirect(w, r, profileURL+"?post_error=empty", http.StatusSeeOther)
 		case errors.Is(err, ErrTooLong):
-			http.Redirect(w, r, "/?post_error=toolong", http.StatusSeeOther)
+			http.Redirect(w, r, profileURL+"?post_error=toolong", http.StatusSeeOther)
 		default:
 			slog.Error("posts: create", "user_id", u.ID, "err", err)
 			h.Renderer.Error(w, http.StatusInternalServerError)
 		}
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, profileURL, http.StatusSeeOther)
 }
 
 func (h *Handlers) delete(w http.ResponseWriter, r *http.Request) {

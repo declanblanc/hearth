@@ -38,7 +38,6 @@ func (h *Handlers) index(w http.ResponseWriter, r *http.Request) {
 		"Old":        res.Old,
 		"HasMore":    res.HasMore,
 		"NextBefore": res.NextBefore,
-		"PostError":  postError(r.URL.Query().Get("post_error")),
 	}))
 }
 
@@ -60,14 +59,3 @@ func (h *Handlers) older(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
-// postError maps the redirect query flag from a rejected post into a message.
-func postError(code string) string {
-	switch code {
-	case "empty":
-		return "Your post can't be empty."
-	case "toolong":
-		return "Your post is too long (1000 characters max)."
-	default:
-		return ""
-	}
-}

@@ -237,8 +237,12 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.Renderer.HTML(w, "profile_view.html", render.Page(u, render.M{
-		"Profile": p, "Owner": owner, "Connected": connected,
-		"Posts": authorPosts, "PhotoURL": h.photoURL(p.PhotoKey),
+		"Profile":   p,
+		"Owner":     owner,
+		"Connected": connected,
+		"Posts":     authorPosts,
+		"PhotoURL":  h.photoURL(p.PhotoKey),
+		"PostError": postError(r.URL.Query().Get("post_error")),
 	}))
 }
 
@@ -247,4 +251,15 @@ func (h *Handlers) photoURL(key string) string {
 		return ""
 	}
 	return h.Media.URL(key)
+}
+
+func postError(code string) string {
+	switch code {
+	case "empty":
+		return "Your post can't be empty."
+	case "toolong":
+		return "Your post is too long (1000 characters max)."
+	default:
+		return ""
+	}
 }

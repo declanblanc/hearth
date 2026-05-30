@@ -12,15 +12,6 @@
   </div>
 {{end}}
 
-{{if .User.Verified}}
-  <form method="post" action="/posts" class="compose">
-    {{if .PostError}}<div class="banner error">{{.PostError}}</div>{{end}}
-    <label for="content" class="visually-hidden">Write a post</label>
-    <textarea id="content" name="content" rows="3" maxlength="1000" placeholder="Share something…"></textarea>
-    <button type="submit">Post</button>
-  </form>
-{{end}}
-
 {{if and (not .New) (not .Old)}}
   <p class="muted empty">Generate an invite link to connect with someone, then their posts will appear here.</p>
 {{end}}
