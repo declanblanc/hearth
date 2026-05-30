@@ -1,0 +1,14 @@
+# Litestream config. Run alongside the server (e.g. inside the same container
+# via supervisor or as a sidecar). Replace the bucket + access keys via env
+# vars `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`, and the R2
+# endpoint URL for your account.
+dbs:
+  - path: /data/hearth.db
+    replicas:
+      - url: s3://${LITESTREAM_BUCKET}/hearth
+        endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+        force-path-style: true
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        retention: 168h
+        snapshot-interval: 24h

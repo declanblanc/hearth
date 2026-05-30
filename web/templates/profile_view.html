@@ -1,0 +1,9 @@
+{{define "profile_view.html"}}{{template "base" .}}{{end}}
+{{define "title"}}{{.Profile.FullName}} — Hearth{{end}}
+{{define "content"}}
+{{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="{{.Profile.FullName}}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;display:block;margin-bottom:1rem">{{end}}
+<h1>{{.Profile.FullName}}</h1>
+<p class="muted">@{{.Profile.Username}}{{if .Profile.Pronouns}} · {{.Profile.Pronouns}}{{end}}</p>
+{{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
+{{if .Owner}}<p><a href="/settings/profile">Edit profile</a></p>{{end}}
+{{end}}

@@ -1,0 +1,32 @@
+{{define "profile_edit.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Edit profile — Hearth{{end}}
+{{define "content"}}
+<h1>Edit profile</h1>
+{{if .Saved}}<div class="banner">Saved.</div>{{end}}
+<form method="post" action="/settings/profile" enctype="multipart/form-data">
+  <label>First name
+    <input name="first_name" value="{{.Profile.FirstName}}" required>
+    {{with index .Errors "first_name"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Last name
+    <input name="last_name" value="{{.Profile.LastName}}" required>
+    {{with index .Errors "last_name"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Pronouns
+    <input name="pronouns" value="{{.Profile.Pronouns}}">
+    {{with index .Errors "pronouns"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Bio
+    <textarea name="bio" rows="4" maxlength="1000">{{.Profile.Bio}}</textarea>
+    {{with index .Errors "bio"}}<small class="error">{{.}}</small>{{end}}
+  </label>
+  <label>Profile photo
+    {{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="Current profile photo" style="display:block;max-width:80px;max-height:80px;border-radius:50%;margin-bottom:.5rem">{{end}}
+    <input type="file" name="photo" accept="image/jpeg,image/png,image/webp">
+    {{with index .Errors "photo"}}<small class="error">{{.}}</small>{{end}}
+    <small class="muted">JPEG, PNG, or WebP · max 5 MB</small>
+  </label>
+  <button type="submit">Save</button>
+</form>
+<p><a href="/settings/account">Account settings</a></p>
+{{end}}

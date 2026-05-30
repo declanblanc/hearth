@@ -1,0 +1,27 @@
+{{define "base"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{block "title" .}}Hearth{{end}}</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<header class="site-header">
+  <a href="/" class="brand">Hearth</a>
+  <nav>
+    {{if .User}}
+      <a href="/{{.User.Username}}">Profile</a>
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit" class="linklike">Log out</button>
+      </form>
+    {{else}}
+      <a href="/login">Log in</a>
+      <a href="/signup">Sign up</a>
+    {{end}}
+  </nav>
+</header>
+<main class="container">{{block "content" .}}{{end}}</main>
+</body>
+</html>{{end}}

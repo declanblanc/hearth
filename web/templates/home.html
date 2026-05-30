@@ -1,0 +1,14 @@
+{{define "home.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Home — Hearth{{end}}
+{{define "content"}}
+<h1>Welcome back, {{.User.DisplayName}}.</h1>
+{{if not .User.Verified}}
+  <div class="banner">
+    Please verify your email to unlock posting and connections.
+    <form method="post" action="/verify/resend" style="display:inline">
+      <button type="submit" class="linklike">Resend verification email</button>
+    </form>
+  </div>
+{{end}}
+<p>The feed will appear here once Phase 1 lands.</p>
+{{end}}

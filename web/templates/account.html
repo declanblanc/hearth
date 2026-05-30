@@ -1,0 +1,13 @@
+{{define "account.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Account — Hearth{{end}}
+{{define "content"}}
+<h1>Delete account</h1>
+<p>Deleting your account immediately signs you out and anonymises your profile. After 30 days, all of your data is permanently removed.</p>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form method="post" action="/settings/account/delete">
+  <label>Confirm with your password
+    <input name="password" type="password" autocomplete="current-password" required>
+  </label>
+  <button type="submit">Delete my account</button>
+</form>
+{{end}}
