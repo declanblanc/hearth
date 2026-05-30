@@ -1,0 +1,28 @@
+{{define "notifications.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Notifications — Hearth{{end}}
+{{define "content"}}
+<h1>Notifications</h1>
+
+{{if .Items}}
+  <ul class="notification-list">
+    {{range .Items}}
+      <li class="notification-item{{if not .Read}} unread{{end}}">
+        <span class="notification-text">
+          {{if eq .Type "connection_request"}}
+            {{if .ActorUsername}}<a href="/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
+            wants to connect. <a href="/requests">Review requests</a>.
+          {{else if eq .Type "connection_accepted"}}
+            {{if .ActorUsername}}<a href="/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
+            accepted your connection request.
+          {{else}}
+            You have a new notification.
+          {{end}}
+        </span>
+        <span class="muted notification-time"><time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
+      </li>
+    {{end}}
+  </ul>
+{{else}}
+  <p class="muted empty">Nothing here yet.</p>
+{{end}}
+{{end}}

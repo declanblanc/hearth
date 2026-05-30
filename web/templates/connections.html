@@ -1,0 +1,25 @@
+{{define "connections.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Connections — Hearth{{end}}
+{{define "content"}}
+<h1>Connections</h1>
+
+{{if .People}}
+  <ul class="connection-list">
+    {{range .People}}
+      <li class="connection-item">
+        {{if .PhotoURL}}<img class="connection-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
+        <div class="connection-body">
+          <a href="/{{.Username}}" class="connection-name">{{.Name}}</a>
+          <span class="muted">@{{.Username}}</span>
+        </div>
+        <form method="post" action="/connections/{{.ID}}/disconnect" style="display:inline"
+              onsubmit="return confirm('Disconnect from {{.Name}}? You will no longer see each other's posts.');">
+          <button type="submit" class="button-secondary">Disconnect</button>
+        </form>
+      </li>
+    {{end}}
+  </ul>
+{{else}}
+  <p class="muted empty">You're not connected with anyone yet. <a href="/settings/invites">Invite someone</a>.</p>
+{{end}}
+{{end}}

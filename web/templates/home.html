@@ -2,6 +2,7 @@
 {{define "title"}}Home — Hearth{{end}}
 {{define "content"}}
 <h1>Welcome back, {{.User.DisplayName}}.</h1>
+
 {{if not .User.Verified}}
   <div class="banner">
     Please verify your email to unlock posting and connections.
@@ -10,5 +11,43 @@
     </form>
   </div>
 {{end}}
-<p>The feed will appear here once Phase 1 lands.</p>
+
+{{if .User.Verified}}
+  <form method="post" action="/posts" class="compose">
+    {{if .PostError}}<div class="banner error">{{.PostError}}</div>{{end}}
+    <label for="content" class="visually-hidden">Write a post</label>
+    <textarea id="content" name="content" rows="3" maxlength="1000" placeholder="Share something…"></textarea>
+    <button type="submit">Post</button>
+  </form>
+{{end}}
+
+{{if and (not .New) (not .Old)}}
+  <p class="muted empty">Generate an invite link to connect with someone, then their posts will appear here.</p>
+{{end}}
+
+{{if .New}}
+  <section class="feed-group">
+    <h2 class="group-label">New</h2>
+    {{range .New}}{{template "postcard" .}}{{end}}
+  </section>
+{{end}}
+
+{{if .Old}}
+  <section class="feed-group">
+    <details{{if not .New}} open{{end}}>
+      <summary class="group-label">Older posts</summary>
+      {{range .Old}}{{template "postcard" .}}{{end}}
+    </details>
+  </section>
+{{end}}
+
+{{if .HasMore}}
+  <div id="load-older">
+    <button type="button" class="linklike"
+            hx-get="/feed/older?before={{.NextBefore}}"
+            hx-target="#load-older" hx-swap="outerHTML">
+      Load older posts
+    </button>
+  </div>
+{{end}}
 {{end}}

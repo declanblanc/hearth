@@ -1,0 +1,8 @@
+{{define "invite_connected.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Invite — Hearth{{end}}
+{{define "content"}}
+<h1>You're already connected{{if .SenderName}} with {{.SenderName}}{{end}}</h1>
+<p>There's nothing more to do here.</p>
+{{if .SenderUsername}}<p><a href="/{{.SenderUsername}}">View their profile</a></p>{{end}}
+<p><a href="/">Back to your feed</a></p>
+{{end}}

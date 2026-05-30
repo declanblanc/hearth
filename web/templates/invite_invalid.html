@@ -1,0 +1,7 @@
+{{define "invite_invalid.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Invite — Hearth{{end}}
+{{define "content"}}
+<h1>This invite is no longer valid</h1>
+<p>It may have expired, already been used, or never existed. Ask whoever invited you for a fresh link.</p>
+{{if .User}}<p><a href="/">Back to your feed</a></p>{{else}}<p><a href="/login">Log in</a></p>{{end}}
+{{end}}

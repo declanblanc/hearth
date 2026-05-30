@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type Renderer struct {
@@ -127,5 +128,12 @@ func (r *Renderer) Error(w http.ResponseWriter, status int) {
 func funcMap() template.FuncMap {
 	return template.FuncMap{
 		"safe": func(s string) template.HTML { return template.HTML(s) }, //nolint:gosec
+		// datetime renders a timestamp for display, e.g. "Jan 2, 2006, 3:04 PM".
+		"datetime": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.Format("Jan 2, 2006, 3:04 PM")
+		},
 	}
 }

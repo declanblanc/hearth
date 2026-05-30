@@ -15,8 +15,11 @@ import (
 	"time"
 
 	"github.com/dblanc/hearth/internal/auth"
-	"github.com/lmittmann/tint"
+	"github.com/dblanc/hearth/internal/connections"
+	"github.com/dblanc/hearth/internal/feed"
 	"github.com/dblanc/hearth/internal/media"
+	"github.com/dblanc/hearth/internal/notifications"
+	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/profiles"
 	"github.com/dblanc/hearth/internal/shared/config"
 	"github.com/dblanc/hearth/internal/shared/db"
@@ -24,6 +27,7 @@ import (
 	"github.com/dblanc/hearth/internal/shared/middleware"
 	"github.com/dblanc/hearth/internal/shared/render"
 	"github.com/dblanc/hearth/web"
+	"github.com/lmittmann/tint"
 )
 
 func main() {
@@ -78,40 +82,41 @@ func main() {
 		logger.Warn("media: R2 not configured — photo uploads disabled")
 	}
 
+	// Services.
 	authSvc := auth.New(database, sender, cfg.BaseURL)
+	notifSvc := notifications.New(database)
+	connSvc := connections.New(database, notifSvc, cfg.BaseURL)
+	postSvc := posts.New(database)
+	feedSvc := feed.New(database, connSvc)
 	profileSvc := profiles.New(database)
 	profileSvc.Media = mediaStore
-	authH := auth.NewHandlers(authSvc, r, cfg.IsProd())
-	profileH := profiles.NewHandlers(profileSvc, authSvc, r, mediaStore, cfg.IsProd())
+
+	// Handlers.
+	authH := auth.NewHandlers(authSvc, r, cfg.CookieSecret, cfg.IsProd())
+	notifH := notifications.NewHandlers(notifSvc, r)
+	connH := connections.NewHandlers(connSvc, r, mediaStore, cfg.CookieSecret, cfg.IsProd())
+	postH := posts.NewHandlers(postSvc, r)
+	feedH := feed.NewHandlers(feedSvc, r)
+	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, r, mediaStore, cfg.IsProd())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		u := middleware.UserFrom(req.Context())
-		if u == nil {
-			http.Redirect(w, req, "/login", http.StatusSeeOther)
-			return
-		}
-		r.HTML(w, "home.html", render.Page(u, nil))
-	})
 
 	// Static assets.
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(mustSub(web.StaticFS, "static"))))
 
-	// Public auth routes.
+	// Each package mounts its own routes, wrapping authenticated handlers with
+	// middleware.RequireAuth internally. Public routes (auth pages, the invite
+	// opener, and /{username}) are registered bare and do their own gating.
 	authH.Mount(mux)
-
-	// Protected routes: wrap with RequireAuth via a sub-mux pattern. http.ServeMux
-	// doesn't support middleware groups, so we register handlers wrapped individually.
-	protected := http.NewServeMux()
-	profileH.Mount(protected)
-	mux.Handle("/settings/", middleware.RequireAuth(protected))
-	// /{username} stays public — the handler enforces its own 404-for-non-owners.
-	// (In Phase 1 this becomes "404 unless connected".)
-	mux.Handle("GET /{username}", protected)
+	feedH.Mount(mux)
+	postH.Mount(mux)
+	notifH.Mount(mux)
+	connH.Mount(mux)
+	profileH.Mount(mux)
 
 	// Background sweep: hourly hard-delete of expired soft-deleted users.
 	go runHardDeleteSweep(logger, profileSvc)
@@ -119,7 +124,9 @@ func main() {
 	chain := middleware.RequestID(
 		middleware.Logger(logger)(
 			middleware.Recoverer(logger)(
-				auth.SessionLoader(authSvc)(mux),
+				auth.SessionLoader(authSvc)(
+					notifH.LoadUnread(mux),
+				),
 			),
 		),
 	)

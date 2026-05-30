@@ -1,0 +1,34 @@
+{{define "settings_invites.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Invites — Hearth{{end}}
+{{define "content"}}
+<h1>Invites</h1>
+<p>Generate a link and share it with someone you'd like to connect with. Links expire after 72 hours and work once.</p>
+
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+
+<form method="post" action="/invites">
+  <button type="submit">Generate invite link</button>
+</form>
+
+{{if .Invites}}
+  <ul class="invite-list">
+    {{range .Invites}}
+      <li class="invite-item">
+        {{if .Active}}
+          <input class="invite-url" type="text" readonly value="{{.URL}}"
+                 onclick="this.select();document.execCommand('copy')">
+          <span class="badge badge-active">Active</span>
+        {{else if .Consumed}}
+          <span class="invite-url muted">{{.URL}}</span>
+          <span class="badge badge-used">Used</span>
+        {{else}}
+          <span class="invite-url muted">{{.URL}}</span>
+          <span class="badge badge-expired">Expired</span>
+        {{end}}
+      </li>
+    {{end}}
+  </ul>
+{{else}}
+  <p class="muted empty">You haven't created any invites yet.</p>
+{{end}}
+{{end}}

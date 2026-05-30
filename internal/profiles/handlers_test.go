@@ -16,7 +16,10 @@ import (
 	"time"
 
 	"github.com/dblanc/hearth/internal/auth"
+	"github.com/dblanc/hearth/internal/connections"
 	"github.com/dblanc/hearth/internal/media"
+	"github.com/dblanc/hearth/internal/notifications"
+	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/shared/db"
 	"github.com/dblanc/hearth/internal/shared/email"
 	"github.com/dblanc/hearth/internal/shared/middleware"
@@ -99,10 +102,13 @@ func newHandlers(t *testing.T, d *sql.DB, m media.Store) (*Handlers, *auth.Servi
 	t.Helper()
 	stub := &email.Stub{}
 	authSvc := auth.New(d, stub, "https://hearth.test")
+	notifSvc := notifications.New(d)
+	connSvc := connections.New(d, notifSvc, "https://hearth.test")
+	postSvc := posts.New(d)
 	profileSvc := New(d)
 	profileSvc.Media = m
 	r := newTestRenderer(t)
-	h := NewHandlers(profileSvc, authSvc, r, m, false)
+	h := NewHandlers(profileSvc, authSvc, connSvc, postSvc, r, m, false)
 	return h, authSvc, profileSvc
 }
 
@@ -296,8 +302,8 @@ func TestEditProfile_PhotoUploaded(t *testing.T) {
 
 	buf, ct := buildMultipartForm(t, map[string]string{
 		"first_name": "Cam", "last_name": "C",
-		"bio":          "",
-		"pronouns":     "",
+		"bio":      "",
+		"pronouns": "",
 	}, "photo.jpg", jpegHeader())
 
 	req := authedRequest(http.MethodPost, "/settings/profile", buf, uid, "cam")
@@ -333,8 +339,8 @@ func TestEditProfile_PhotoTooLarge(t *testing.T) {
 
 	buf, ct := buildMultipartForm(t, map[string]string{
 		"first_name": "Dana", "last_name": "D",
-		"bio":          "",
-		"pronouns":     "",
+		"bio":      "",
+		"pronouns": "",
 	}, "big.jpg", oversized)
 
 	req := authedRequest(http.MethodPost, "/settings/profile", buf, uid, "dana")
@@ -362,8 +368,8 @@ func TestEditProfile_NonImageRejected(t *testing.T) {
 	textContent := []byte("this is not an image, no matter the extension")
 	buf, ct := buildMultipartForm(t, map[string]string{
 		"first_name": "Evan", "last_name": "E",
-		"bio":          "",
-		"pronouns":     "",
+		"bio":      "",
+		"pronouns": "",
 	}, "fake.jpg", textContent)
 
 	req := authedRequest(http.MethodPost, "/settings/profile", buf, uid, "evan")
@@ -395,8 +401,8 @@ func TestEditProfile_OldPhotoDeletedOnReplacement(t *testing.T) {
 	// Upload a new photo.
 	buf, ct := buildMultipartForm(t, map[string]string{
 		"first_name": "Fern", "last_name": "F",
-		"bio":          "",
-		"pronouns":     "",
+		"bio":      "",
+		"pronouns": "",
 	}, "new.jpg", jpegHeader())
 	req := authedRequest(http.MethodPost, "/settings/profile", buf, uid, "fern")
 	req.Header.Set("Content-Type", ct)

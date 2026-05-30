@@ -1,0 +1,11 @@
+{{define "welcome.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Welcome — Hearth{{end}}
+{{define "content"}}
+<h1>You've been invited to Hearth</h1>
+<p>Hearth is a small, private space for close connections. To accept this invite, log in or create an account.</p>
+<div class="welcome-actions">
+  <a class="button-link" href="/login?next=/i/{{.Token}}">I have an account → Log in</a>
+  <a class="button-link" href="/signup">I'm new → Sign up</a>
+</div>
+<p class="muted">Your invite is saved for the next 30 minutes, so you'll come right back here after signing in.</p>
+{{end}}

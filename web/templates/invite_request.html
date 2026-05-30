@@ -1,0 +1,13 @@
+{{define "invite_request.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Connect — Hearth{{end}}
+{{define "content"}}
+<div class="invite-card">
+  {{if .SenderPhotoURL}}<img class="invite-photo" src="{{.SenderPhotoURL}}" alt="{{.SenderName}}">{{end}}
+  <h1>Request to connect with {{.SenderName}}</h1>
+  <p class="muted">@{{.SenderUsername}}</p>
+  <p>If you connect, you'll each be able to see the other's posts.</p>
+  <form method="post" action="/i/{{.Token}}/request">
+    <button type="submit">Request to connect</button>
+  </form>
+</div>
+{{end}}

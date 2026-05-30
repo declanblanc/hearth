@@ -1,0 +1,8 @@
+{{define "feed_older.html"}}{{range .Posts}}{{template "postcard" .}}{{end}}{{if .HasMore}}
+<div id="load-older">
+  <button type="button" class="linklike"
+          hx-get="/feed/older?before={{.NextBefore}}"
+          hx-target="#load-older" hx-swap="outerHTML">
+    Load older posts
+  </button>
+</div>{{end}}{{end}}

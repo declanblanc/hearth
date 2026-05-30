@@ -26,6 +26,9 @@ type User struct {
 	Username    string
 	DisplayName string
 	Verified    bool
+	// UnreadDot drives the header notification dot. Populated per-request by
+	// notifications.LoadUnread middleware (not by the session loader).
+	UnreadDot bool
 }
 
 func WithUser(ctx context.Context, u *User) context.Context {

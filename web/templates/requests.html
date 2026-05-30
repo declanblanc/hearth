@@ -1,0 +1,31 @@
+{{define "requests.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Requests — Hearth{{end}}
+{{define "content"}}
+<h1>Connection requests</h1>
+
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+
+{{if .Requests}}
+  <ul class="request-list">
+    {{range .Requests}}
+      <li class="request-item">
+        {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
+        <div class="request-body">
+          <span class="request-name">{{.Name}}</span>
+          <span class="muted">@{{.Username}}</span>
+        </div>
+        <div class="request-actions">
+          <form method="post" action="/requests/{{.ID}}/accept" style="display:inline">
+            <button type="submit">Accept</button>
+          </form>
+          <form method="post" action="/requests/{{.ID}}/deny" style="display:inline">
+            <button type="submit" class="button-secondary">Decline</button>
+          </form>
+        </div>
+      </li>
+    {{end}}
+  </ul>
+{{else}}
+  <p class="muted empty">No pending requests.</p>
+{{end}}
+{{end}}

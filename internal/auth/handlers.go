@@ -5,7 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/dblanc/hearth/internal/connections"
 	"github.com/dblanc/hearth/internal/shared/middleware"
 	"github.com/dblanc/hearth/internal/shared/render"
 )
@@ -14,11 +16,25 @@ import (
 type Handlers struct {
 	Svc      *Service
 	Renderer *render.Renderer
-	Secure   bool // true in production — controls Secure cookie flag
+	Secret   []byte // HMAC key for reading the pending_invite cookie
+	Secure   bool   // true in production — controls Secure cookie flag
 }
 
-func NewHandlers(svc *Service, r *render.Renderer, secure bool) *Handlers {
-	return &Handlers{Svc: svc, Renderer: r, Secure: secure}
+func NewHandlers(svc *Service, r *render.Renderer, secret []byte, secure bool) *Handlers {
+	return &Handlers{Svc: svc, Renderer: r, Secret: secret, Secure: secure}
+}
+
+// postAuthRedirect picks where to send a user immediately after they log in or
+// verify their email. A valid pending_invite cookie wins (it carries an invite
+// across the signup/verify round-trip, CLAUDE.md §5); otherwise we fall back to
+// the provided default (e.g. the login `next` param or "/"). When an invite
+// redirect is used, the cookie is cleared.
+func (h *Handlers) postAuthRedirect(w http.ResponseWriter, r *http.Request, fallback string) string {
+	if target := connections.PendingInviteRedirect(r, h.Secret, time.Now()); target != "" {
+		connections.ClearPendingInviteCookie(w, h.Secure)
+		return target
+	}
+	return fallback
 }
 
 // Mount registers all auth routes on the given mux.
@@ -141,7 +157,7 @@ func (h *Handlers) verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	SetSessionCookie(w, sess.Token, sess.ExpiresAt, h.Secure)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, h.postAuthRedirect(w, r, "/"), http.StatusSeeOther)
 }
 
 func (h *Handlers) resendVerification(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +222,8 @@ func (h *Handlers) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if next != "" && strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") {
 		target = next
 	}
-	http.Redirect(w, r, target, http.StatusSeeOther)
+	// A pending invite takes precedence over the default/next target.
+	http.Redirect(w, r, h.postAuthRedirect(w, r, target), http.StatusSeeOther)
 }
 
 func (h *Handlers) logout(w http.ResponseWriter, r *http.Request) {

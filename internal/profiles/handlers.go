@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	"github.com/dblanc/hearth/internal/auth"
+	"github.com/dblanc/hearth/internal/connections"
 	"github.com/dblanc/hearth/internal/media"
+	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/shared/middleware"
 	"github.com/dblanc/hearth/internal/shared/render"
 )
@@ -17,20 +19,26 @@ import (
 type Handlers struct {
 	Svc      *Service
 	Auth     *auth.Service
+	Conns    *connections.Service
+	Posts    *posts.Service
 	Renderer *render.Renderer
 	Media    media.Store // may be nil in dev (photo uploads silently skipped)
 	Secure   bool
 }
 
-func NewHandlers(svc *Service, authSvc *auth.Service, r *render.Renderer, m media.Store, secure bool) *Handlers {
-	return &Handlers{Svc: svc, Auth: authSvc, Renderer: r, Media: m, Secure: secure}
+func NewHandlers(svc *Service, authSvc *auth.Service, conns *connections.Service, postsSvc *posts.Service, r *render.Renderer, m media.Store, secure bool) *Handlers {
+	return &Handlers{Svc: svc, Auth: authSvc, Conns: conns, Posts: postsSvc, Renderer: r, Media: m, Secure: secure}
 }
 
 func (h *Handlers) Mount(mux *http.ServeMux) {
-	mux.HandleFunc("GET /settings/profile", h.editForm)
-	mux.HandleFunc("POST /settings/profile", h.editSubmit)
-	mux.HandleFunc("GET /settings/account", h.accountForm)
-	mux.HandleFunc("POST /settings/account/delete", h.deleteAccount)
+	authed := func(fn http.HandlerFunc) http.Handler {
+		return middleware.RequireAuth(http.HandlerFunc(fn))
+	}
+	mux.Handle("GET /settings/profile", authed(h.editForm))
+	mux.Handle("POST /settings/profile", authed(h.editSubmit))
+	mux.Handle("GET /settings/account", authed(h.accountForm))
+	mux.Handle("POST /settings/account/delete", authed(h.deleteAccount))
+	// /{username} stays public — the handler enforces 404-unless-connected.
 	mux.HandleFunc("GET /{username}", h.viewProfile)
 }
 
@@ -192,9 +200,9 @@ func (h *Handlers) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	h.Renderer.HTML(w, "account_deleted.html", render.Page(nil, nil))
 }
 
-// viewProfile handles /{username}. In Phase 0 only the user's own profile is
-// viewable; non-owners get a 404 (privacy by non-existence). Phase 1 extends
-// this to connected viewers via IsConnected.
+// viewProfile handles /{username}. The profile is visible only to its owner or
+// to a connected viewer; everyone else gets a 404 — non-existence is part of
+// the privacy model, so we never reveal a profile exists (CLAUDE.md §1).
 func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
 	p, err := h.Svc.GetByUsername(r.Context(), username)
@@ -206,14 +214,31 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
+
 	u := middleware.UserFrom(r.Context())
-	if u == nil || u.ID != p.ID {
-		// Phase 0: privacy by 404 for non-owners.
+	owner := u != nil && u.ID == p.ID
+	connected := false
+	if u != nil && !owner {
+		connected, err = h.Conns.IsConnected(r.Context(), u.ID, p.ID)
+		if err != nil {
+			h.Renderer.Error(w, http.StatusInternalServerError)
+			return
+		}
+	}
+	if !owner && !connected {
+		// Privacy by 404 for anyone not connected to this user.
 		h.Renderer.Error(w, http.StatusNotFound)
 		return
 	}
+
+	authorPosts, err := h.Posts.ListByAuthor(r.Context(), p.ID)
+	if err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
 	h.Renderer.HTML(w, "profile_view.html", render.Page(u, render.M{
-		"Profile": p, "Owner": true, "PhotoURL": h.photoURL(p.PhotoKey),
+		"Profile": p, "Owner": owner, "Connected": connected,
+		"Posts": authorPosts, "PhotoURL": h.photoURL(p.PhotoKey),
 	}))
 }
 
