@@ -17,7 +17,7 @@ const (
 	SessionLifetime            = 30 * 24 * time.Hour
 	VerificationTokenLifetime  = 24 * time.Hour
 	PasswordResetTokenLifetime = 1 * time.Hour
-	FailedLoginWindow          = 15 * time.Second
+	FailedLoginWindow          = 15 * time.Minute
 	FailedLoginLimit           = 10
 	ResendVerificationLimit    = 3
 	ResendVerificationWindow   = time.Hour
