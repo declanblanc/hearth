@@ -131,6 +131,13 @@ func (s *Service) queryPosts(ctx context.Context, userID, before int64) ([]posts
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return posts.ScanRows(rows)
+	out, err := posts.ScanRows(rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if err := posts.LoadMedia(ctx, s.DB, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

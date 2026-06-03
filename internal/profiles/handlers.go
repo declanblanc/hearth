@@ -236,6 +236,12 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
+	// Owner or connected viewer confirmed above — only now mint signed image
+	// URLs for this author's posts (CLAUDE.md §6).
+	if err := posts.SignMediaURLs(r.Context(), h.Media, authorPosts); err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
 	h.Renderer.HTML(w, "profile_view.html", render.Page(u, render.M{
 		"Profile":   p,
 		"Owner":     owner,
@@ -259,6 +265,14 @@ func postError(code string) string {
 		return "Your post can't be empty."
 	case "toolong":
 		return "Your post is too long (1000 characters max)."
+	case "too_many_images":
+		return "A post can have at most 5 images."
+	case "image_too_large":
+		return "Each image must be 25 MB or smaller."
+	case "image_type":
+		return "Only JPEG, PNG, and WebP images are supported."
+	case "image_unreadable":
+		return "One of your images couldn't be read. Please try again."
 	default:
 		return ""
 	}

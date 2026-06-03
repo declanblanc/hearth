@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/dblanc/hearth/internal/media"
+	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/shared/middleware"
 	"github.com/dblanc/hearth/internal/shared/render"
 )
@@ -12,10 +14,11 @@ import (
 type Handlers struct {
 	Svc      *Service
 	Renderer *render.Renderer
+	Media    media.Store // may be nil in dev (post images won't render)
 }
 
-func NewHandlers(svc *Service, r *render.Renderer) *Handlers {
-	return &Handlers{Svc: svc, Renderer: r}
+func NewHandlers(svc *Service, r *render.Renderer, m media.Store) *Handlers {
+	return &Handlers{Svc: svc, Renderer: r, Media: m}
 }
 
 // Mount registers the feed at the site root and the "load older" partial.
@@ -30,6 +33,18 @@ func (h *Handlers) index(w http.ResponseWriter, r *http.Request) {
 	res, err := h.Svc.FirstPage(r.Context(), u.ID)
 	if err != nil {
 		slog.Error("feed: first page", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	// The feed only contains posts by the viewer's connections, so the
+	// connection check is implicit; sign image URLs for rendering.
+	if err := posts.SignMediaURLs(r.Context(), h.Media, res.New); err != nil {
+		slog.Error("feed: sign media", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	if err := posts.SignMediaURLs(r.Context(), h.Media, res.Old); err != nil {
+		slog.Error("feed: sign media", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
@@ -52,10 +67,14 @@ func (h *Handlers) older(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
+	if err := posts.SignMediaURLs(r.Context(), h.Media, rows); err != nil {
+		slog.Error("feed: sign media", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
 	h.Renderer.HTML(w, "feed_older.html", render.Page(u, render.M{
 		"Posts":      rows,
 		"HasMore":    next > 0,
 		"NextBefore": next,
 	}))
 }
-

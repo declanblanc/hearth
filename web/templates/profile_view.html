@@ -9,10 +9,14 @@
 {{if .Owner}}
   <p><a href="/settings/profile">Edit profile</a></p>
   {{if .User.Verified}}
-    <form method="post" action="/posts" class="compose">
+    <form method="post" action="/posts" class="compose" enctype="multipart/form-data">
       {{if .PostError}}<div class="banner error">{{.PostError}}</div>{{end}}
       <label for="content" class="visually-hidden">Write a post</label>
       <textarea id="content" name="content" rows="3" maxlength="1000" placeholder="Share something…"></textarea>
+      <label for="images" class="compose-images">Add photos
+        <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple>
+      </label>
+      <small class="muted">Up to 5 images · JPEG, PNG, or WebP · max 25 MB each</small>
       <button type="submit">Post</button>
     </form>
   {{end}}
@@ -30,7 +34,8 @@
         <header class="post-meta">
           <span class="muted"><time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
         </header>
-        <div class="post-content">{{.Content}}</div>
+        {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
+        {{template "postmedia" .}}
         {{if $.Owner}}
           <form method="post" action="/posts/{{.ID}}/delete" class="post-actions"
                 onsubmit="return confirm('Delete this post? This cannot be undone.');">
