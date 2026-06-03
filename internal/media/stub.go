@@ -3,7 +3,9 @@ package media
 import (
 	"context"
 	"io"
+	"strconv"
 	"sync"
+	"time"
 )
 
 // Stub is an in-memory Store for tests and development. It never talks to R2.
@@ -39,6 +41,15 @@ func (s *Stub) URL(key string) string {
 		return ""
 	}
 	return "https://stub.test/" + key
+}
+
+// PresignGet returns a fake but well-formed signed URL. The ttl is encoded into
+// the query string so tests can assert that an expiry was applied.
+func (s *Stub) PresignGet(_ context.Context, key string, ttl time.Duration) (string, error) {
+	if key == "" {
+		return "", nil
+	}
+	return "https://stub.test/" + key + "?X-Amz-Expires=" + strconv.Itoa(int(ttl.Seconds())), nil
 }
 
 // Has reports whether key is currently stored (not deleted).
