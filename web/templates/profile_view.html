@@ -13,8 +13,15 @@
       {{if .PostError}}<div class="banner error">{{.PostError}}</div>{{end}}
       <label for="content" class="visually-hidden">Write a post</label>
       <textarea id="content" name="content" rows="3" maxlength="1000" placeholder="Share something…"></textarea>
-      <label for="images" class="compose-images">Add photos
-        <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple>
+      <label for="images" class="upload-button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <span>Add photos</span>
+        <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple class="visually-hidden">
       </label>
       <small class="muted">Up to 5 images · JPEG, PNG, or WebP · max 25 MB each</small>
       <button type="submit">Post</button>
