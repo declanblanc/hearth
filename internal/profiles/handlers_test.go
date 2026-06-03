@@ -235,6 +235,52 @@ func TestHardDeleteSweep_SkipsRecent(t *testing.T) {
 	}
 }
 
+func TestHardDeleteSweep_RemovesPostMediaFromR2(t *testing.T) {
+	d := newTestDB(t)
+	stub := &email.Stub{}
+	store := media.NewStub()
+	authSvc := auth.New(d, stub, "https://hearth.test")
+	profileSvc := New(d)
+	profileSvc.Media = store
+	profileSvc.Now = time.Now
+
+	postSvc := posts.New(d)
+	postSvc.Media = store
+
+	uid := createUser(t, authSvc, "expired")
+	ctx := context.Background()
+
+	// Author posts an image, then deletes their account; the post (and its
+	// image) survive soft-delete and must be cleaned up at hard-delete.
+	if _, err := postSvc.Create(ctx, uid, "bye", []posts.NewImage{
+		{Data: []byte("img"), ContentType: "image/png", Ext: ".png"},
+	}); err != nil {
+		t.Fatalf("Create post: %v", err)
+	}
+	var key string
+	if err := d.QueryRowContext(ctx, `SELECT object_key FROM post_media LIMIT 1`).Scan(&key); err != nil {
+		t.Fatalf("read key: %v", err)
+	}
+	if !store.Has(key) {
+		t.Fatalf("expected object %s in store before delete", key)
+	}
+
+	if err := profileSvc.SoftDelete(ctx, uid); err != nil {
+		t.Fatalf("SoftDelete: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `UPDATE users SET deleted_at = ? WHERE id = ?`,
+		time.Now().Add(-31*24*time.Hour), uid); err != nil {
+		t.Fatalf("backdate: %v", err)
+	}
+
+	if _, err := profileSvc.HardDeleteExpired(ctx); err != nil {
+		t.Fatalf("HardDeleteExpired: %v", err)
+	}
+	if store.Has(key) {
+		t.Errorf("post image %s should have been removed from storage", key)
+	}
+}
+
 // --- handler-level tests ---
 
 func TestEditProfile_TextPersistsAcrossRequests(t *testing.T) {
@@ -332,7 +378,7 @@ func TestEditProfile_PhotoTooLarge(t *testing.T) {
 	h, authSvc, _ := newHandlers(t, d, m)
 	uid := createUser(t, authSvc, "dana")
 
-	// Build a file slightly larger than 5MB.
+	// Build a file slightly larger than the per-image limit.
 	oversized := make([]byte, media.MaxProfilePhotoSize+1)
 	// Set JPEG magic at the start so type detection isn't the failure point.
 	copy(oversized, jpegHeader())
@@ -350,7 +396,7 @@ func TestEditProfile_PhotoTooLarge(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("oversized photo: want 422, got %d", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "5 MB") {
+	if !strings.Contains(rr.Body.String(), "25 MB") {
 		t.Errorf("expected size error in response body, got: %s", rr.Body.String())
 	}
 	if len(m.Deleted()) != 0 {

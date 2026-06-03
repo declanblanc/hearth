@@ -58,8 +58,10 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 
 	// ParseMultipartForm handles both multipart (photo present) and plain
-	// URL-encoded forms (no photo). Max 6MB in memory — just above photo limit.
-	if err := r.ParseMultipartForm(6 << 20); err != nil {
+	// URL-encoded forms (no photo). maxMemory is modest; a larger photo spills
+	// to a temp file, and the real size limit is enforced by the LimitReader
+	// below.
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		if err2 := r.ParseForm(); err2 != nil {
 			h.Renderer.Error(w, http.StatusBadRequest)
 			return
@@ -103,7 +105,7 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if int64(len(data)) > media.MaxProfilePhotoSize {
-				errs.Add("photo", "Photo must be 5 MB or smaller.")
+				errs.Add("photo", "Photo must be 25 MB or smaller.")
 			} else {
 				ct, ext, err := media.DetectType(data)
 				if errors.Is(err, media.ErrUnsupportedType) {

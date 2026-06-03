@@ -24,7 +24,7 @@
     {{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="Current profile photo" style="display:block;max-width:80px;max-height:80px;border-radius:50%;margin-bottom:.5rem">{{end}}
     <input type="file" name="photo" accept="image/jpeg,image/png,image/webp">
     {{with index .Errors "photo"}}<small class="error">{{.}}</small>{{end}}
-    <small class="muted">JPEG, PNG, or WebP · max 5 MB</small>
+    <small class="muted">JPEG, PNG, or WebP · max 25 MB</small>
   </label>
   <button type="submit">Save</button>
 </form>
