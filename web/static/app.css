@@ -441,6 +441,34 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .post-actions { margin-top: 0.6rem; }
 
+/* Attached images. A single image sits full-width; two or more tile into a
+   responsive grid. Each image keeps its aspect ratio and never overflows. */
+.post-media {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.post-media:has(> .post-image:only-child) { grid-template-columns: 1fr; }
+.post-image {
+  width: 100%;
+  max-height: 32rem;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+/* Compose file picker — quieter than the primary action. */
+.compose-images {
+  display: block;
+  margin: 0 0 0.4rem;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.compose-images input { margin-top: 0.35rem; }
+
 #load-older { margin-top: 1.75rem; text-align: center; }
 
 /* ---- Profile ------------------------------------------------------------- */
