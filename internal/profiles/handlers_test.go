@@ -5,6 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -112,16 +115,21 @@ func newHandlers(t *testing.T, d *sql.DB, m media.Store) (*Handlers, *auth.Servi
 	return h, authSvc, profileSvc
 }
 
-// jpegHeader returns a minimal 512-byte slice that Go's http.DetectContentType
-// identifies as image/jpeg.
-func jpegHeader() []byte {
-	data := make([]byte, 512)
-	// JPEG magic bytes: FF D8 FF
-	data[0] = 0xFF
-	data[1] = 0xD8
-	data[2] = 0xFF
-	data[3] = 0xE0
-	return data
+// testJPEG returns a small, genuinely decodable JPEG. It must be real (not just
+// the magic bytes) because the upload handler now decodes and re-encodes profile
+// photos server-side; an undecodable blob would be rejected as unreadable.
+func testJPEG() []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 48, 64)) // intentionally non-square
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 48; x++ {
+			img.Set(x, y, color.RGBA{R: 120, G: 80, B: 200, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		panic("encode test jpeg: " + err.Error())
+	}
+	return buf.Bytes()
 }
 
 // buildMultipartForm returns a body and content-type for a multipart form with
@@ -350,7 +358,7 @@ func TestEditProfile_PhotoUploaded(t *testing.T) {
 		"first_name": "Cam", "last_name": "C",
 		"bio":      "",
 		"pronouns": "",
-	}, "photo.jpg", jpegHeader())
+	}, "photo.jpg", testJPEG())
 
 	req := authedRequest(http.MethodPost, "/settings/profile", buf, uid, "cam")
 	req.Header.Set("Content-Type", ct)
@@ -381,7 +389,7 @@ func TestEditProfile_PhotoTooLarge(t *testing.T) {
 	// Build a file slightly larger than the per-image limit.
 	oversized := make([]byte, media.MaxProfilePhotoSize+1)
 	// Set JPEG magic at the start so type detection isn't the failure point.
-	copy(oversized, jpegHeader())
+	copy(oversized, testJPEG())
 
 	buf, ct := buildMultipartForm(t, map[string]string{
 		"first_name": "Dana", "last_name": "D",
@@ -449,7 +457,7 @@ func TestEditProfile_OldPhotoDeletedOnReplacement(t *testing.T) {
 		"first_name": "Fern", "last_name": "F",
 		"bio":      "",
 		"pronouns": "",
-	}, "new.jpg", jpegHeader())
+	}, "new.jpg", testJPEG())
 	req := authedRequest(http.MethodPost, "/settings/profile", buf, uid, "fern")
 	req.Header.Set("Content-Type", ct)
 	rr := httptest.NewRecorder()

@@ -106,15 +106,24 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 			}
 			if int64(len(data)) > media.MaxProfilePhotoSize {
 				errs.Add("photo", "Photo must be 25 MB or smaller.")
+			} else if _, _, err := media.DetectType(data); errors.Is(err, media.ErrUnsupportedType) {
+				errs.Add("photo", "Only JPEG, PNG, and WebP photos are supported.")
+			} else if err != nil {
+				h.Renderer.Error(w, http.StatusInternalServerError)
+				return
 			} else {
-				ct, ext, err := media.DetectType(data)
-				if errors.Is(err, media.ErrUnsupportedType) {
-					errs.Add("photo", "Only JPEG, PNG, and WebP photos are supported.")
-				} else if err != nil {
+				// Center-crop to a square and re-encode server-side, so the
+				// stored object is always a known-good fixed-size JPEG — whether
+				// or not the browser pre-cropped it (CLAUDE.md §6: media access
+				// control and storage stay server-controlled).
+				normalized, ct, ext, nerr := media.NormalizeProfilePhoto(data)
+				if errors.Is(nerr, media.ErrUnreadableImage) {
+					errs.Add("photo", "That photo couldn't be read. Please try another.")
+				} else if nerr != nil {
 					h.Renderer.Error(w, http.StatusInternalServerError)
 					return
 				} else {
-					photoData = data
+					photoData = normalized
 					photoType = ct
 					photoExt = ext
 				}
