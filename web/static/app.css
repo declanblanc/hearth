@@ -516,6 +516,45 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .profile-posts { margin-top: 2rem; }
 
+/* ---- Profile photo field + cropper --------------------------------------- */
+.avatar-field { display: block; margin-bottom: 1rem; }
+.avatar-field .field-label {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+/* Current-photo thumbnail: a true square cropped to a circle, so a non-square
+   source previews exactly as it will be stored (never stretched to an ellipse). */
+.avatar-current {
+  display: block;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 0.5rem;
+  border: 2px solid var(--raised);
+}
+.avatar-crop-stage {
+  margin: 0.6rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 240px;
+}
+.avatar-crop-stage canvas {
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none; /* let the cropper handle drags instead of scrolling */
+  background: var(--raised);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--line);
+}
+.avatar-crop-stage canvas:active { cursor: grabbing; }
+.avatar-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.avatar-zoom input[type="range"] { flex: 1; }
+
 /* ---- Invites ------------------------------------------------------------- */
 .invite-card {
   text-align: center;

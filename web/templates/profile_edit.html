@@ -20,13 +20,24 @@
     <textarea name="bio" rows="4" maxlength="1000">{{.Profile.Bio}}</textarea>
     {{with index .Errors "bio"}}<small class="error">{{.}}</small>{{end}}
   </label>
-  <label>Profile photo
-    {{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="Current profile photo" style="display:block;max-width:80px;max-height:80px;border-radius:50%;margin-bottom:.5rem">{{end}}
+  <div class="avatar-field" data-avatar-crop>
+    <span class="field-label">Profile photo</span>
+    {{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="Current profile photo" class="avatar-current">{{end}}
     <input type="file" name="photo" accept="image/jpeg,image/png,image/webp">
+    {{/* The cropper stage is revealed by avatar-crop.js once a file is chosen.
+         Without JS it stays hidden and the server center-crops the upload. */}}
+    <div class="avatar-crop-stage" data-crop-stage hidden>
+      <canvas data-crop-canvas></canvas>
+      <label class="avatar-zoom">Zoom
+        <input type="range" data-crop-zoom min="1" max="3" step="0.01" value="1">
+      </label>
+      <small class="muted">Drag to reposition · slide to zoom</small>
+    </div>
     {{with index .Errors "photo"}}<small class="error">{{.}}</small>{{end}}
     <small class="muted">JPEG, PNG, or WebP · max 25 MB</small>
-  </label>
+  </div>
   <button type="submit">Save</button>
 </form>
 <p><a href="/settings/account">Account settings</a></p>
 {{end}}
+{{define "scripts"}}<script src="/static/avatar-crop.js" defer></script>{{end}}
