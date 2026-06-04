@@ -386,6 +386,13 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   font-size: 1.05rem;
   line-height: 1.55;
 }
+/* Stack the picker, its helper line, and the Post button cleanly. */
+.compose .upload-button { margin-bottom: 0.45rem; }
+.compose > small.muted {
+  display: block;
+  margin: 0 0 0.9rem;
+  font-size: 0.8rem;
+}
 
 /* ---- Feed & posts -------------------------------------------------------- */
 .feed-group { margin-top: 2.25rem; }
@@ -441,6 +448,59 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .post-actions { margin-top: 0.6rem; }
 
+/* Attached images. A single image sits full-width; two or more tile into a
+   responsive grid. Each image keeps its aspect ratio and never overflows. */
+.post-media {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.post-media:has(> .post-image:only-child) { grid-template-columns: 1fr; }
+.post-image {
+  width: 100%;
+  max-height: 32rem;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+/* Compose file picker — the native input is hidden and the label is styled as
+   a ghost button (mirrors .button-secondary), with the SVG as its leading icon.
+   :focus-within carries the keyboard focus ring from the hidden input. */
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.4rem;
+  padding: 0.5rem 1rem;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ember-deep);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s ease, color 0.18s ease, transform 0.14s ease;
+}
+.upload-button:hover {
+  border-color: var(--ember);
+  color: var(--ember);
+  transform: translateY(-1px);
+}
+.upload-button:focus-within {
+  outline: 2.5px solid var(--ember);
+  outline-offset: 2px;
+}
+.upload-button svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+
 #load-older { margin-top: 1.75rem; text-align: center; }
 
 /* ---- Profile ------------------------------------------------------------- */
@@ -455,6 +515,45 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   box-shadow: var(--shadow-md), 0 0 0 1px var(--line);
 }
 .profile-posts { margin-top: 2rem; }
+
+/* ---- Profile photo field + cropper --------------------------------------- */
+.avatar-field { display: block; margin-bottom: 1rem; }
+.avatar-field .field-label {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+/* Current-photo thumbnail: a true square cropped to a circle, so a non-square
+   source previews exactly as it will be stored (never stretched to an ellipse). */
+.avatar-current {
+  display: block;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 0.5rem;
+  border: 2px solid var(--raised);
+}
+.avatar-crop-stage {
+  margin: 0.6rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 240px;
+}
+.avatar-crop-stage canvas {
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none; /* let the cropper handle drags instead of scrolling */
+  background: var(--raised);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--line);
+}
+.avatar-crop-stage canvas:active { cursor: grabbing; }
+.avatar-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.avatar-zoom input[type="range"] { flex: 1; }
 
 /* ---- Invites ------------------------------------------------------------- */
 .invite-card {

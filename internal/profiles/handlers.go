@@ -58,8 +58,10 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 
 	// ParseMultipartForm handles both multipart (photo present) and plain
-	// URL-encoded forms (no photo). Max 6MB in memory — just above photo limit.
-	if err := r.ParseMultipartForm(6 << 20); err != nil {
+	// URL-encoded forms (no photo). maxMemory is modest; a larger photo spills
+	// to a temp file, and the real size limit is enforced by the LimitReader
+	// below.
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		if err2 := r.ParseForm(); err2 != nil {
 			h.Renderer.Error(w, http.StatusBadRequest)
 			return
@@ -103,16 +105,25 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if int64(len(data)) > media.MaxProfilePhotoSize {
-				errs.Add("photo", "Photo must be 5 MB or smaller.")
+				errs.Add("photo", "Photo must be 25 MB or smaller.")
+			} else if _, _, err := media.DetectType(data); errors.Is(err, media.ErrUnsupportedType) {
+				errs.Add("photo", "Only JPEG, PNG, and WebP photos are supported.")
+			} else if err != nil {
+				h.Renderer.Error(w, http.StatusInternalServerError)
+				return
 			} else {
-				ct, ext, err := media.DetectType(data)
-				if errors.Is(err, media.ErrUnsupportedType) {
-					errs.Add("photo", "Only JPEG, PNG, and WebP photos are supported.")
-				} else if err != nil {
+				// Center-crop to a square and re-encode server-side, so the
+				// stored object is always a known-good fixed-size JPEG — whether
+				// or not the browser pre-cropped it (CLAUDE.md §6: media access
+				// control and storage stay server-controlled).
+				normalized, ct, ext, nerr := media.NormalizeProfilePhoto(data)
+				if errors.Is(nerr, media.ErrUnreadableImage) {
+					errs.Add("photo", "That photo couldn't be read. Please try another.")
+				} else if nerr != nil {
 					h.Renderer.Error(w, http.StatusInternalServerError)
 					return
 				} else {
-					photoData = data
+					photoData = normalized
 					photoType = ct
 					photoExt = ext
 				}
@@ -236,6 +247,12 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
+	// Owner or connected viewer confirmed above — only now mint signed image
+	// URLs for this author's posts (CLAUDE.md §6).
+	if err := posts.SignMediaURLs(r.Context(), h.Media, authorPosts); err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
 	h.Renderer.HTML(w, "profile_view.html", render.Page(u, render.M{
 		"Profile":   p,
 		"Owner":     owner,
@@ -259,6 +276,14 @@ func postError(code string) string {
 		return "Your post can't be empty."
 	case "toolong":
 		return "Your post is too long (1000 characters max)."
+	case "too_many_images":
+		return "A post can have at most 5 images."
+	case "image_too_large":
+		return "Each image must be 25 MB or smaller."
+	case "image_type":
+		return "Only JPEG, PNG, and WebP images are supported."
+	case "image_unreadable":
+		return "One of your images couldn't be read. Please try again."
 	default:
 		return ""
 	}

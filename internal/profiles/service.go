@@ -164,17 +164,61 @@ func (s *Service) SoftDelete(ctx context.Context, userID int64) error {
 // HardDeleteExpired removes users whose soft-delete is older than 30 days.
 // Returns the count removed. The Technical Plan calls for this to run hourly
 // (cron or Fly scheduled machine).
-// Profile photos are already removed from R2 at soft-delete time, so no R2
-// cleanup is needed here. Post/comment media cleanup will be added in Phase 1/2.
+//
+// Profile photos are already removed from R2 at soft-delete time. Post images,
+// however, persist until hard delete, so we gather their object keys before the
+// cascading row delete and remove them from storage afterwards (Build Plan
+// §0.5/§2.5). The ON DELETE CASCADE chain (users → posts → post_media) clears
+// the rows; only the objects need explicit cleanup.
 func (s *Service) HardDeleteExpired(ctx context.Context) (int64, error) {
 	cutoff := s.Now().Add(-30 * 24 * time.Hour)
-	// ON DELETE CASCADE on sessions handles cleanup; posts/comments/media will
-	// be added in Phase 1/2 and must be cascade-deleted too.
+
+	mediaKeys, err := s.expiredPostMediaKeys(ctx, cutoff)
+	if err != nil {
+		return 0, err
+	}
+
 	res, err := s.DB.ExecContext(ctx, `DELETE FROM users WHERE deleted_at IS NOT NULL AND deleted_at < ?`, cutoff)
 	if err != nil {
 		return 0, err
 	}
+
+	// Best-effort storage cleanup after the rows are gone. A leaked object is
+	// recoverable by a later sweep; failing the whole delete over it is not
+	// worth it.
+	if s.Media != nil {
+		for _, key := range mediaKeys {
+			_ = s.Media.Delete(ctx, key)
+		}
+	}
 	return res.RowsAffected()
+}
+
+// expiredPostMediaKeys returns the R2 object keys for all post images belonging
+// to users whose soft-delete has passed the cutoff.
+func (s *Service) expiredPostMediaKeys(ctx context.Context, cutoff time.Time) ([]string, error) {
+	if s.Media == nil {
+		return nil, nil
+	}
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT pm.object_key
+		  FROM post_media pm
+		  JOIN posts p ON p.id = pm.post_id
+		  JOIN users u ON u.id = p.author_id
+		 WHERE u.deleted_at IS NOT NULL AND u.deleted_at < ?`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
 }
 
 func nullable(s string) any {

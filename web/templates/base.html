@@ -39,6 +39,7 @@
   <div class="ember-rule"></div>
   <p>Hearth — a small, private place for the people you keep close.</p>
 </footer>
+{{block "scripts" .}}{{end}}
 </body>
 </html>{{end}}
 
@@ -49,6 +50,16 @@
     <a href="/{{.AuthorUsername}}" class="post-author">{{.AuthorName}}</a>
     <span class="muted"> · <time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </header>
-  <div class="post-content">{{.Content}}</div>
+  {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
+  {{template "postmedia" .}}
 </article>
 {{end}}
+
+{{/* postmedia renders a post's attached images. Expects a posts.Post; each
+     image carries a short-lived signed URL minted at render time. URLs that
+     failed to sign (no store configured) are skipped. */}}
+{{define "postmedia"}}{{if .Media}}
+<div class="post-media">
+  {{range .Media}}{{if .URL}}<img src="{{.URL}}" alt="" class="post-image" loading="lazy">{{end}}{{end}}
+</div>
+{{end}}{{end}}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -14,6 +15,7 @@ import (
 // R2Store writes objects to Cloudflare R2 using the S3-compatible API.
 type R2Store struct {
 	client     *s3.Client
+	presigner  *s3.PresignClient
 	bucket     string
 	publicHost string
 }
@@ -26,7 +28,12 @@ func NewR2(accountID, accessKeyID, secretAccessKey, bucket, publicHost string) *
 		Region:       "auto",
 		Credentials:  credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, ""),
 	})
-	return &R2Store{client: client, bucket: bucket, publicHost: publicHost}
+	return &R2Store{
+		client:     client,
+		presigner:  s3.NewPresignClient(client),
+		bucket:     bucket,
+		publicHost: publicHost,
+	}
 }
 
 func (s *R2Store) Upload(ctx context.Context, key string, r io.Reader, contentType string) error {
@@ -52,4 +59,18 @@ func (s *R2Store) URL(key string) string {
 		return ""
 	}
 	return strings.TrimRight(s.publicHost, "/") + "/" + key
+}
+
+func (s *R2Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	if key == "" {
+		return "", nil
+	}
+	req, err := s.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", err
+	}
+	return req.URL, nil
 }

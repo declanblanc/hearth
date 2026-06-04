@@ -87,6 +87,7 @@ func main() {
 	notifSvc := notifications.New(database)
 	connSvc := connections.New(database, notifSvc, cfg.BaseURL)
 	postSvc := posts.New(database)
+	postSvc.Media = mediaStore
 	feedSvc := feed.New(database, connSvc)
 	profileSvc := profiles.New(database)
 	profileSvc.Media = mediaStore
@@ -96,7 +97,7 @@ func main() {
 	notifH := notifications.NewHandlers(notifSvc, r)
 	connH := connections.NewHandlers(connSvc, r, mediaStore, cfg.CookieSecret, cfg.IsProd())
 	postH := posts.NewHandlers(postSvc, r)
-	feedH := feed.NewHandlers(feedSvc, r)
+	feedH := feed.NewHandlers(feedSvc, r, mediaStore)
 	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, r, mediaStore, cfg.IsProd())
 
 	mux := http.NewServeMux()
