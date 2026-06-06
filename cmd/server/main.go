@@ -60,6 +60,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// In development, ensure a pre-verified user exists so the app is usable
+	// without the signup/email-verify round-trip. Never runs in prod.
+	if cfg.Env == config.EnvDevelopment {
+		seedDevUser(database, logger)
+	}
+
 	var sender email.Sender
 	if cfg.ResendConfigured() {
 		sender = email.NewResend(cfg.ResendAPIKey, cfg.EmailFrom)
