@@ -9,7 +9,7 @@
 {{if .Owner}}
   <p><a href="/settings/profile">Edit profile</a></p>
   {{if .User.Verified}}
-    <form method="post" action="/posts" class="compose" enctype="multipart/form-data">
+    <form method="post" action="/posts" class="compose" enctype="multipart/form-data" data-image-preview>
       {{if .PostError}}<div class="banner error">{{.PostError}}</div>{{end}}
       <label for="content" class="visually-hidden">Write a post</label>
       <textarea id="content" name="content" rows="3" maxlength="1000" placeholder="Share something…"></textarea>
@@ -24,6 +24,8 @@
         <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple class="visually-hidden">
       </label>
       <small class="muted">Up to 5 images · JPEG, PNG, or WebP · max 25 MB each</small>
+      {{/* Thumbnails of the chosen images, rendered by post-images.js. */}}
+      <div class="preview-list" data-preview-list hidden></div>
       <button type="submit">Post</button>
     </form>
   {{end}}
@@ -56,3 +58,4 @@
   {{end}}
 </section>
 {{end}}
+{{define "scripts"}}<script src="/static/post-images.js" defer></script>{{end}}
