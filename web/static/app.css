@@ -39,6 +39,58 @@
   --sans: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   --measure: 40rem;
+
+  /* Header glass — paper-toned by default; overridden in dark mode. */
+  --header-bg: rgba(244, 238, 226, 0.82);
+
+  /* Page background washes — soft ember glow on warm paper. */
+  --bg-wash-1: radial-gradient(120% 80% at 82% -10%, rgba(227, 162, 90, 0.20), transparent 60%);
+  --bg-wash-2: radial-gradient(120% 70% at 8% -6%, rgba(189, 75, 39, 0.10), transparent 55%);
+
+  /* Selection highlight — ember tint over paper. */
+  --selection-bg: rgba(189, 75, 39, 0.18);
+
+  /* Theme transition: only color-ish properties animate, never layout. */
+  --theme-transition: background-color 0.25s ease, color 0.25s ease,
+                      border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* ---- Dark theme ---------------------------------------------------------- *
+   A warm low-light room — embers banked, paper turned to deep walnut. Never
+   pure black; the ember palette stays recognizable so the brand reads the same.
+   Activated by the [data-theme="dark"] attribute on <html>, set by the inline
+   script in base.html before paint to prevent a flash. */
+:root[data-theme="dark"] {
+  --ink:        #f0e6d6;
+  --ink-soft:   #b29f87;
+  --paper:      #1c140e;
+  --paper-deep: #251a12;
+  --raised:     #2a1f17;
+
+  --ember:      #e07a4f;
+  --ember-deep: #c25a30;
+  --glow:       #e3a25a;
+
+  --line:       #3a2a1e;
+  --line-soft:  #2f221a;
+
+  --error:      #e8826b;
+  --error-bg:   #3a1d15;
+  --ok:         #9fc283;
+  --ok-bg:      #1f2b16;
+
+  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md:  0 6px 22px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg:  0 18px 50px -18px rgba(0, 0, 0, 0.70);
+
+  --header-bg: rgba(28, 20, 14, 0.82);
+
+  --bg-wash-1: radial-gradient(120% 80% at 82% -10%, rgba(227, 162, 90, 0.10), transparent 60%);
+  --bg-wash-2: radial-gradient(120% 70% at 8% -6%, rgba(189, 75, 39, 0.12), transparent 55%);
+
+  --selection-bg: rgba(224, 122, 79, 0.28);
+
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -53,10 +105,9 @@ body {
   color: var(--ink);
   background-color: var(--paper);
   /* Two soft ember washes bleeding from the top — the glow of a fire. */
-  background-image:
-    radial-gradient(120% 80% at 82% -10%, rgba(227, 162, 90, 0.20), transparent 60%),
-    radial-gradient(120% 70% at 8% -6%, rgba(189, 75, 39, 0.10), transparent 55%);
+  background-image: var(--bg-wash-1), var(--bg-wash-2);
   background-attachment: fixed;
+  transition: var(--theme-transition);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   min-height: 100vh;
@@ -94,7 +145,7 @@ p { margin: 0 0 1rem; }
 a { color: var(--ember-deep); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a:hover { color: var(--ember); }
 
-::selection { background: rgba(189, 75, 39, 0.18); }
+::selection { background: var(--selection-bg); }
 
 /* ---- Layout -------------------------------------------------------------- */
 .container {
@@ -128,7 +179,7 @@ a:hover { color: var(--ember); }
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem clamp(1rem, 4vw, 2rem);
-  background: rgba(244, 238, 226, 0.82);
+  background: var(--header-bg);
   backdrop-filter: saturate(140%) blur(10px);
   -webkit-backdrop-filter: saturate(140%) blur(10px);
   border-bottom: 1px solid var(--line);
@@ -194,6 +245,35 @@ a:hover { color: var(--ember); }
 .site-header nav a:hover,
 .site-header nav .linklike:hover { color: var(--ink); }
 .site-header nav a:hover::after { transform: scaleX(1); }
+
+/* Theme toggle — a small icon button in the header. Shows a sun in dark mode
+   and a moon in light mode (the icon represents what clicking will switch TO).
+   The two SVGs are stacked; CSS shows the right one for the current theme. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin-left: 0.25rem;
+  padding: 0;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.theme-toggle:hover {
+  color: var(--ember);
+  background: var(--raised);
+  border-color: var(--line);
+}
+.theme-toggle svg { width: 1.05rem; height: 1.05rem; display: block; }
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
 /* ---- Buttons & links ----------------------------------------------------- */
 /* The :not() guards keep the filled style off link- and secondary-style
@@ -299,7 +379,7 @@ textarea {
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 input::placeholder,
-textarea::placeholder { color: #b3a594; }
+textarea::placeholder { color: var(--ink-soft); opacity: 0.7; }
 label input:focus,
 label textarea:focus,
 input:focus,
@@ -487,7 +567,7 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   font-optical-sizing: auto;
   font-size: 1.12rem;
   line-height: 1.62;
-  color: #34281f;
+  color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
