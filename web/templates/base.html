@@ -37,7 +37,7 @@
       <a href="/notifications" class="nav-notifications">Notifications{{if .User.UnreadDot}}<span class="dot" aria-label="unread notifications"></span>{{end}}</a>
       <a href="/requests">Requests</a>
       <a href="/connections">Connections</a>
-      <a href="/{{.User.Username}}">Profile</a>
+      <a href="/u/{{.User.Username}}">Profile</a>
       <form method="post" action="/logout" style="display:inline">
         <button type="submit" class="linklike">Log out</button>
       </form>
@@ -69,7 +69,7 @@
 {{define "postcard"}}
 <article class="post">
   <header class="post-meta">
-    <a href="/{{.AuthorUsername}}" class="post-author">{{.AuthorName}}</a>
+    <a href="/u/{{.AuthorUsername}}" class="post-author">{{.AuthorName}}</a>
     <span class="muted"> · <time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </header>
   {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
@@ -87,7 +87,7 @@
   <ul class="liker-list">
     {{range .Likers}}
       <li class="liker-item">
-        <a href="/{{.Username}}">{{.Name}}</a>
+        <a href="/u/{{.Username}}">{{.Name}}</a>
         <span class="muted"> · @{{.Username}}</span>
       </li>
     {{end}}

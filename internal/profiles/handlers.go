@@ -41,8 +41,10 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 	mux.Handle("POST /settings/profile", authed(h.editSubmit))
 	mux.Handle("GET /settings/account", authed(h.accountForm))
 	mux.Handle("POST /settings/account/delete", authed(h.deleteAccount))
-	// /{username} stays public — the handler enforces 404-unless-connected.
-	mux.HandleFunc("GET /{username}", h.viewProfile)
+	// /u/{username} stays public — the handler enforces 404-unless-connected.
+	// The /u/ prefix keeps usernames in their own namespace, clear of the app's
+	// top-level pages (/connections, /settings, …) so the two can't collide.
+	mux.HandleFunc("GET /u/{username}", h.viewProfile)
 }
 
 func (h *Handlers) editForm(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +216,7 @@ func (h *Handlers) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	h.Renderer.HTML(w, "account_deleted.html", render.Page(nil, nil))
 }
 
-// viewProfile handles /{username}. The profile is visible only to its owner or
+// viewProfile handles /u/{username}. The profile is visible only to its owner or
 // to a connected viewer; everyone else gets a 404 — non-existence is part of
 // the privacy model, so we never reveal a profile exists (CLAUDE.md §1).
 func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +225,7 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, ErrNotFound) {
 		// No such account. Serve the same descriptive page as the
 		// "not connected" branch below so the two cases are byte-for-byte
-		// identical — otherwise probing /{username} would leak whether an
+		// identical — otherwise probing /u/{username} would leak whether an
 		// account exists (CLAUDE.md §1).
 		h.renderProfileUnavailable(w, r)
 		return
@@ -324,7 +326,7 @@ func (h *Handlers) renderProfilePreview(w http.ResponseWriter, r *http.Request, 
 // no account, and the username exists but the viewer isn't connected — funnel
 // through this single helper so their responses are byte-for-byte identical.
 // That identity is the privacy property: it stops anyone from probing
-// /{username} to learn whether an account exists (CLAUDE.md §1).
+// /u/{username} to learn whether an account exists (CLAUDE.md §1).
 //
 // The page data deliberately depends only on the viewer (for the nav/footer
 // chrome), never on the requested profile, so nothing about the target account

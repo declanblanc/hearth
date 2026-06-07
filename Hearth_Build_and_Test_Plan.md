@@ -242,7 +242,7 @@ Establish the deployment pipeline, the database, and the authentication system. 
 - `GET /settings/profile`: form to edit display name, bio, pronouns, and profile photo.
 - `POST /settings/profile`: saves changes.
 - Photo upload: client-side compression (same library and settings as post media — see 2.1), upload to R2 with key like `profile/{user_id}/{uuid}.jpg`, store key in `users.photo_key`. Old photo deleted from R2 on replacement.
-- `GET /{username}` for own profile shows profile + an "edit profile" link. Other users' profiles handled in Phase 1.
+- `GET /u/{username}` for own profile shows profile + an "edit profile" link. Other users' profiles handled in Phase 1.
 
 ### Acceptance criteria
 
@@ -438,7 +438,7 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 ### Implementation
 
 - `POST /posts` accepts `{ content }`, max 1000 chars after trimming. Reject empty.
-- `GET /{username}` (when connected): paginated list of the user's active posts, reverse chronological.
+- `GET /u/{username}` (when connected): paginated list of the user's active posts, reverse chronological.
 - `DELETE /posts/{id}` (author only): set `status = 'deleted'`, null content, clear `post_edits` (none yet in Phase 1), delete associated media (none yet in Phase 1).
 
 ### Acceptance criteria
@@ -806,7 +806,7 @@ Empty state copy:
 - New user with connections but empty feed: "Your feed will fill up as your connections post."
 - `/notifications` empty: "Nothing here yet."
 - `/settings/archived` empty: "You haven't archived any posts."
-- `/{username}` (connected, no posts): "{Name} hasn't posted yet."
+- `/u/{username}` (connected, no posts): "{Name} hasn't posted yet."
 
 Error pages:
 
@@ -831,7 +831,7 @@ Error pages:
 
 - Visit `/notifications` as a new user; check copy.
 - Trigger each error class manually:
-  - Visit a nonexistent `/{username}` → 404.
+  - Visit a nonexistent `/u/{username}` → 404.
   - Trigger a 429 by hitting an endpoint past the rate limit.
   - Induce a 500 (e.g., by temporarily breaking a DB query) — confirm graceful degradation.
 

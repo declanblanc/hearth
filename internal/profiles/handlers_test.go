@@ -547,12 +547,12 @@ func TestViewProfile_NonOwnerGets404(t *testing.T) {
 	}
 }
 
-// probeProfile issues a GET /{username} as the given viewer and returns the
+// probeProfile issues a GET /u/{username} as the given viewer and returns the
 // recorded response. A nil viewer simulates a logged-out visitor (no user in
 // the request context). It mirrors how http.ServeMux would populate the path
 // value in production.
 func probeProfile(h *Handlers, username string, viewer *middleware.User) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/"+username, nil)
+	req := httptest.NewRequest(http.MethodGet, "/u/"+username, nil)
 	if viewer != nil {
 		req = req.WithContext(middleware.WithUser(req.Context(), viewer))
 	}
@@ -563,7 +563,7 @@ func probeProfile(h *Handlers, username string, viewer *middleware.User) *httpte
 }
 
 // TestViewProfile_InaccessibleProfilesAreIndistinguishable is the core privacy
-// guarantee from issue #2: probing /{username} must not reveal whether an
+// guarantee from issue #2: probing /u/{username} must not reveal whether an
 // account exists. The response for an existing-but-not-connected user and the
 // response for a username with no account at all must be byte-for-byte
 // identical — same status code AND same body — for the same viewer. Otherwise

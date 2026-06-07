@@ -90,7 +90,7 @@ Tables below use generic SQL types; adapt to your chosen ORM/driver.
 | column              | type        | notes                                              |
 | ------------------- | ----------- | -------------------------------------------------- |
 | id                  | INTEGER PK  |                                                    |
-| username            | TEXT UNIQUE | immutable after signup, used in `/{username}` URLs |
+| username            | TEXT UNIQUE | immutable after signup, used in `/u/{username}` URLs |
 | email               | TEXT UNIQUE |                                                    |
 | password_hash       | TEXT        | argon2id                                           |
 | display_name        | TEXT        | editable                                           |
@@ -388,7 +388,7 @@ These are the things the product _doesn't_ do, with a note on how that's enforce
 | Anti-feature                 | How it's enforced                                                                                                     |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | No _public_ likes/reactions  | A like exists only as a private notification to the author plus an author-only liker list (§4.4.5). No public like indicator, no reactions, no emoji palette. |
-| No discovery                 | No user search endpoint. `/{username}` returns 404 unless the requesting user is connected. No "people you may know." |
+| No discovery                 | No user search endpoint. `/u/{username}` returns 404 unless the requesting user is connected. No "people you may know." |
 | No algorithm                 | Feed query is `ORDER BY created_at DESC`. Period.                                                                     |
 | Notifications off by default | All flags in `notification_preferences` default to `false`                                                            |
 | No visible counts            | Connection list returns names only. Comment thread returns comments, never `count`. Likes surface as a notification and an author-only list of names — never a number. |
@@ -400,7 +400,7 @@ These are the things the product _doesn't_ do, with a note on how that's enforce
 
 Things I made a judgment call on while drafting. Each is worth a sanity check.
 
-1. **Usernames are immutable, display names are editable.** Usernames appear in URLs (`/{username}`), so changing them would break invite links and bookmarks. Display names are what users see in the UI.
+1. **Usernames are immutable, display names are editable.** Usernames appear in URLs (`/u/{username}`), so changing them would break invite links and bookmarks. Display names are what users see in the UI.
 2. **GIFs treated as static images at MVP.** Animated GIFs are a low-grade form of video and bring most of the same complexity. Easy to revisit.
 3. **Email notifications are the only notification channel at MVP.** No push, no SMS. Push notifications would require a service worker setup with VAPID keys; doable but adds scope.
 4. **Account deletion ships in MVP.** Privacy-focused apps essentially require this for both ethical and GDPR-adjacent reasons. Soft-delete the user (anonymize email, null content), then hard-delete after 30 days.

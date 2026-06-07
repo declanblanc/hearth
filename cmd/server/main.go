@@ -120,7 +120,7 @@ func main() {
 
 	// Each package mounts its own routes, wrapping authenticated handlers with
 	// middleware.RequireAuth internally. Public routes (auth pages, the invite
-	// opener, and /{username}) are registered bare and do their own gating.
+	// opener, and /u/{username}) are registered bare and do their own gating.
 	authH.Mount(mux)
 	feedH.Mount(mux)
 	postH.Mount(mux)

@@ -21,7 +21,7 @@
       <li class="connection-item">
         {{if .PhotoURL}}<img class="connection-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
         <div class="connection-body">
-          <a href="/{{.Username}}" class="connection-name">{{.Name}}</a>
+          <a href="/u/{{.Username}}" class="connection-name">{{.Name}}</a>
           <span class="muted">@{{.Username}}</span>
         </div>
         <form method="post" action="/connections/{{.ID}}/disconnect" style="display:inline"
