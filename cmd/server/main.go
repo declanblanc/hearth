@@ -136,7 +136,9 @@ func main() {
 		middleware.Logger(logger)(
 			middleware.Recoverer(logger)(
 				auth.SessionLoader(authSvc)(
-					notifH.LoadUnread(mux),
+					notifH.LoadUnread(
+						connH.LoadPendingDot(mux),
+					),
 				),
 			),
 		),

@@ -222,7 +222,7 @@ func TestResolve_ExpiredAndConsumed(t *testing.T) {
 
 // ---- request / accept / deny ----
 
-func TestCreateRequest_ConsumesInviteAndNotifies(t *testing.T) {
+func TestCreateRequest_ConsumesInviteAndRecordsPending(t *testing.T) {
 	d := newTestDB(t)
 	svc := newSvc(d)
 	ctx := context.Background()
@@ -239,14 +239,30 @@ func TestCreateRequest_ConsumesInviteAndNotifies(t *testing.T) {
 		t.Errorf("second request on a consumed invite should fail, got %v", err)
 	}
 
-	// Recipient (sender) got a connection_request notification.
-	if n := unreadCount(t, d, sender, notifications.TypeConnectionRequest); n != 1 {
-		t.Errorf("want 1 connection_request notification for sender, got %d", n)
+	// No connection_request notification is created: the pending connection
+	// surfaces on the connections page and as the Connections tab dot, so a
+	// notifications-page entry would be duplicate information (issue #13).
+	if n := unreadCount(t, d, sender, notifications.TypeConnectionRequest); n != 0 {
+		t.Errorf("want 0 connection_request notifications for sender, got %d", n)
 	}
 
+	// The recipient sees the pending request and its dot is lit.
 	reqs, _ := svc.ListPendingRequests(ctx, sender)
 	if len(reqs) != 1 || reqs[0].RequesterUsername != "requester" {
 		t.Errorf("expected one pending request from requester, got %+v", reqs)
+	}
+	if dot, _ := svc.HasPendingRequests(ctx, sender); !dot {
+		t.Error("HasPendingRequests(sender) = false, want true")
+	}
+
+	// The requester (accepter) sees the connection as outgoing-pending (issue
+	// #15) but has no incoming request and no dot.
+	outgoing, _ := svc.ListOutgoingPending(ctx, requester)
+	if len(outgoing) != 1 || outgoing[0].Username != "sender" {
+		t.Errorf("expected one outgoing pending toward sender, got %+v", outgoing)
+	}
+	if dot, _ := svc.HasPendingRequests(ctx, requester); dot {
+		t.Error("HasPendingRequests(requester) = true, want false")
 	}
 }
 

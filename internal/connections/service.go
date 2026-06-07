@@ -296,10 +296,15 @@ func (s *Service) Resolve(ctx context.Context, token string, viewerID int64) (Re
 // ---- connection requests ----
 
 // CreateRequest consumes the invite and records a pending connection request
-// from requesterID to the invite's sender, notifying the sender. The invite is
-// consumed here (not at link-open time, CLAUDE.md §5). Returns ErrInviteInvalid
-// if the invite was already used or is otherwise unusable, and ErrSelfConnect /
+// from requesterID to the invite's sender. The invite is consumed here (not at
+// link-open time, CLAUDE.md §5). Returns ErrInviteInvalid if the invite was
+// already used or is otherwise unusable, and ErrSelfConnect /
 // ErrAlreadyConnected for those states.
+//
+// No notification row is created for the sender: a pending connection already
+// surfaces at the top of the sender's connections page and as a dot on the
+// Connections tab (HasPendingRequests), so a notifications-page entry would be
+// duplicate information (issue #13).
 func (s *Service) CreateRequest(ctx context.Context, token string, requesterID int64) error {
 	res, err := s.Resolve(ctx, token, requesterID)
 	if err != nil {
@@ -325,19 +330,11 @@ func (s *Service) CreateRequest(ctx context.Context, token string, requesterID i
 		if n, _ := r.RowsAffected(); n == 0 {
 			return ErrInviteInvalid
 		}
-		ins, err := conn.ExecContext(ctx, `
+		_, err = conn.ExecContext(ctx, `
 			INSERT INTO connection_requests (invite_id, requester_id, recipient_id, status, created_at)
 			VALUES (?, ?, ?, 'pending', ?)`,
 			res.InviteID, requesterID, res.SenderID, s.Now())
-		if err != nil {
-			return err
-		}
-		_ = ins
-		return s.Notifs.Create(ctx, conn, notifications.Params{
-			UserID:  res.SenderID,
-			Type:    notifications.TypeConnectionRequest,
-			ActorID: requesterID,
-		})
+		return err
 	})
 }
 
@@ -375,6 +372,58 @@ func (s *Service) ListPendingRequests(ctx context.Context, recipientID int64) ([
 		reqs = append(reqs, req)
 	}
 	return reqs, rows.Err()
+}
+
+// HasPendingRequests reports whether the user has any pending incoming
+// connection requests awaiting their confirm/decline. It drives the Connections
+// tab dot (issue #13) — deliberately a boolean, never a count (CLAUDE.md §2).
+func (s *Service) HasPendingRequests(ctx context.Context, recipientID int64) (bool, error) {
+	var one int
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT 1
+		  FROM connection_requests cr
+		  JOIN users u ON u.id = cr.requester_id AND u.deleted_at IS NULL
+		 WHERE cr.recipient_id = ? AND cr.status = 'pending'
+		 LIMIT 1`, recipientID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ListOutgoingPending returns the people the requester is waiting on: those they
+// asked to connect with (by accepting an invite link) who have not yet confirmed
+// or declined. The accepter sees these on their own connections page so the
+// in-flight connection isn't invisible to them (issue #15). The entry clears on
+// its own once the recipient resolves the request, since this only matches
+// status='pending'.
+func (s *Service) ListOutgoingPending(ctx context.Context, requesterID int64) ([]Person, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT u.id, u.username, u.first_name, u.last_name, COALESCE(u.photo_key, '')
+		  FROM connection_requests cr
+		  JOIN users u ON u.id = cr.recipient_id AND u.deleted_at IS NULL
+		 WHERE cr.requester_id = ? AND cr.status = 'pending'
+		 ORDER BY cr.created_at DESC`, requesterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var people []Person
+	for rows.Next() {
+		var (
+			p           Person
+			first, last string
+		)
+		if err := rows.Scan(&p.ID, &p.Username, &first, &last, &p.PhotoKey); err != nil {
+			return nil, err
+		}
+		p.Name = fullName(first, last)
+		people = append(people, p)
+	}
+	return people, rows.Err()
 }
 
 // PendingRequestFrom looks up the id of a pending incoming connection request

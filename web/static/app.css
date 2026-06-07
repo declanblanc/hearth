@@ -431,7 +431,8 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 
 /* ---- Notification dot — presence only, never a count (CLAUDE.md §2) ------- */
-.nav-notifications { position: relative; }
+.nav-notifications,
+.nav-connections { position: relative; }
 .dot {
   display: inline-block;
   width: 7px;
@@ -974,6 +975,18 @@ span.invite-url { box-shadow: none; }
 .request-name:hover,
 .connection-name:hover { color: var(--ember); }
 .request-actions { display: flex; gap: 0.5rem; }
+/* Outgoing pending entries (issue #15) show a read-only status pill instead of
+   confirm/decline actions — only the recipient can resolve them. */
+.request-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+}
 
 /* ---- Notifications ------------------------------------------------------- */
 .notification-item {

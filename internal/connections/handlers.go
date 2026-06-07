@@ -44,6 +44,23 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 	mux.Handle("POST /connections/{user_id}/disconnect", authed(h.disconnect))
 }
 
+// LoadPendingDot is middleware that flags the Connections tab dot for
+// authenticated users who have a pending connection awaiting their confirm or
+// decline (issue #13). It mirrors notifications.LoadUnread: it mutates the
+// context User so every page's base template can show the dot without each
+// handler threading it through. Errors are swallowed — a missing dot is not
+// worth a 500.
+func (h *Handlers) LoadPendingDot(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if u := middleware.UserFrom(r.Context()); u != nil {
+			if pending, err := h.Svc.HasPendingRequests(r.Context(), u.ID); err == nil {
+				u.ConnectionsDot = pending
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ---- invite opening (the §4.2 state machine) ----
 
 func (h *Handlers) openInvite(w http.ResponseWriter, r *http.Request) {
@@ -269,6 +286,20 @@ func (h *Handlers) connectionsPageData(ctx context.Context, u *middleware.User, 
 		})
 	}
 
+	// Outgoing pending: people the viewer accepted an invite from and is now
+	// waiting on to confirm (issue #15). Read-only — the viewer can't act on
+	// these; the entry clears when the recipient resolves the request.
+	outgoing, err := h.Svc.ListOutgoingPending(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	outgoingViews := make([]personView, 0, len(outgoing))
+	for _, p := range outgoing {
+		outgoingViews = append(outgoingViews, personView{
+			ID: p.ID, Name: p.Name, Username: p.Username, PhotoURL: h.photoURL(p.PhotoKey),
+		})
+	}
+
 	people, err := h.Svc.ListConnections(ctx, u.ID)
 	if err != nil {
 		return nil, err
@@ -280,7 +311,12 @@ func (h *Handlers) connectionsPageData(ctx context.Context, u *middleware.User, 
 		})
 	}
 
-	return render.M{"Requests": requestViews, "People": peopleViews, "Error": errMsg}, nil
+	return render.M{
+		"Requests": requestViews,
+		"Outgoing": outgoingViews,
+		"People":   peopleViews,
+		"Error":    errMsg,
+	}, nil
 }
 
 type personView struct {
