@@ -55,6 +55,10 @@ type Post struct {
 	// the likes package; it is never a count and says nothing about other users'
 	// likes (CLAUDE.md §11).
 	LikedByViewer bool
+	// Comments holds the post's top-level comments (each with nested replies),
+	// populated per-request by CommentService.AttachToPosts for the feed and
+	// profile views. Nil until attached; never a count (CLAUDE.md §2).
+	Comments []*Comment
 }
 
 // PostMedia is one image attached to a post. Key/ContentType come from the
@@ -289,6 +293,12 @@ func (s *Service) Delete(ctx context.Context, postID, requesterID int64) error {
 	// Likes are recorded per (post, user); drop them with the post so a deleted
 	// post leaves no liker rows behind (CLAUDE.md §10 delete cascade).
 	if _, err := tx.ExecContext(ctx, `DELETE FROM likes WHERE post_id = ?`, postID); err != nil {
+		return err
+	}
+	// Comments (and their threads) go with the post too (CLAUDE.md §10, Build
+	// Plan §2.5). The post row is only soft-deleted, so the FK cascade won't
+	// fire — remove them explicitly here.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM comments WHERE post_id = ?`, postID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,

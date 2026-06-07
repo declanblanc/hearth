@@ -12,8 +12,14 @@
   </div>
 {{end}}
 
+{{/* Create-post entry point on the feed itself, so posting doesn't require a
+     detour to the profile page (issue #19). Opens the shared compose dialog. */}}
+{{if .User.Verified}}
+  <div class="feed-compose">{{template "composetrigger" .}}</div>
+{{end}}
+
 {{if and (not .New) (not .Old)}}
-  <p class="muted empty">Generate an invitation link to connect with someone by checking out the <a href="/connections">Connections</a> page, then their posts will appear here.</p>
+  <p class="muted empty">Generate an invite link to connect with someone by checking out the <a href="/connections">Connections</a> page, then their posts will appear here.</p>
 {{end}}
 
 {{if .New}}
@@ -25,7 +31,9 @@
 
 {{if .Old}}
   <section class="feed-group">
-    <details{{if not .New}} open{{end}}>
+    {{/* Collapsed by default so the feed opens on new posts only, rather than
+         inviting a mindless scroll back through already-seen ones (#14). */}}
+    <details>
       <summary class="group-label">Older posts</summary>
       {{range .Old}}{{template "postcard" .}}{{end}}
     </details>
@@ -41,4 +49,10 @@
     </button>
   </div>
 {{end}}
+
+{{if .User.Verified}}{{template "composemodal" .}}{{end}}
 {{end}}
+{{define "scripts"}}
+<script src="/static/comments.js" defer></script>
+{{if .User.Verified}}<script src="/static/post-images.js" defer></script>
+<script src="/static/compose-modal.js" defer></script>{{end}}{{end}}

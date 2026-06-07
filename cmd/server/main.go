@@ -95,6 +95,7 @@ func main() {
 	connSvc := connections.New(database, notifSvc, cfg.BaseURL)
 	postSvc := posts.New(database)
 	postSvc.Media = mediaStore
+	commentSvc := posts.NewCommentService(database, connSvc, notifSvc)
 	feedSvc := feed.New(database, connSvc)
 	likeSvc := likes.New(database, connSvc, notifSvc)
 	profileSvc := profiles.New(database)
@@ -105,9 +106,10 @@ func main() {
 	notifH := notifications.NewHandlers(notifSvc, r)
 	connH := connections.NewHandlers(connSvc, r, mediaStore, cfg.CookieSecret, cfg.IsProd())
 	postH := posts.NewHandlers(postSvc, r)
+	commentH := posts.NewCommentHandlers(commentSvc, r)
 	likeH := likes.NewHandlers(likeSvc, r)
-	feedH := feed.NewHandlers(feedSvc, r, mediaStore, likeSvc)
-	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, likeSvc, r, mediaStore, cfg.IsProd())
+	feedH := feed.NewHandlers(feedSvc, r, mediaStore, likeSvc, commentSvc)
+	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, likeSvc, commentSvc, r, mediaStore, cfg.IsProd())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -124,6 +126,7 @@ func main() {
 	authH.Mount(mux)
 	feedH.Mount(mux)
 	postH.Mount(mux)
+	commentH.Mount(mux)
 	likeH.Mount(mux)
 	notifH.Mount(mux)
 	connH.Mount(mux)
@@ -136,7 +139,9 @@ func main() {
 		middleware.Logger(logger)(
 			middleware.Recoverer(logger)(
 				auth.SessionLoader(authSvc)(
-					notifH.LoadUnread(mux),
+					notifH.LoadUnread(
+						connH.LoadPendingDot(mux),
+					),
 				),
 			),
 		),

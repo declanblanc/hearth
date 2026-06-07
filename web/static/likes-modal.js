@@ -1,4 +1,4 @@
-// Enhances "See who liked" links into a modal. Each link keeps its href to the
+// Enhances "View Likes" links into a modal. Each link keeps its href to the
 // standalone /posts/{id}/likes page, so without JS it still works as a plain
 // navigation; here we intercept the click, fetch the bare list fragment, and
 // show it in a native <dialog>.

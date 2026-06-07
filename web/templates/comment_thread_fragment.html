@@ -1,0 +1,6 @@
+{{/* comment_thread_fragment.html — the bare comment thread returned to htmx
+     requests after a comment, reply, or delete, so the thread swaps in place
+     without a full reload (issue #11). Reuses the "commentthread" define from
+     base.html, which is always parsed alongside. Expects a posts.Post carrying
+     .ID and .Comments. */}}
+{{define "comment_thread_fragment.html"}}{{template "commentthread" .}}{{end}}

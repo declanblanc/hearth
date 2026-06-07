@@ -7,7 +7,7 @@
 
 {{/*
   Pending connections live at the top of this page (there is no separate
-  requests page). These are people who accepted an invitation link the viewer
+  requests page). These are people who accepted an invite link the viewer
   shared; the connection only completes once the viewer confirms it here. The
   Confirm/Decline forms post to /connections/{id}/confirm and
   /connections/{id}/decline.
@@ -15,7 +15,7 @@
 {{if .Requests}}
   <section class="pending-connections">
     <h2>Pending connections</h2>
-    <p class="muted">These people accepted your invitation link. Confirm to connect — you'll each be able to see the other's posts.</p>
+    <p class="muted">These people accepted your invite link. Confirm to connect — you'll each be able to see the other's posts.</p>
     <ul class="request-list">
       {{range .Requests}}
         <li class="request-item">
@@ -39,6 +39,31 @@
 {{end}}
 
 {{/*
+  Outgoing pending connections (issue #15): people whose invite link the viewer
+  accepted, now waiting on that person to confirm. Read-only — only the
+  recipient can confirm or decline — so there are no action buttons here. Each
+  entry disappears once the other person resolves it.
+*/}}
+{{if .Outgoing}}
+  <section class="pending-connections pending-outgoing">
+    <h2>Waiting to connect</h2>
+    <p class="muted">You accepted these invite links. You'll connect once they confirm.</p>
+    <ul class="request-list">
+      {{range .Outgoing}}
+        <li class="request-item">
+          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
+          <div class="request-body">
+            <a href="/u/{{.Username}}" class="request-name">{{.Name}}</a>
+            <span class="muted">@{{.Username}}</span>
+          </div>
+          <span class="request-status muted">Pending</span>
+        </li>
+      {{end}}
+    </ul>
+  </section>
+{{end}}
+
+{{/*
   The invite-generation affordance lives outside the connections list so it is
   always reachable. Gating it on the empty state (the old behaviour) left users
   who already had a connection with no way to invite anyone else — see issue #4.
@@ -47,7 +72,7 @@
   button. Without JavaScript the same POST renders invite_created.html instead.
 */}}
 <form method="post" action="/invites" data-invite-form>
-  <button type="submit" class="button-link">Generate invitation link</button>
+  <button type="submit" class="button-link">Generate invite link</button>
 </form>
 
 {{if .People}}
@@ -67,7 +92,7 @@
     {{end}}
   </ul>
 {{else}}
-  <p class="muted empty">You're not connected with anyone yet. Generate an invitation link above and share it with someone you'd like to connect with — when they accept, you'll confirm their request to connect.</p>
+  <p class="muted empty">You're not connected with anyone yet. Generate an invite link above and share it with someone you'd like to connect with — when they accept, you'll confirm their request to connect.</p>
 {{end}}
 
 {{/* invite-modal.js fills this dialog with the freshly generated link. */}}

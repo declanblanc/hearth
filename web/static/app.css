@@ -431,7 +431,8 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 
 /* ---- Notification dot — presence only, never a count (CLAUDE.md §2) ------- */
-.nav-notifications { position: relative; }
+.nav-notifications,
+.nav-connections { position: relative; }
 .dot {
   display: inline-block;
   width: 7px;
@@ -646,6 +647,16 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   font-weight: 500;
 }
 
+/* The owner's "View Likes" and "Delete" actions share one quiet, small
+   sans-serif treatment so they read as a deliberate, consistent action
+   row rather than two mismatched links (#9). */
+.post-actions .linklike,
+.post-actions .likers-link {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
 .liker-list {
   list-style: none;
   padding: 0;
@@ -657,7 +668,7 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .liker-item:last-child { border-bottom: 0; }
 
-/* "See who liked" modal. Quiet card centred over a dimmed backdrop; the same
+/* "View Likes" modal. Quiet card centred over a dimmed backdrop; the same
    liker list as the standalone page, just without the page chrome. */
 .likes-dialog {
   width: min(28rem, calc(100vw - 2rem));
@@ -723,6 +734,12 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   cursor: pointer;
 }
 .invite-dialog-close:hover { color: var(--ember); }
+/* Single-use warning shown right above the freshly minted link, so the
+   one-person-only rule is impossible to miss at the point of sharing (#12). */
+.invite-single-use {
+  color: var(--ember-deep);
+}
+
 .invite-copy-row {
   display: flex;
   align-items: stretch;
@@ -731,6 +748,46 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .invite-copy-row .invite-url { flex: 1; }
 .invite-copy-row .button-secondary { flex-shrink: 0; }
+
+/* Compose-post modal (issue #19), opened from the feed and the profile page by
+   compose-modal.js. Shares the quiet-card look of the other dialogs; the inner
+   .compose form keeps its own styling, so we only need the dialog chrome. */
+.compose-dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 1.5rem 1.6rem;
+  background: var(--raised);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.compose-dialog::backdrop { background: rgba(28, 20, 14, 0.45); }
+.compose-modal-title { margin: 0 2rem 0.8rem 0; font-size: 1.25rem; }
+/* Inside the dialog the composer needs no card of its own — the dialog is the
+   card — so flatten the standalone .compose styling here. */
+.compose-dialog .compose {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.compose-dialog-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.75rem;
+  background: none;
+  border: 0;
+  padding: 0.2rem 0.4rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.compose-dialog-close:hover { color: var(--ember); }
+/* The feed's "Create post" entry point sits above the feed groups. */
+.feed-compose { margin: 0 0 1.75rem; }
 
 /* Attached images. A single image sits full-width; two or more tile into a
    responsive grid. Each image keeps its aspect ratio and never overflows. */
@@ -748,6 +805,85 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: var(--paper);
+  cursor: zoom-in; /* post-lightbox.js opens a larger view on click (issue #8) */
+}
+
+/* ---- Photo lightbox (post-lightbox.js, issue #8) ------------------------- *
+   A full-screen overlay for viewing a post's photos larger, with prev/next for
+   posts that carry several. Built and toggled entirely by the script; absent it
+   the photos just render inline. */
+.lightbox-open { overflow: hidden; } /* freeze the page behind the overlay */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: rgba(28, 20, 14, 0.82);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: lightbox-fade 0.18s ease-out;
+}
+@keyframes lightbox-fade { from { opacity: 0; } to { opacity: 1; } }
+.lightbox-figure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+}
+.lightbox-image {
+  max-width: 100%;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.lightbox-close,
+.lightbox-nav {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 253, 248, 0.12);
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.16s ease;
+}
+.lightbox-close:hover,
+.lightbox-nav:hover { background: rgba(255, 253, 248, 0.28); }
+.lightbox-close {
+  top: 1rem;
+  right: 1rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  font-size: 1.8rem;
+}
+.lightbox-nav {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3rem;
+  height: 3rem;
+  font-size: 2.2rem;
+}
+.lightbox-prev { left: clamp(0.5rem, 2vw, 1.5rem); }
+.lightbox-next { right: clamp(0.5rem, 2vw, 1.5rem); }
+.lightbox-counter {
+  position: absolute;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(28, 20, 14, 0.6);
+  color: #fff;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Compose file picker — the native input is hidden and the label is styled as
@@ -958,6 +1094,18 @@ span.invite-url { box-shadow: none; }
 .request-name:hover,
 .connection-name:hover { color: var(--ember); }
 .request-actions { display: flex; gap: 0.5rem; }
+/* Outgoing pending entries (issue #15) show a read-only status pill instead of
+   confirm/decline actions — only the recipient can resolve them. */
+.request-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+}
 
 /* ---- Notifications ------------------------------------------------------- */
 .notification-item {

@@ -29,6 +29,10 @@ type User struct {
 	// UnreadDot drives the header notification dot. Populated per-request by
 	// notifications.LoadUnread middleware (not by the session loader).
 	UnreadDot bool
+	// ConnectionsDot drives the Connections tab dot, shown when the user has a
+	// pending connection awaiting their confirm/decline. Populated per-request
+	// by connections.LoadPendingDot middleware (issue #13).
+	ConnectionsDot bool
 }
 
 func WithUser(ctx context.Context, u *User) context.Context {

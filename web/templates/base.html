@@ -22,6 +22,7 @@
 </script>
 <script src="/static/htmx.min.js" defer></script>
 <script src="/static/theme-toggle.js" defer></script>
+<script src="/static/post-lightbox.js" defer></script>
 </head>
 <body>
 <header class="site-header">
@@ -35,7 +36,7 @@
     {{if .User}}
       <a href="/">Feed</a>
       <a href="/notifications" class="nav-notifications">Notifications{{if .User.UnreadDot}}<span class="dot" aria-label="unread notifications"></span>{{end}}</a>
-      <a href="/connections">Connections</a>
+      <a href="/connections" class="nav-connections">Connections{{if .User.ConnectionsDot}}<span class="dot" aria-label="pending connection"></span>{{end}}</a>
       <a href="/u/{{.User.Username}}">Profile</a>
       <form method="post" action="/logout" style="display:inline">
         <button type="submit" class="linklike">Log out</button>
@@ -74,6 +75,7 @@
   {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
   {{template "postmedia" .}}
   <div class="post-actions">{{template "likecontrol" .}}</div>
+  {{template "commentthread" .}}
 </article>
 {{end}}
 
@@ -98,17 +100,25 @@
 
 {{/* likecontrol renders the private like toggle for a post the viewer did not
      author. There is no count and no indication of who else liked — just the
-     viewer's own on/off state (CLAUDE.md §11). Expects a posts.Post. */}}
+     viewer's own on/off state (CLAUDE.md §11). Expects a posts.Post.
+
+     The forms post with htmx (hx-post) and swap themselves with the server's
+     re-rendered control, so liking/unliking updates in place without a full
+     page reload (issue #10). The native method/action attributes remain the
+     no-JS fallback: without htmx the form submits normally and the handler
+     redirects back. The server returns this same fragment to htmx requests. */}}
 {{define "likecontrol"}}
 {{if .LikedByViewer}}
-  <form method="post" action="/posts/{{.ID}}/unlike" class="like-form">
+  <form method="post" action="/posts/{{.ID}}/unlike" class="like-form"
+        hx-post="/posts/{{.ID}}/unlike" hx-target="this" hx-swap="outerHTML">
     <button type="submit" class="like-button liked" aria-pressed="true">
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.7-4.35-9.33-8.07C.9 10.27 1.4 7.1 3.86 5.66a4.6 4.6 0 0 1 5.64.9L12 9.06l2.5-2.5a4.6 4.6 0 0 1 5.64-.9c2.46 1.44 2.96 4.61 1.19 7.27C18.7 16.65 12 21 12 21Z"/></svg>
       <span>Liked</span>
     </button>
   </form>
 {{else}}
-  <form method="post" action="/posts/{{.ID}}/like" class="like-form">
+  <form method="post" action="/posts/{{.ID}}/like" class="like-form"
+        hx-post="/posts/{{.ID}}/like" hx-target="this" hx-swap="outerHTML">
     <button type="submit" class="like-button" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.7-4.35-9.33-8.07C.9 10.27 1.4 7.1 3.86 5.66a4.6 4.6 0 0 1 5.64.9L12 9.06l2.5-2.5a4.6 4.6 0 0 1 5.64-.9c2.46 1.44 2.96 4.61 1.19 7.27C18.7 16.65 12 21 12 21Z"/></svg>
       <span>Like</span>
@@ -125,3 +135,118 @@
   {{range .Media}}{{if .URL}}<img src="{{.URL}}" alt="" class="post-image" loading="lazy">{{end}}{{end}}
 </div>
 {{end}}{{end}}
+
+{{/* composetrigger — the "Create post" button that opens the shared compose
+     dialog (issue #19). compose-modal.js wires the click; without JS the button
+     does nothing, so pages that show it must also keep a no-JS path (the
+     <dialog> is open-able via its fallback, see compose-modal.js). */}}
+{{define "composetrigger"}}
+<button type="button" class="button-link compose-trigger" data-compose-open>Create post</button>
+{{end}}
+
+{{/* composemodal — the post composer in a <dialog>, reused by the home feed and
+     the profile page (issue #19) so there is one canonical compose form. The
+     form is the same multipart POST to /posts as before, enhanced by
+     post-images.js (thumbnail previews + upload progress). On a validation
+     error the server redirects to the author's profile with ?post_error=…; that
+     renders the banner here and compose-modal.js re-opens the dialog so the
+     message is seen. Expects .PostError (may be empty). */}}
+{{define "composemodal"}}
+<dialog id="compose-dialog" class="compose-dialog"{{if .PostError}} data-compose-error{{end}}>
+  <button type="button" class="compose-dialog-close" data-compose-close aria-label="Close">&times;</button>
+  <h2 class="compose-modal-title">Create post</h2>
+  <form method="post" action="/posts" class="compose" enctype="multipart/form-data" data-image-preview>
+    {{if .PostError}}<div class="banner error">{{.PostError}}</div>{{end}}
+    <label for="content" class="visually-hidden">Write a post</label>
+    <textarea id="content" name="content" rows="3" maxlength="1000" placeholder="Share something…"></textarea>
+    <label for="images" class="upload-button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+      </svg>
+      <span>Add photos</span>
+      <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple class="visually-hidden">
+    </label>
+    <small class="muted">Up to 5 images · JPEG, PNG, or WebP · 200 MB total</small>
+    {{/* Thumbnails of the chosen images, rendered by post-images.js. */}}
+    <div class="preview-list" data-preview-list hidden></div>
+    {{/* Upload progress, shown by post-images.js while a post is submitting. */}}
+    <div class="upload-progress" data-upload-progress hidden>
+      <div class="upload-progress-track">
+        <div class="upload-progress-bar" data-upload-bar></div>
+      </div>
+      <span class="upload-progress-label" data-upload-label></span>
+    </div>
+    <button type="submit">Post</button>
+  </form>
+</dialog>
+{{end}}
+
+{{/* commentthread renders a post's comment thread and the add-comment box
+     (issue #11). Expects a posts.Post: .ID is the post and .Comments its
+     top-level comments (each with nested .Children). The whole section is the
+     htmx swap target — posting a comment, a reply, or deleting one re-renders
+     it via comment_thread_fragment.html. The native method/action on each form
+     is the no-JS fallback (the handler redirects back). */}}
+{{define "commentthread"}}
+<section class="comments" id="comments-{{.ID}}">
+  {{if .Comments}}
+    <ul class="comment-list">
+      {{range .Comments}}{{template "commentnode" .}}{{end}}
+    </ul>
+  {{end}}
+  <form class="comment-form" method="post" action="/posts/{{.ID}}/comments"
+        hx-post="/posts/{{.ID}}/comments" hx-target="#comments-{{.ID}}" hx-swap="outerHTML">
+    <label for="comment-{{.ID}}" class="visually-hidden">Add a comment</label>
+    <textarea id="comment-{{.ID}}" name="content" rows="1" maxlength="1000"
+              placeholder="Add a comment…" required></textarea>
+    <button type="submit" class="button-secondary">Comment</button>
+  </form>
+</section>
+{{end}}
+
+{{/* commentnode renders one comment and, recursively, its replies. Expects a
+     posts.Comment. A soft-deleted comment shows a "[deleted]" placeholder but
+     keeps its replies so the thread structure survives (Build Plan §2.2).
+     Reply/Delete forms target the whole post thread (#comments-<postID>);
+     comments.js toggles the reply box. */}}
+{{define "commentnode"}}
+<li class="comment{{if .Deleted}} comment-deleted{{end}}" id="comment-{{.ID}}">
+  <div class="comment-head">
+    {{if .Deleted}}
+      <span class="muted comment-author">[deleted]</span>
+    {{else}}
+      <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
+    {{end}}
+    <span class="muted"> · <time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
+  </div>
+  {{if not .Deleted}}<div class="comment-content">{{.Content}}</div>{{end}}
+  {{if not .Deleted}}
+  <div class="comment-actions">
+    <button type="button" class="linklike comment-reply-toggle" data-reply-toggle="reply-{{.ID}}">Reply</button>
+    {{if .CanDelete}}
+      <form method="post" action="/comments/{{.ID}}/delete" class="inline-form"
+            hx-post="/comments/{{.ID}}/delete" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML"
+            onsubmit="return confirm('Delete this comment? This cannot be undone.');">
+        <button type="submit" class="linklike danger">Delete</button>
+      </form>
+    {{end}}
+  </div>
+  <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
+        method="post" action="/comments/{{.ID}}/replies"
+        hx-post="/comments/{{.ID}}/replies" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML">
+    <label for="reply-input-{{.ID}}" class="visually-hidden">Write a reply</label>
+    <textarea id="reply-input-{{.ID}}" name="content" rows="1" maxlength="1000"
+              placeholder="Write a reply…" required></textarea>
+    <button type="submit" class="button-secondary">Reply</button>
+  </form>
+  {{end}}
+  {{if .Children}}
+    <ul class="comment-list comment-replies">
+      {{range .Children}}{{template "commentnode" .}}{{end}}
+    </ul>
+  {{end}}
+</li>
+{{end}}
