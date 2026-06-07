@@ -12,7 +12,7 @@
       <li class="request-item">
         {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
         <div class="request-body">
-          <span class="request-name">{{.Name}}</span>
+          <a href="/u/{{.Username}}" class="request-name">{{.Name}}</a>
           <span class="muted">@{{.Username}}</span>
         </div>
         <div class="request-actions">

@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -43,6 +44,7 @@ func newConnectionsHandlers(t *testing.T) (*Handlers, *Service) {
 			`{{define "base"}}{{block "content" .}}{{end}}{{end}}`,
 		)},
 		"connections.html":          {Data: mustReadTemplate(t, "connections.html")},
+		"requests.html":             {Data: mustReadTemplate(t, "requests.html")},
 		"invite_link_fragment.html": {Data: mustReadTemplate(t, "invite_link_fragment.html")},
 		"invite_created.html":       {Data: mustReadTemplate(t, "invite_created.html")},
 		"error.html": {Data: []byte(
@@ -137,6 +139,39 @@ func TestCreateInvite_NoFragmentRendersStandalonePage(t *testing.T) {
 	}
 	if !strings.Contains(body, "Back to connections") {
 		t.Errorf("standalone page should link back to connections;\nbody:\n%s", body)
+	}
+}
+
+// The requester's name on the /requests page must be a link to their profile
+// preview, so a recipient can look before they confirm (issue #7). The link
+// uses the /u/ profile prefix (issue #6).
+func TestRequestsPage_RequesterNameLinksToProfile(t *testing.T) {
+	h, svc := newConnectionsHandlers(t)
+	ctx := context.Background()
+	recipient := seedUser(t, h.Svc.DB, "recipient")
+	requesterID := seedUser(t, h.Svc.DB, "requester")
+
+	// recipient invites; requester accepts, creating a pending incoming request.
+	token, err := svc.CreateInvite(ctx, recipient)
+	if err != nil {
+		t.Fatalf("CreateInvite: %v", err)
+	}
+	if err := svc.CreateRequest(ctx, token, requesterID); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/requests", nil)
+	u := &middleware.User{ID: recipient, Username: "recipient", DisplayName: "recipient", Verified: true}
+	req = req.WithContext(middleware.WithUser(req.Context(), u))
+	rec := httptest.NewRecorder()
+	h.listRequests(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /requests: status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/u/requester"`) {
+		t.Errorf("requester name should link to /u/requester;\nbody:\n%s", body)
 	}
 }
 
