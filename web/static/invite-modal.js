@@ -1,4 +1,4 @@
-// Enhances the "Generate invitation link" form on the connections page into a
+// Enhances the "Generate invite link" form on the connections page into a
 // modal. Without JS the form POSTs to /invites and renders the link on its own
 // page (invite_created.html); here we intercept the submit, post for the bare
 // fragment, and show it in a native <dialog> with a copy button.

@@ -1,11 +1,11 @@
 {{define "invite_created.html"}}{{template "base" .}}{{end}}
-{{define "title"}}Invitation link — Hearth{{end}}
+{{define "title"}}Invite link — Hearth{{end}}
 {{define "content"}}
-<h1>Invitation link</h1>
+<h1>Invite link</h1>
 {{if .Error}}
   <div class="banner error">{{.Error}}</div>
 {{else}}
-  <p>Share this with one person you'd like to connect with. It works once and expires after 72 hours.</p>
+  <p class="invite-single-use"><strong>This invite link is for one person only.</strong> Send it to just the person you want to connect with — it works a single time and expires after 72 hours.</p>
   <div class="invite-copy-row">
     <input class="invite-url" type="text" readonly value="{{.URL}}"
            onclick="this.select();document.execCommand('copy')">

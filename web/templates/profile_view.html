@@ -57,7 +57,7 @@
             {{/* The author can see who liked, never a count, and only they can.
                  likes-modal.js enhances this into a dialog; the href is the
                  no-JS fallback to the standalone page. */}}
-            <a href="/posts/{{.ID}}/likes" class="likers-link" data-likes-trigger>See who liked</a>
+            <a href="/posts/{{.ID}}/likes" class="likers-link linklike" data-likes-trigger>View Likes</a>
             <form method="post" action="/posts/{{.ID}}/delete" class="inline-form"
                   onsubmit="return confirm('Delete this post? This cannot be undone.');">
               <button type="submit" class="linklike danger">Delete</button>

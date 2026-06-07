@@ -646,6 +646,16 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   font-weight: 500;
 }
 
+/* The owner's "View Likes" and "Delete" actions share one quiet, small
+   sans-serif treatment so they read as a deliberate, consistent action
+   row rather than two mismatched links (#9). */
+.post-actions .linklike,
+.post-actions .likers-link {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
 .liker-list {
   list-style: none;
   padding: 0;
@@ -657,7 +667,7 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .liker-item:last-child { border-bottom: 0; }
 
-/* "See who liked" modal. Quiet card centred over a dimmed backdrop; the same
+/* "View Likes" modal. Quiet card centred over a dimmed backdrop; the same
    liker list as the standalone page, just without the page chrome. */
 .likes-dialog {
   width: min(28rem, calc(100vw - 2rem));
@@ -723,6 +733,12 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   cursor: pointer;
 }
 .invite-dialog-close:hover { color: var(--ember); }
+/* Single-use warning shown right above the freshly minted link, so the
+   one-person-only rule is impossible to miss at the point of sharing (#12). */
+.invite-single-use {
+  color: var(--ember-deep);
+}
+
 .invite-copy-row {
   display: flex;
   align-items: stretch;
