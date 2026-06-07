@@ -32,7 +32,7 @@ Specific Go libraries (router, templating, SQLite driver, sessions) are intentio
 These are load-bearing — many features in the plan assume them:
 
 1. **Privacy is a data-layer check, not a UI affordance.** Every endpoint returning another user's content must call a single `IsConnected(viewer_id, author_id) bool` helper. Negative paths must be tested. `/{username}` returns 404 to non-connected viewers (not 403 — non-existence is part of the privacy model).
-2. **No counts, anywhere.** The product is partly defined by what it doesn't show. Connection list returns names, not a count. Comment thread returns comments, never a `count`. Unread notifications surface as a **dot**, not a number. No `*_count` columns, no `likes` table, no aggregates.
+2. **No counts, anywhere.** The product is partly defined by what it doesn't show. Connection list returns names, not a count. Comment thread returns comments, never a `count`. Unread notifications surface as a **dot**, not a number. No `*_count` columns, no aggregates. A `likes` table exists but is never aggregated into a count — see rule #11.
 3. **Connections are stored as `(min_id, max_id)`** in `connections.user_a_id`/`user_b_id` to make the pair unique. Don't insert both directions.
 4. **The feed's new/old split is driven by `users.last_feed_loaded_at`.** Update it **after** running the feed query so the same load doesn't reclassify its own results (Technical Plan §4.1, step ordering matters).
 5. **Invite tokens are consumed when the connection request is submitted, not when `/i/{token}` is opened.** A `pending_invite` cookie carries the token across the signup/email-verification round-trip, because verification typically happens in a different browser session.
@@ -40,11 +40,12 @@ These are load-bearing — many features in the plan assume them:
 7. **Rate limits** (20 invites / 7d, 10 accepted connections / 7d) are enforced inside the write transaction with `BEGIN IMMEDIATE` to avoid boundary races.
 8. **Notifications fan out in two steps:** always insert into `notifications` (in-app is universal); send email only if the recipient's `notification_preferences` flag for that category is true. All preference flags default to `false`.
 9. **Post edits snapshot the _old_ content** into `post_edits` before overwriting `posts.content`. The current version always lives on `posts`.
-10. **Delete vs. archive:** archive sets `status='archived'` and preserves rows; delete sets `status='deleted'`, nulls content, removes R2 media, and deletes `post_edits` rows.
+10. **Delete vs. archive:** archive sets `status='archived'` and preserves rows; delete sets `status='deleted'`, nulls content, removes R2 media, and deletes `post_edits`, `comments`, and `likes` rows.
+11. **Likes are private, never a metric.** Liking a post notifies the author (`like_on_post` notification) and is recorded in the `likes` table (unique `(post_id, user_id)`, idempotent). There is **no public like indicator and no count anywhere** — not public, not even author-private. The post author (and only the author) can fetch the *list of names* who liked a post via `GET /posts/{id}/likes` (404 for everyone else, including connected non-authors); it returns names, never a number. The like control may reflect whether *the current viewer* liked the post, but exposes nothing about others. Unliking deletes the like row and the corresponding notification (Technical Plan §4.4.5).
 
 ## Anti-features (do not build)
 
-No likes/reactions, no user search/discovery, no algorithmic ranking, no messaging, no visible counts, no public profiles. Enforced by _not having the tables, endpoints, or UI_ — not by hiding things in the frontend.
+No _public_ likes/reactions, no user search/discovery, no algorithmic ranking, no messaging, no visible counts, no public profiles. Enforced by _not having the tables, endpoints, or UI_ — not by hiding things in the frontend. (Likes themselves are allowed but strictly private — see rule #11. What's banned is any *public* like indicator, any reaction palette, and any count.)
 
 ## Conventions called out in the Build & Test Plan
 
