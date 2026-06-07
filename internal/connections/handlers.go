@@ -148,7 +148,7 @@ func (h *Handlers) createInvite(w http.ResponseWriter, r *http.Request) {
 	h.renderInviteLink(w, r, u, http.StatusOK, h.Svc.inviteURL(token), "")
 }
 
-// renderInviteLink shows a freshly minted, single-use invitation link. The
+// renderInviteLink shows a freshly minted, single-use invite link. The
 // connections-page modal (invite-modal.js) requests just the link fragment via
 // X-Fragment; a plain form POST with no JavaScript instead gets the standalone
 // page, so the flow still works without scripts. Invites are one-time use, so
