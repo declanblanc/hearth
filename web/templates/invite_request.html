@@ -5,7 +5,8 @@
   {{if .SenderPhotoURL}}<img class="invite-photo" src="{{.SenderPhotoURL}}" alt="{{.SenderName}}">{{end}}
   <h1>{{.SenderName}} invited you to connect</h1>
   <p class="muted">@{{.SenderUsername}}</p>
-  <p>Connections on Hearth are mutual and intentional — once you're connected, you'll each be able to see the other's posts, and no one else can.</p>
+  <p>Connections on Hearth are <em>mutual and intentional</em></p>
+  <p>This philosophy breaks connection down into a three-step process:</p>
 
   {{/*
     Hearth's connection flow is a deliberate three-way handshake (CLAUDE.md §5,
@@ -16,8 +17,8 @@
   */}}
   <ol class="invite-steps">
     <li>{{.SenderName}} sent you this invitation.</li>
-    <li><strong>You accept it</strong> by sending {{.SenderName}} a connection request.</li>
-    <li>{{.SenderName}} confirms the request, and you're connected.</li>
+    <li>You accept it by clicking the button below <i>(or simply ignore it if you don't want to connect with them).</i></li>
+    <li>Finally, if you accept, {{.SenderName}} is notified and <strong>confirms the connection</strong> (this final step ensures no one else got a hold of their invitation link that wasn't supposed to).</li>
   </ol>
 
   <form method="post" action="/i/{{.Token}}/request">
