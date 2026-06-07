@@ -279,8 +279,8 @@ func postError(code string) string {
 		return "Your post is too long (1000 characters max)."
 	case "too_many_images":
 		return "A post can have at most 5 images."
-	case "image_too_large":
-		return fmt.Sprintf("Each image must be %d MB or smaller.", media.MaxImageSize/(1024*1024))
+	case "images_too_large":
+		return fmt.Sprintf("Your images can total at most %d MB.", media.MaxPostImagesTotalSize/(1024*1024))
 	case "image_type":
 		return "Only JPEG, PNG, and WebP images are supported."
 	case "image_unreadable":

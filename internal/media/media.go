@@ -18,13 +18,15 @@ var (
 	ErrTooLarge        = errors.New("media: file too large")
 )
 
-// MaxImageSize is the server-enforced upload limit for a single image, applied
-// to both profile photos and post images.
-const MaxImageSize int64 = 200 * 1024 * 1024
+// MaxProfilePhotoSize is the server-enforced upload limit for a single profile
+// photo.
+const MaxProfilePhotoSize int64 = 200 * 1024 * 1024
 
-// MaxProfilePhotoSize is retained as an alias for MaxImageSize so existing
-// profile-photo call sites read clearly.
-const MaxProfilePhotoSize int64 = MaxImageSize
+// MaxPostImagesTotalSize is the server-enforced limit on the *combined* size of
+// all images attached to a single post. Individual files are not capped
+// separately: one 200 MB image, two 100 MB images, or four 50 MB images are all
+// fine, so long as the total stays within budget.
+const MaxPostImagesTotalSize int64 = 200 * 1024 * 1024
 
 // MaxImagesPerPost caps how many images a single post may carry.
 const MaxImagesPerPost = 5

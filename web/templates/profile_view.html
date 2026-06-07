@@ -23,9 +23,16 @@
         <span>Add photos</span>
         <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple class="visually-hidden">
       </label>
-      <small class="muted">Up to 5 images · JPEG, PNG, or WebP · max 200 MB each</small>
+      <small class="muted">Up to 5 images · JPEG, PNG, or WebP · 200 MB total</small>
       {{/* Thumbnails of the chosen images, rendered by post-images.js. */}}
       <div class="preview-list" data-preview-list hidden></div>
+      {{/* Upload progress, shown by post-images.js while a post is submitting. */}}
+      <div class="upload-progress" data-upload-progress hidden>
+        <div class="upload-progress-track">
+          <div class="upload-progress-bar" data-upload-bar></div>
+        </div>
+        <span class="upload-progress-label" data-upload-label></span>
+      </div>
       <button type="submit">Post</button>
     </form>
   {{end}}

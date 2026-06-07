@@ -87,22 +87,28 @@ func (h *Handlers) collectImages(r *http.Request) ([]NewImage, string) {
 		return nil, "too_many_images"
 	}
 
+	// The 200 MB budget is shared across every image in the post. We track the
+	// remaining allowance and read each file with a limit of remaining+1 bytes,
+	// so a post can never buffer more than the total budget into memory even if
+	// a client sends oversized files.
+	remaining := media.MaxPostImagesTotalSize
 	images := make([]NewImage, 0, len(files))
 	for _, fh := range files {
 		file, err := fh.Open()
 		if err != nil {
 			return nil, "image_unreadable"
 		}
-		// Read one byte past the limit so we can tell "exactly at limit" from
-		// "over limit".
-		data, err := io.ReadAll(io.LimitReader(file, media.MaxImageSize+1))
+		// Read one byte past the remaining budget so we can tell "exactly at the
+		// limit" from "over the limit".
+		data, err := io.ReadAll(io.LimitReader(file, remaining+1))
 		file.Close()
 		if err != nil {
 			return nil, "image_unreadable"
 		}
-		if int64(len(data)) > media.MaxImageSize {
-			return nil, "image_too_large"
+		if int64(len(data)) > remaining {
+			return nil, "images_too_large"
 		}
+		remaining -= int64(len(data))
 		ct, ext, err := media.DetectType(data)
 		if err != nil {
 			return nil, "image_type"
