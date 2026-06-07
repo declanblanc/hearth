@@ -49,7 +49,7 @@ func (h *Handlers) like(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	redirectBack(w, r)
+	h.renderToggle(w, r, id, true)
 }
 
 func (h *Handlers) unlike(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +63,7 @@ func (h *Handlers) unlike(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	redirectBack(w, r)
+	h.renderToggle(w, r, id, false)
 }
 
 func (h *Handlers) likers(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +102,19 @@ func postID(w http.ResponseWriter, r *http.Request, h *Handlers) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// renderToggle responds after a like/unlike. htmx requests (issue #10) get just
+// the re-rendered like control to swap in place — no full reload. Everyone else
+// (the no-JS fallback) is redirected back to the page they acted from, where the
+// control re-renders server-side in its new state.
+func (h *Handlers) renderToggle(w http.ResponseWriter, r *http.Request, postID int64, liked bool) {
+	if r.Header.Get("HX-Request") == "true" {
+		h.Renderer.HTML(w, "like_control_fragment.html",
+			render.M{"ID": postID, "LikedByViewer": liked})
+		return
+	}
+	redirectBack(w, r)
 }
 
 // redirectBack returns the user to the page they liked from (feed or profile),
