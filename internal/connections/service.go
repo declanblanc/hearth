@@ -383,8 +383,8 @@ func (s *Service) ListPendingRequests(ctx context.Context, recipientID int64) ([
 //
 // This powers the profile preview (issue #3): a viewer may peek at a profile
 // only when that profile's owner has an outstanding request to them, and the
-// preview needs the request id to wire its Accept/Decline forms to the existing
-// /requests/{id}/accept and /requests/{id}/deny endpoints. The lookup is
+// preview needs the request id to wire its Confirm/Decline forms to the
+// /connections/{id}/confirm and /connections/{id}/decline endpoints. The lookup is
 // deliberately narrow — only status='pending', and only when the requester is
 // not soft-deleted — so it can never widen into a general profile-view bypass
 // (CLAUDE.md §1). It mirrors the filters used by ListPendingRequests.

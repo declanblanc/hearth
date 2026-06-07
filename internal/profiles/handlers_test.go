@@ -74,8 +74,8 @@ func newTestRenderer(t *testing.T) *render.Renderer {
 		"profile_preview.html": {Data: []byte(
 			`{{define "profile_preview.html"}}{{template "base" .}}{{end}}` +
 				`{{define "content"}}preview {{.Profile.FullName}} bio={{.Profile.Bio}} ` +
-				`<form action="/requests/{{.RequestID}}/accept">accept</form>` +
-				`<form action="/requests/{{.RequestID}}/deny">decline</form>{{end}}`,
+				`<form action="/connections/{{.RequestID}}/confirm">confirm</form>` +
+				`<form action="/connections/{{.RequestID}}/decline">decline</form>{{end}}`,
 		)},
 		"error.html": {Data: []byte(
 			`{{define "error.html"}}error {{.Status}}{{end}}`,
@@ -686,18 +686,18 @@ func TestViewProfile_PendingRequesterSeesPreview(t *testing.T) {
 	if !strings.Contains(body, "owen-secret-bio") {
 		t.Errorf("preview should show the owner's bio, got: %q", body)
 	}
-	// Accept/Decline controls must be present and point at the request endpoints.
+	// Confirm/Decline controls must be present and point at the connection endpoints.
 	reqs, _ := h.Conns.ListPendingRequests(ctx, ninaID)
 	if len(reqs) != 1 {
 		t.Fatalf("expected one pending request, got %d", len(reqs))
 	}
-	acceptAction := fmt.Sprintf("/requests/%d/accept", reqs[0].ID)
-	denyAction := fmt.Sprintf("/requests/%d/deny", reqs[0].ID)
-	if !strings.Contains(body, acceptAction) {
-		t.Errorf("preview missing accept control %q, got: %q", acceptAction, body)
+	confirmAction := fmt.Sprintf("/connections/%d/confirm", reqs[0].ID)
+	declineAction := fmt.Sprintf("/connections/%d/decline", reqs[0].ID)
+	if !strings.Contains(body, confirmAction) {
+		t.Errorf("preview missing confirm control %q, got: %q", confirmAction, body)
 	}
-	if !strings.Contains(body, denyAction) {
-		t.Errorf("preview missing decline control %q, got: %q", denyAction, body)
+	if !strings.Contains(body, declineAction) {
+		t.Errorf("preview missing decline control %q, got: %q", declineAction, body)
 	}
 	// The preview must not leak posts.
 	if strings.Contains(body, "owen-secret-post") {

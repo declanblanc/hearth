@@ -376,37 +376,39 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 - Repeat with an existing-user flow (login instead of signup).
 - Try on mobile, where the email link opens in the system browser (which may or may not have the cookie).
 
-## 1.3 Connection requests
+## 1.3 Pending connections (confirm/decline)
+
+There is **no dedicated requests page**. The word "request" is avoided in the UI because it doesn't fit Hearth's mutual connection model. Incoming pending connections — people who accepted an invite link the user shared — are pinned to the **top of the connections page** (`/connections`), where the user confirms or declines each one. The `connection_requests` table name is kept internally as the data-model concept, but the user never sees the word.
 
 ### Implementation
 
-- `POST /i/{token}/request` (authenticated, must have passed the invite handler's gate): inserts `connection_requests` row, marks invite consumed.
-- `GET /requests`: lists pending incoming requests for the user.
-- `POST /requests/{id}/accept`: insert `connections` row (with `min(user_a, user_b), max(...)`), update request status to `accepted`. Check the accepted-this-week limit before insert.
-- `POST /requests/{id}/deny`: update request status to `denied`. Original requester is **not** notified.
+- `POST /i/{token}/accept` (authenticated, must have passed the invite handler's gate): inserts `connection_requests` row, marks invite consumed.
+- `GET /connections`: lists established connections, with pending incoming connections shown in a "Pending connections" section at the top.
+- `POST /connections/{id}/confirm`: insert `connections` row (with `min(user_a, user_b), max(...)`), update the pending row's status to `accepted`. Check the accepted-this-week limit before insert. Redirects back to `/connections`.
+- `POST /connections/{id}/decline`: update the pending row's status to `denied`. Original requester is **not** notified. Redirects back to `/connections`.
 - Rate limit: max 10 accepted connections in trailing 7 days. At-limit attempts return 429 with the lift time.
-- On accept, insert a `connections_accepted` notification for the original requester.
+- On confirm, insert a `connections_accepted` notification for the original requester.
 
 ### Acceptance criteria
 
 - Connections always stored with canonical (lower_id, higher_id) ordering.
-- Accept at limit fails cleanly.
-- Deny is silent to the requester.
+- Confirm at limit fails cleanly.
+- Decline is silent to the requester.
 
 ### Testing plan
 
 **Automated**
 
-- Integration test: request → accept produces canonically-ordered connections row.
-- Test: accept at rate limit returns 429.
-- Test: deny does not insert into connections and does not create a notification.
-- Test: accepting the same request twice fails (status already final).
-- Test: notification row created on accept with correct `actor_id` and type.
+- Integration test: accept invite → confirm produces canonically-ordered connections row.
+- Test: confirm at rate limit returns 429.
+- Test: decline does not insert into connections and does not create a notification.
+- Test: confirming the same pending connection twice fails (status already final).
+- Test: notification row created on confirm with correct `actor_id` and type.
 
 **Manual**
 
-- Two-user test: A invites B, B accepts; A sees notification, both see each other on profile.
-- Two-user test: A invites B, B denies; A is not notified; B no longer sees the request.
+- Two-user test: A invites B, B accepts the link; A sees a notification and the pending connection at the top of `/connections`, confirms it, both see each other on profile.
+- Two-user test: A invites B, B accepts the link, A declines; A is the only one who acted, B is not notified, and the pending entry leaves A's connections page.
 
 ## 1.4 Disconnect
 
@@ -875,7 +877,7 @@ hearth/
 │       └── main.go
 ├── internal/
 │   ├── auth/                  # signup, login, sessions, password reset
-│   ├── connections/           # connections, invites, requests, disconnect
+│   ├── connections/           # connections, invites, confirm/decline, disconnect
 │   ├── feed/                  # feed query + pagination
 │   ├── media/                 # R2 upload, signed URLs, image processing helpers
 │   ├── notifications/         # in-app + email dispatch

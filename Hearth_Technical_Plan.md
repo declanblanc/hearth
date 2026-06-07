@@ -276,11 +276,11 @@ Note: step 4 happens _after_ the query in step 2, so the same load doesn't re-cl
 
    **Notes:**
    - The cookie matters even though the token is in the URL, because email verification typically happens in a different browser session (user clicks the link in their email client). The cookie is what carries the pending invite across that gap.
-   - The invite is _consumed_ only when B submits the connection request (step 4), not when the link is opened. Opening `/i/{token}` multiple times during signup doesn't burn the invite.
+   - The invite is _consumed_ only when B accepts the invitation (step 4), not when the link is opened. Opening `/i/{token}` multiple times during signup doesn't burn the invite.
 
-4. B clicks "Request to connect": insert `connection_requests` row (pending), mark invite consumed.
-5. A sees pending requests in their notifications inbox.
-6. A clicks accept → insert `connections` row, set request status to 'accepted'.
+4. B clicks "Accept invitation" (`POST /i/{token}/accept`): insert `connection_requests` row (pending), mark invite consumed.
+5. A is notified and sees the pending connection pinned to the top of their connections page (`/connections`). There is no separate requests page — the word "request" is avoided in the UI as it doesn't fit the mutual connection model.
+6. A clicks confirm (`POST /connections/{id}/confirm`) → insert `connections` row, set the pending row's status to 'accepted'. (Or declines via `POST /connections/{id}/decline`.)
    - Reject if A has 10+ accepted connections in the trailing 7 days; show "you've reached your weekly limit, try again on [date]."
 
 ### 4.3 Disconnect
@@ -423,7 +423,7 @@ Things I made a judgment call on while drafting. Each is worth a sanity check.
 
 ### Phase 1 — Core social loop
 
-- Invites, connection requests, accept/deny
+- Invites, pending connections, confirm/decline
 - Disconnect
 - Rate limiting (20 invites/week, 10 accepts/week)
 - Post creation (text only)

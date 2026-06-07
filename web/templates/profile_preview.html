@@ -1,12 +1,12 @@
 {{define "profile_preview.html"}}{{template "base" .}}{{end}}
-{{define "title"}}{{.Profile.FullName}} — Connection request — Hearth{{end}}
+{{define "title"}}{{.Profile.FullName}} — Connection — Hearth{{end}}
 {{define "content"}}
 {{/*
   Limited profile preview shown only to a viewer who has a pending incoming
-  connection request from this profile's owner (issue #3). It deliberately shows
-  just the public-facing profile fields — name, pronouns, bio, avatar — and the
-  two request actions. It never renders the owner's posts or any connected-only
-  content; the viewer earns that access only by accepting the request.
+  connection from this profile's owner (issue #3). It deliberately shows just
+  the public-facing profile fields — name, pronouns, bio, avatar — and the two
+  confirm/decline actions. It never renders the owner's posts or any
+  connected-only content; the viewer earns that access only by confirming.
 */}}
 <p class="muted">{{.Profile.FirstName}} wants to connect with you on Hearth.</p>
 
@@ -16,20 +16,20 @@
 {{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
 
 {{/*
-  Accept/Decline post to the same endpoints the requests page uses, so the
-  accept/deny logic lives in exactly one place.
+  Confirm/Decline post to the same endpoints the connections page uses, so the
+  confirm/decline logic lives in exactly one place.
 */}}
 <div class="request-actions">
-  <form method="post" action="/requests/{{.RequestID}}/accept" style="display:inline">
-    <button type="submit">Accept</button>
+  <form method="post" action="/connections/{{.RequestID}}/confirm" style="display:inline">
+    <button type="submit">Confirm</button>
   </form>
-  <form method="post" action="/requests/{{.RequestID}}/deny" style="display:inline">
+  <form method="post" action="/connections/{{.RequestID}}/decline" style="display:inline">
     <button type="submit" class="button-secondary">Decline</button>
   </form>
 </div>
 
 <p class="muted">
   You're seeing a preview. {{.Profile.FirstName}}'s posts stay hidden until you
-  accept.
+  confirm.
 </p>
 {{end}}

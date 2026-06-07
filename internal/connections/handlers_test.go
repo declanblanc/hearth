@@ -44,7 +44,6 @@ func newConnectionsHandlers(t *testing.T) (*Handlers, *Service) {
 			`{{define "base"}}{{block "content" .}}{{end}}{{end}}`,
 		)},
 		"connections.html":          {Data: mustReadTemplate(t, "connections.html")},
-		"requests.html":             {Data: mustReadTemplate(t, "requests.html")},
 		"invite_link_fragment.html": {Data: mustReadTemplate(t, "invite_link_fragment.html")},
 		"invite_created.html":       {Data: mustReadTemplate(t, "invite_created.html")},
 		"error.html": {Data: []byte(
@@ -142,10 +141,11 @@ func TestCreateInvite_NoFragmentRendersStandalonePage(t *testing.T) {
 	}
 }
 
-// The requester's name on the /requests page must be a link to their profile
-// preview, so a recipient can look before they confirm (issue #7). The link
-// uses the /u/ profile prefix (issue #6).
-func TestRequestsPage_RequesterNameLinksToProfile(t *testing.T) {
+// Pending connections live at the top of the connections page (the dedicated
+// requests page was removed). The requester's name there must link to their
+// profile preview, so a recipient can look before they confirm (issue #7). The
+// link uses the /u/ profile prefix (issue #6).
+func TestConnectionsPage_PendingRequesterNameLinksToProfile(t *testing.T) {
 	h, svc := newConnectionsHandlers(t)
 	ctx := context.Background()
 	recipient := seedUser(t, h.Svc.DB, "recipient")
@@ -160,18 +160,17 @@ func TestRequestsPage_RequesterNameLinksToProfile(t *testing.T) {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/requests", nil)
-	u := &middleware.User{ID: recipient, Username: "recipient", DisplayName: "recipient", Verified: true}
-	req = req.WithContext(middleware.WithUser(req.Context(), u))
-	rec := httptest.NewRecorder()
-	h.listRequests(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /requests: status = %d, want 200", rec.Code)
-	}
-	body := rec.Body.String()
+	body := renderConnectionsPage(t, h, recipient, "recipient")
 	if !strings.Contains(body, `href="/u/requester"`) {
 		t.Errorf("requester name should link to /u/requester;\nbody:\n%s", body)
+	}
+	// The pending confirmation controls must be present and target the
+	// /connections confirm/decline endpoints.
+	if !strings.Contains(body, "/confirm") {
+		t.Errorf("pending connection should expose a confirm control;\nbody:\n%s", body)
+	}
+	if !strings.Contains(body, "/decline") {
+		t.Errorf("pending connection should expose a decline control;\nbody:\n%s", body)
 	}
 }
 

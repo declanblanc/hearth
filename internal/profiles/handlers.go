@@ -304,15 +304,15 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 // renderProfilePreview shows the limited, request-decision view of a profile to
 // a viewer who has a pending incoming connection request from its owner (issue
 // #3). It exposes only the public-facing profile fields (name, bio, pronouns,
-// avatar) plus Accept/Decline controls — never the owner's posts.
+// avatar) plus Confirm/Decline controls — never the owner's posts.
 //
 // Crucially, this path mints no signed post-media URLs and never lists posts:
 // the preview must not leak any connected-only content, and per CLAUDE.md §6 we
 // only do media work after access to that content is actually granted (which,
-// for posts, happens only once the connection is accepted). The Accept/Decline
-// forms post to the same /requests/{id}/accept and /requests/{id}/deny
-// endpoints used by the notifications/requests page, so the actions stay
-// authoritative in one place.
+// for posts, happens only once the connection is confirmed). The Confirm/Decline
+// forms post to the same /connections/{id}/confirm and /connections/{id}/decline
+// endpoints used by the connections page, so the actions stay authoritative in
+// one place.
 func (h *Handlers) renderProfilePreview(w http.ResponseWriter, r *http.Request, viewer *middleware.User, p *Profile, requestID int64) {
 	h.Renderer.HTML(w, "profile_preview.html", render.Page(viewer, render.M{
 		"Profile":   p,

@@ -13,7 +13,7 @@
     Technical Plan §4.1). Alice received Bob's invitation, so the copy frames her
     action as *accepting* it rather than cold-requesting a stranger, and spells
     out why Bob still has to confirm. This template is wording-only; the endpoint
-    (POST /i/{token}/request) and handshake logic are unchanged.
+    (POST /i/{token}/accept) and handshake logic are unchanged.
   */}}
   <ol class="invite-steps">
     <li>{{.SenderName}} sent you this invitation.</li>
@@ -21,7 +21,7 @@
     <li>Finally, if you accept, {{.SenderName}} is notified and <strong>confirms the connection</strong> (this final step ensures no one else got a hold of their invitation link that wasn't supposed to).</li>
   </ol>
 
-  <form method="post" action="/i/{{.Token}}/request">
+  <form method="post" action="/i/{{.Token}}/accept">
     <button type="submit">Accept invitation from {{.SenderName}}</button>
   </form>
 </div>

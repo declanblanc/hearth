@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -36,11 +37,10 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 
 	// Authenticated.
 	mux.Handle("POST /invites", authed(h.createInvite))
-	mux.Handle("POST /i/{token}/request", authed(h.submitRequest))
-	mux.Handle("GET /requests", authed(h.listRequests))
-	mux.Handle("POST /requests/{id}/accept", authed(h.acceptRequest))
-	mux.Handle("POST /requests/{id}/deny", authed(h.denyRequest))
+	mux.Handle("POST /i/{token}/accept", authed(h.acceptInvite))
 	mux.Handle("GET /connections", authed(h.listConnections))
+	mux.Handle("POST /connections/{id}/confirm", authed(h.confirmConnection))
+	mux.Handle("POST /connections/{id}/decline", authed(h.declineConnection))
 	mux.Handle("POST /connections/{user_id}/disconnect", authed(h.disconnect))
 }
 
@@ -99,7 +99,7 @@ func (h *Handlers) welcome(w http.ResponseWriter, r *http.Request) {
 	h.Renderer.HTML(w, "welcome.html", render.Page(nil, render.M{"Token": token}))
 }
 
-func (h *Handlers) submitRequest(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	if !u.Verified {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -123,7 +123,7 @@ func (h *Handlers) submitRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	// Clear the pending-invite cookie — its job is done.
 	ClearPendingInviteCookie(w, h.Secure)
-	h.Renderer.HTML(w, "request_sent.html", render.Page(u, nil))
+	h.Renderer.HTML(w, "invite_accepted.html", render.Page(u, nil))
 }
 
 // ---- invites management ----
@@ -161,24 +161,7 @@ func (h *Handlers) renderInviteLink(w http.ResponseWriter, r *http.Request, u *m
 	h.Renderer.Status(w, status, "invite_created.html", render.Page(u, render.M{"URL": url, "Error": errMsg}))
 }
 
-// ---- requests ----
-
-func (h *Handlers) listRequests(w http.ResponseWriter, r *http.Request) {
-	u := middleware.UserFrom(r.Context())
-	reqs, err := h.Svc.ListPendingRequests(r.Context(), u.ID)
-	if err != nil {
-		h.Renderer.Error(w, http.StatusInternalServerError)
-		return
-	}
-	views := make([]requestView, 0, len(reqs))
-	for _, req := range reqs {
-		views = append(views, requestView{
-			ID: req.ID, Name: req.RequesterName, Username: req.RequesterUsername,
-			PhotoURL: h.photoURL(req.RequesterPhotoKey), CreatedAt: req.CreatedAt,
-		})
-	}
-	h.Renderer.HTML(w, "requests.html", render.Page(u, render.M{"Requests": views, "Error": ""}))
-}
+// ---- pending connections (incoming requests) ----
 
 type requestView struct {
 	ID        int64
@@ -188,7 +171,11 @@ type requestView struct {
 	CreatedAt time.Time
 }
 
-func (h *Handlers) acceptRequest(w http.ResponseWriter, r *http.Request) {
+// confirmConnection completes a connection for someone who accepted the
+// viewer's invite. On success — or when the pending connection has already been
+// resolved — it returns to the connections page where pending confirmations now
+// live (the dedicated requests page was removed).
+func (h *Handlers) confirmConnection(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	if !u.Verified {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -204,21 +191,23 @@ func (h *Handlers) acceptRequest(w http.ResponseWriter, r *http.Request) {
 		var rl *RateLimitError
 		switch {
 		case errors.As(err, &rl):
-			h.renderRequestsError(w, r, u, http.StatusTooManyRequests, rateLimitMessage(rl))
+			h.renderConnectionsError(w, r, u, http.StatusTooManyRequests, rateLimitMessage(rl))
 		case errors.Is(err, ErrRequestNotFound), errors.Is(err, ErrNotRecipient):
 			h.Renderer.Error(w, http.StatusNotFound)
 		case errors.Is(err, ErrRequestResolved):
-			http.Redirect(w, r, "/requests", http.StatusSeeOther)
+			http.Redirect(w, r, "/connections", http.StatusSeeOther)
 		default:
-			slog.Error("connections: accept", "user_id", u.ID, "err", err)
+			slog.Error("connections: confirm", "user_id", u.ID, "err", err)
 			h.Renderer.Error(w, http.StatusInternalServerError)
 		}
 		return
 	}
-	http.Redirect(w, r, "/requests", http.StatusSeeOther)
+	http.Redirect(w, r, "/connections", http.StatusSeeOther)
 }
 
-func (h *Handlers) denyRequest(w http.ResponseWriter, r *http.Request) {
+// declineConnection turns away a pending connection without notifying the
+// requester (deny is silent), then returns to the connections page.
+func (h *Handlers) declineConnection(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	id, ok := pathID(r, "id")
 	if !ok {
@@ -231,44 +220,67 @@ func (h *Handlers) denyRequest(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrRequestNotFound), errors.Is(err, ErrNotRecipient):
 			h.Renderer.Error(w, http.StatusNotFound)
 		case errors.Is(err, ErrRequestResolved):
-			http.Redirect(w, r, "/requests", http.StatusSeeOther)
+			http.Redirect(w, r, "/connections", http.StatusSeeOther)
 		default:
-			slog.Error("connections: deny", "user_id", u.ID, "err", err)
+			slog.Error("connections: decline", "user_id", u.ID, "err", err)
 			h.Renderer.Error(w, http.StatusInternalServerError)
 		}
 		return
 	}
-	http.Redirect(w, r, "/requests", http.StatusSeeOther)
-}
-
-func (h *Handlers) renderRequestsError(w http.ResponseWriter, r *http.Request, u *middleware.User, status int, msg string) {
-	reqs, _ := h.Svc.ListPendingRequests(r.Context(), u.ID)
-	views := make([]requestView, 0, len(reqs))
-	for _, req := range reqs {
-		views = append(views, requestView{
-			ID: req.ID, Name: req.RequesterName, Username: req.RequesterUsername,
-			PhotoURL: h.photoURL(req.RequesterPhotoKey), CreatedAt: req.CreatedAt,
-		})
-	}
-	h.Renderer.Status(w, status, "requests.html", render.Page(u, render.M{"Requests": views, "Error": msg}))
+	http.Redirect(w, r, "/connections", http.StatusSeeOther)
 }
 
 // ---- connections list / disconnect ----
 
 func (h *Handlers) listConnections(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
-	people, err := h.Svc.ListConnections(r.Context(), u.ID)
+	data, err := h.connectionsPageData(r.Context(), u, "")
 	if err != nil {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	views := make([]personView, 0, len(people))
+	h.Renderer.HTML(w, "connections.html", render.Page(u, data))
+}
+
+// renderConnectionsError re-renders the connections page with a banner message,
+// used for the rate-limit path when confirming a connection.
+func (h *Handlers) renderConnectionsError(w http.ResponseWriter, r *http.Request, u *middleware.User, status int, msg string) {
+	data, err := h.connectionsPageData(r.Context(), u, msg)
+	if err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	h.Renderer.Status(w, status, "connections.html", render.Page(u, data))
+}
+
+// connectionsPageData assembles everything the connections page shows: the
+// pending incoming requests pinned to the top (people who accepted the viewer's
+// invite and await confirmation) and the established connections below.
+func (h *Handlers) connectionsPageData(ctx context.Context, u *middleware.User, errMsg string) (render.M, error) {
+	reqs, err := h.Svc.ListPendingRequests(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	requestViews := make([]requestView, 0, len(reqs))
+	for _, req := range reqs {
+		requestViews = append(requestViews, requestView{
+			ID: req.ID, Name: req.RequesterName, Username: req.RequesterUsername,
+			PhotoURL: h.photoURL(req.RequesterPhotoKey), CreatedAt: req.CreatedAt,
+		})
+	}
+
+	people, err := h.Svc.ListConnections(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	peopleViews := make([]personView, 0, len(people))
 	for _, p := range people {
-		views = append(views, personView{
+		peopleViews = append(peopleViews, personView{
 			ID: p.ID, Name: p.Name, Username: p.Username, PhotoURL: h.photoURL(p.PhotoKey),
 		})
 	}
-	h.Renderer.HTML(w, "connections.html", render.Page(u, render.M{"People": views}))
+
+	return render.M{"Requests": requestViews, "People": peopleViews, "Error": errMsg}, nil
 }
 
 type personView struct {

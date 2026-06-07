@@ -35,7 +35,6 @@
     {{if .User}}
       <a href="/">Feed</a>
       <a href="/notifications" class="nav-notifications">Notifications{{if .User.UnreadDot}}<span class="dot" aria-label="unread notifications"></span>{{end}}</a>
-      <a href="/requests">Requests</a>
       <a href="/connections">Connections</a>
       <a href="/u/{{.User.Username}}">Profile</a>
       <form method="post" action="/logout" style="display:inline">
