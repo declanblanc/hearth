@@ -482,6 +482,10 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   gap: 0.5rem;
   margin: 0 0 0.9rem;
 }
+/* display:grid would otherwise override the UA [hidden] rule. */
+.preview-list[hidden] {
+  display: none;
+}
 .preview-thumb {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -526,6 +530,11 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   align-items: center;
   gap: 0.6rem;
   margin: 0 0 0.9rem;
+}
+/* The display:flex above would otherwise override the UA [hidden] rule, leaving
+   an empty track visible while idle. Keep it hidden until JS reveals it. */
+.upload-progress[hidden] {
+  display: none;
 }
 .upload-progress-track {
   flex: 1;
