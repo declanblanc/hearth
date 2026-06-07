@@ -3,6 +3,7 @@ package profiles
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -105,7 +106,7 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if int64(len(data)) > media.MaxProfilePhotoSize {
-				errs.Add("photo", "Photo must be 25 MB or smaller.")
+				errs.Add("photo", fmt.Sprintf("Photo must be %d MB or smaller.", media.MaxProfilePhotoSize/(1024*1024)))
 			} else if _, _, err := media.DetectType(data); errors.Is(err, media.ErrUnsupportedType) {
 				errs.Add("photo", "Only JPEG, PNG, and WebP photos are supported.")
 			} else if err != nil {
@@ -279,7 +280,7 @@ func postError(code string) string {
 	case "too_many_images":
 		return "A post can have at most 5 images."
 	case "image_too_large":
-		return "Each image must be 25 MB or smaller."
+		return fmt.Sprintf("Each image must be %d MB or smaller.", media.MaxImageSize/(1024*1024))
 	case "image_type":
 		return "Only JPEG, PNG, and WebP images are supported."
 	case "image_unreadable":

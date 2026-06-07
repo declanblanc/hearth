@@ -20,7 +20,7 @@ var (
 
 // MaxImageSize is the server-enforced upload limit for a single image, applied
 // to both profile photos and post images.
-const MaxImageSize int64 = 25 * 1024 * 1024
+const MaxImageSize int64 = 200 * 1024 * 1024
 
 // MaxProfilePhotoSize is retained as an alias for MaxImageSize so existing
 // profile-photo call sites read clearly.

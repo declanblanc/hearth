@@ -404,7 +404,7 @@ func TestEditProfile_PhotoTooLarge(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("oversized photo: want 422, got %d", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "25 MB") {
+	if !strings.Contains(rr.Body.String(), "200 MB") {
 		t.Errorf("expected size error in response body, got: %s", rr.Body.String())
 	}
 	if len(m.Deleted()) != 0 {
