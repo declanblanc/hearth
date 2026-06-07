@@ -74,6 +74,7 @@
   {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
   {{template "postmedia" .}}
   <div class="post-actions">{{template "likecontrol" .}}</div>
+  {{template "commentthread" .}}
 </article>
 {{end}}
 
@@ -172,4 +173,71 @@
     <button type="submit">Post</button>
   </form>
 </dialog>
+{{end}}
+
+{{/* commentthread renders a post's comment thread and the add-comment box
+     (issue #11). Expects a posts.Post: .ID is the post and .Comments its
+     top-level comments (each with nested .Children). The whole section is the
+     htmx swap target — posting a comment, a reply, or deleting one re-renders
+     it via comment_thread_fragment.html. The native method/action on each form
+     is the no-JS fallback (the handler redirects back). */}}
+{{define "commentthread"}}
+<section class="comments" id="comments-{{.ID}}">
+  {{if .Comments}}
+    <ul class="comment-list">
+      {{range .Comments}}{{template "commentnode" .}}{{end}}
+    </ul>
+  {{end}}
+  <form class="comment-form" method="post" action="/posts/{{.ID}}/comments"
+        hx-post="/posts/{{.ID}}/comments" hx-target="#comments-{{.ID}}" hx-swap="outerHTML">
+    <label for="comment-{{.ID}}" class="visually-hidden">Add a comment</label>
+    <textarea id="comment-{{.ID}}" name="content" rows="1" maxlength="1000"
+              placeholder="Add a comment…" required></textarea>
+    <button type="submit" class="button-secondary">Comment</button>
+  </form>
+</section>
+{{end}}
+
+{{/* commentnode renders one comment and, recursively, its replies. Expects a
+     posts.Comment. A soft-deleted comment shows a "[deleted]" placeholder but
+     keeps its replies so the thread structure survives (Build Plan §2.2).
+     Reply/Delete forms target the whole post thread (#comments-<postID>);
+     comments.js toggles the reply box. */}}
+{{define "commentnode"}}
+<li class="comment{{if .Deleted}} comment-deleted{{end}}" id="comment-{{.ID}}">
+  <div class="comment-head">
+    {{if .Deleted}}
+      <span class="muted comment-author">[deleted]</span>
+    {{else}}
+      <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
+    {{end}}
+    <span class="muted"> · <time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
+  </div>
+  {{if not .Deleted}}<div class="comment-content">{{.Content}}</div>{{end}}
+  {{if not .Deleted}}
+  <div class="comment-actions">
+    <button type="button" class="linklike comment-reply-toggle" data-reply-toggle="reply-{{.ID}}">Reply</button>
+    {{if .CanDelete}}
+      <form method="post" action="/comments/{{.ID}}/delete" class="inline-form"
+            hx-post="/comments/{{.ID}}/delete" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML"
+            onsubmit="return confirm('Delete this comment? This cannot be undone.');">
+        <button type="submit" class="linklike danger">Delete</button>
+      </form>
+    {{end}}
+  </div>
+  <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
+        method="post" action="/comments/{{.ID}}/replies"
+        hx-post="/comments/{{.ID}}/replies" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML">
+    <label for="reply-input-{{.ID}}" class="visually-hidden">Write a reply</label>
+    <textarea id="reply-input-{{.ID}}" name="content" rows="1" maxlength="1000"
+              placeholder="Write a reply…" required></textarea>
+    <button type="submit" class="button-secondary">Reply</button>
+  </form>
+  {{end}}
+  {{if .Children}}
+    <ul class="comment-list comment-replies">
+      {{range .Children}}{{template "commentnode" .}}{{end}}
+    </ul>
+  {{end}}
+</li>
 {{end}}

@@ -120,10 +120,11 @@ func newHandlers(t *testing.T, d *sql.DB, m media.Store) (*Handlers, *auth.Servi
 	connSvc := connections.New(d, notifSvc, "https://hearth.test")
 	postSvc := posts.New(d)
 	likeSvc := likes.New(d, connSvc, notifSvc)
+	commentSvc := posts.NewCommentService(d, connSvc, notifSvc)
 	profileSvc := New(d)
 	profileSvc.Media = m
 	r := newTestRenderer(t)
-	h := NewHandlers(profileSvc, authSvc, connSvc, postSvc, likeSvc, r, m, false)
+	h := NewHandlers(profileSvc, authSvc, connSvc, postSvc, likeSvc, commentSvc, r, m, false)
 	return h, authSvc, profileSvc
 }
 

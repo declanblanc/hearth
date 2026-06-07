@@ -17,10 +17,11 @@ type Handlers struct {
 	Renderer *render.Renderer
 	Media    media.Store // may be nil in dev (post images won't render)
 	Likes    *likes.Service
+	Comments *posts.CommentService
 }
 
-func NewHandlers(svc *Service, r *render.Renderer, m media.Store, likeSvc *likes.Service) *Handlers {
-	return &Handlers{Svc: svc, Renderer: r, Media: m, Likes: likeSvc}
+func NewHandlers(svc *Service, r *render.Renderer, m media.Store, likeSvc *likes.Service, commentSvc *posts.CommentService) *Handlers {
+	return &Handlers{Svc: svc, Renderer: r, Media: m, Likes: likeSvc, Comments: commentSvc}
 }
 
 // Mount registers the feed at the site root and the "load older" partial.
@@ -59,6 +60,13 @@ func (h *Handlers) index(w http.ResponseWriter, r *http.Request) {
 			h.Renderer.Error(w, http.StatusInternalServerError)
 			return
 		}
+		// Comment threads are visible to the viewer for the same reason the posts
+		// are: every feed author is a connection (CLAUDE.md §1).
+		if err := h.Comments.AttachToPosts(r.Context(), u.ID, group); err != nil {
+			slog.Error("feed: attach comments", "user_id", u.ID, "err", err)
+			h.Renderer.Error(w, http.StatusInternalServerError)
+			return
+		}
 	}
 	h.Renderer.HTML(w, "home.html", render.Page(u, render.M{
 		"New":        res.New,
@@ -86,6 +94,11 @@ func (h *Handlers) older(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.Likes.MarkViewerLikes(r.Context(), u.ID, rows); err != nil {
 		slog.Error("feed: mark likes", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	if err := h.Comments.AttachToPosts(r.Context(), u.ID, rows); err != nil {
+		slog.Error("feed: attach comments", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}

@@ -43,6 +43,7 @@
             {{template "likecontrol" .}}
           {{end}}
         </div>
+        {{template "commentthread" .}}
       </article>
     {{end}}
   {{else}}
@@ -61,5 +62,6 @@
 {{end}}
 {{end}}
 {{define "scripts"}}<script src="/static/post-images.js" defer></script>
+<script src="/static/comments.js" defer></script>
 {{if .Owner}}<script src="/static/compose-modal.js" defer></script>
 <script src="/static/likes-modal.js" defer></script>{{end}}{{end}}

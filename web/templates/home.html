@@ -53,5 +53,6 @@
 {{if .User.Verified}}{{template "composemodal" .}}{{end}}
 {{end}}
 {{define "scripts"}}
+<script src="/static/comments.js" defer></script>
 {{if .User.Verified}}<script src="/static/post-images.js" defer></script>
 <script src="/static/compose-modal.js" defer></script>{{end}}{{end}}

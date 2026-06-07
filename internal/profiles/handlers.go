@@ -24,13 +24,14 @@ type Handlers struct {
 	Conns    *connections.Service
 	Posts    *posts.Service
 	Likes    *likes.Service
+	Comments *posts.CommentService
 	Renderer *render.Renderer
 	Media    media.Store // may be nil in dev (photo uploads silently skipped)
 	Secure   bool
 }
 
-func NewHandlers(svc *Service, authSvc *auth.Service, conns *connections.Service, postsSvc *posts.Service, likeSvc *likes.Service, r *render.Renderer, m media.Store, secure bool) *Handlers {
-	return &Handlers{Svc: svc, Auth: authSvc, Conns: conns, Posts: postsSvc, Likes: likeSvc, Renderer: r, Media: m, Secure: secure}
+func NewHandlers(svc *Service, authSvc *auth.Service, conns *connections.Service, postsSvc *posts.Service, likeSvc *likes.Service, commentSvc *posts.CommentService, r *render.Renderer, m media.Store, secure bool) *Handlers {
+	return &Handlers{Svc: svc, Auth: authSvc, Conns: conns, Posts: postsSvc, Likes: likeSvc, Comments: commentSvc, Renderer: r, Media: m, Secure: secure}
 }
 
 func (h *Handlers) Mount(mux *http.ServeMux) {
@@ -290,6 +291,12 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 			h.Renderer.Error(w, http.StatusInternalServerError)
 			return
 		}
+	}
+	// Attach comment threads for rendering. Access was settled above (owner or
+	// connected viewer), so this needs no further connection check.
+	if err := h.Comments.AttachToPosts(r.Context(), u.ID, authorPosts); err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
 	}
 	h.Renderer.HTML(w, "profile_view.html", render.Page(u, render.M{
 		"Profile":   p,
