@@ -12,6 +12,12 @@
   </div>
 {{end}}
 
+{{/* Create-post entry point on the feed itself, so posting doesn't require a
+     detour to the profile page (issue #19). Opens the shared compose dialog. */}}
+{{if .User.Verified}}
+  <div class="feed-compose">{{template "composetrigger" .}}</div>
+{{end}}
+
 {{if and (not .New) (not .Old)}}
   <p class="muted empty">Generate an invite link to connect with someone by checking out the <a href="/connections">Connections</a> page, then their posts will appear here.</p>
 {{end}}
@@ -43,4 +49,9 @@
     </button>
   </div>
 {{end}}
+
+{{if .User.Verified}}{{template "composemodal" .}}{{end}}
 {{end}}
+{{define "scripts"}}
+{{if .User.Verified}}<script src="/static/post-images.js" defer></script>
+<script src="/static/compose-modal.js" defer></script>{{end}}{{end}}

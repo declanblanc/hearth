@@ -748,6 +748,46 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 .invite-copy-row .invite-url { flex: 1; }
 .invite-copy-row .button-secondary { flex-shrink: 0; }
 
+/* Compose-post modal (issue #19), opened from the feed and the profile page by
+   compose-modal.js. Shares the quiet-card look of the other dialogs; the inner
+   .compose form keeps its own styling, so we only need the dialog chrome. */
+.compose-dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 1.5rem 1.6rem;
+  background: var(--raised);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.compose-dialog::backdrop { background: rgba(28, 20, 14, 0.45); }
+.compose-modal-title { margin: 0 2rem 0.8rem 0; font-size: 1.25rem; }
+/* Inside the dialog the composer needs no card of its own — the dialog is the
+   card — so flatten the standalone .compose styling here. */
+.compose-dialog .compose {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.compose-dialog-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.75rem;
+  background: none;
+  border: 0;
+  padding: 0.2rem 0.4rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.compose-dialog-close:hover { color: var(--ember); }
+/* The feed's "Create post" entry point sits above the feed groups. */
+.feed-compose { margin: 0 0 1.75rem; }
+
 /* Attached images. A single image sits full-width; two or more tile into a
    responsive grid. Each image keeps its aspect ratio and never overflows. */
 .post-media {

@@ -9,32 +9,9 @@
 {{if .Owner}}
   <p><a href="/settings/profile">Edit profile</a></p>
   {{if .User.Verified}}
-    <form method="post" action="/posts" class="compose" enctype="multipart/form-data" data-image-preview>
-      {{if .PostError}}<div class="banner error">{{.PostError}}</div>{{end}}
-      <label for="content" class="visually-hidden">Write a post</label>
-      <textarea id="content" name="content" rows="3" maxlength="1000" placeholder="Share something…"></textarea>
-      <label for="images" class="upload-button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="3" y="3" width="18" height="18" rx="3"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <path d="M21 15l-5-5L5 21"/>
-        </svg>
-        <span>Add photos</span>
-        <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple class="visually-hidden">
-      </label>
-      <small class="muted">Up to 5 images · JPEG, PNG, or WebP · 200 MB total</small>
-      {{/* Thumbnails of the chosen images, rendered by post-images.js. */}}
-      <div class="preview-list" data-preview-list hidden></div>
-      {{/* Upload progress, shown by post-images.js while a post is submitting. */}}
-      <div class="upload-progress" data-upload-progress hidden>
-        <div class="upload-progress-track">
-          <div class="upload-progress-bar" data-upload-bar></div>
-        </div>
-        <span class="upload-progress-label" data-upload-label></span>
-      </div>
-      <button type="submit">Post</button>
-    </form>
+    {{/* The composer now lives in a shared dialog (issue #19); this button opens
+         it. The dialog markup is emitted once near the end of the page. */}}
+    {{template "composetrigger" .}}
   {{end}}
 {{else if .Connected}}
   <form method="post" action="/connections/{{.Profile.ID}}/disconnect"
@@ -74,6 +51,7 @@
 </section>
 
 {{if .Owner}}
+  {{if .User.Verified}}{{template "composemodal" .}}{{end}}
   {{/* Single reused dialog; likes-modal.js loads each post's liker list into
        it on demand. Owner-only, so non-owners never receive this markup. */}}
   <dialog id="likes-dialog" class="likes-dialog">
@@ -83,4 +61,5 @@
 {{end}}
 {{end}}
 {{define "scripts"}}<script src="/static/post-images.js" defer></script>
-{{if .Owner}}<script src="/static/likes-modal.js" defer></script>{{end}}{{end}}
+{{if .Owner}}<script src="/static/compose-modal.js" defer></script>
+<script src="/static/likes-modal.js" defer></script>{{end}}{{end}}
