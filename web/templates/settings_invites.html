@@ -2,12 +2,12 @@
 {{define "title"}}Invites — Hearth{{end}}
 {{define "content"}}
 <h1>Invites</h1>
-<p>Generate a link and share it with someone you'd like to connect with. Links expire after 72 hours and work once.</p>
+<p>Generate an invitation link and share it with someone you'd like to connect with. When they accept, they'll send you a connection request to confirm — connections on Hearth are always mutual. Links expire after 72 hours and work once.</p>
 
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 
 <form method="post" action="/invites">
-  <button type="submit">Generate invite link</button>
+  <button type="submit">Generate invitation link</button>
 </form>
 
 {{if .Invites}}

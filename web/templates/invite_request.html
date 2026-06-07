@@ -1,13 +1,27 @@
 {{define "invite_request.html"}}{{template "base" .}}{{end}}
-{{define "title"}}Connect — Hearth{{end}}
+{{define "title"}}Accept invitation — Hearth{{end}}
 {{define "content"}}
 <div class="invite-card">
   {{if .SenderPhotoURL}}<img class="invite-photo" src="{{.SenderPhotoURL}}" alt="{{.SenderName}}">{{end}}
-  <h1>Request to connect with {{.SenderName}}</h1>
+  <h1>{{.SenderName}} invited you to connect</h1>
   <p class="muted">@{{.SenderUsername}}</p>
-  <p>If you connect, you'll each be able to see the other's posts.</p>
+  <p>Connections on Hearth are mutual and intentional — once you're connected, you'll each be able to see the other's posts, and no one else can.</p>
+
+  {{/*
+    Hearth's connection flow is a deliberate three-way handshake (CLAUDE.md §5,
+    Technical Plan §4.1). Alice received Bob's invitation, so the copy frames her
+    action as *accepting* it rather than cold-requesting a stranger, and spells
+    out why Bob still has to confirm. This template is wording-only; the endpoint
+    (POST /i/{token}/request) and handshake logic are unchanged.
+  */}}
+  <ol class="invite-steps">
+    <li>{{.SenderName}} sent you this invitation.</li>
+    <li><strong>You accept it</strong> by sending {{.SenderName}} a connection request.</li>
+    <li>{{.SenderName}} confirms the request, and you're connected.</li>
+  </ol>
+
   <form method="post" action="/i/{{.Token}}/request">
-    <button type="submit">Request to connect</button>
+    <button type="submit">Accept invitation from {{.SenderName}}</button>
   </form>
 </div>
 {{end}}

@@ -6,6 +6,7 @@
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 
 {{if .Requests}}
+  <p class="muted">These people accepted your invitation. Confirm a request to complete the connection — you'll each be able to see the other's posts.</p>
   <ul class="request-list">
     {{range .Requests}}
       <li class="request-item">
@@ -16,7 +17,7 @@
         </div>
         <div class="request-actions">
           <form method="post" action="/requests/{{.ID}}/accept" style="display:inline">
-            <button type="submit">Accept</button>
+            <button type="submit">Confirm connection</button>
           </form>
           <form method="post" action="/requests/{{.ID}}/deny" style="display:inline">
             <button type="submit" class="button-secondary">Decline</button>

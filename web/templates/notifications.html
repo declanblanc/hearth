@@ -10,10 +10,10 @@
         <span class="notification-text">
           {{if eq .Type "connection_request"}}
             {{if .ActorUsername}}<a href="/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            wants to connect. <a href="/requests">Review requests</a>.
+            accepted your invitation and sent a connection request. <a href="/requests">Confirm to connect</a>.
           {{else if eq .Type "connection_accepted"}}
             {{if .ActorUsername}}<a href="/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            accepted your connection request.
+            confirmed your connection request. You're now connected.
           {{else if eq .Type "like_on_post"}}
             {{if .ActorUsername}}<a href="/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
             liked your post.

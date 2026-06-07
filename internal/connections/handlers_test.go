@@ -91,8 +91,8 @@ func TestConnectionsPage_ShowsInviteControl_WhenUserHasNoConnections(t *testing.
 	if !strings.Contains(body, inviteControlMarker) {
 		t.Fatalf("connections page (no connections) is missing the invite control;\nbody:\n%s", body)
 	}
-	if !strings.Contains(body, "Generate invite link") {
-		t.Errorf("expected a 'Generate invite link' label on the empty connections page")
+	if !strings.Contains(body, "Generate invitation link") {
+		t.Errorf("expected a 'Generate invitation link' label on the empty connections page")
 	}
 }
 
@@ -120,7 +120,7 @@ func TestConnectionsPage_ShowsInviteControl_WhenUserHasConnections(t *testing.T)
 	if !strings.Contains(body, inviteControlMarker) {
 		t.Fatalf("connections page (with connections) is missing the invite control;\nbody:\n%s", body)
 	}
-	if !strings.Contains(body, "Generate invite link") {
-		t.Errorf("expected a 'Generate invite link' label when the user has connections")
+	if !strings.Contains(body, "Generate invitation link") {
+		t.Errorf("expected a 'Generate invitation link' label when the user has connections")
 	}
 }

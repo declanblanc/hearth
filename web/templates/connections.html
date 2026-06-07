@@ -10,7 +10,7 @@
   The link points at /settings/invites, which owns the actual minting flow
   (POST /invites and its rate limit); we don't duplicate that endpoint here.
 */}}
-<a class="button-link" href="/settings/invites">Generate invite link</a>
+<a class="button-link" href="/settings/invites">Generate invitation link</a>
 
 {{if .People}}
   <ul class="connection-list">
@@ -29,6 +29,6 @@
     {{end}}
   </ul>
 {{else}}
-  <p class="muted empty">You're not connected with anyone yet. Generate an invite link above and share it with someone you'd like to connect with.</p>
+  <p class="muted empty">You're not connected with anyone yet. Generate an invitation link above and share it with someone you'd like to connect with — when they accept, you'll confirm their request to connect.</p>
 {{end}}
 {{end}}

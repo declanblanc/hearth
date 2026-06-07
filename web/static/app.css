@@ -816,6 +816,21 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   box-shadow: var(--shadow-md), 0 0 0 1px var(--line);
 }
 
+/* Numbered explanation of the three-way connection handshake on the
+   invite-acceptance screen. Left-aligned for readability inside the
+   otherwise centred invite card. */
+.invite-steps {
+  text-align: left;
+  margin: 1.25rem auto;
+  max-width: 22rem;
+  padding-left: 1.5rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+.invite-steps strong {
+  color: var(--ink);
+}
+
 .invite-list,
 .request-list,
 .connection-list,
