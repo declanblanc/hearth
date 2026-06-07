@@ -4,18 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-This repository is **pre-code**. It currently contains only planning documents — no source, build system, tests, or deployment config exists yet. Treat the two markdown files as the authoritative spec:
+The project is **under active development**. The Go backend is scaffolded and the core social loop is implemented; work is progressing through the phases below. The two planning documents remain the authoritative spec for intent and architecture — keep them and the code in sync:
 
 - [Hearth_Technical_Plan.md](Hearth_Technical_Plan.md) — stack decisions, data model, key flows, anti-features, decision log.
 - [Hearth_Build_and_Test_Plan.md](Hearth_Build_and_Test_Plan.md) — phase-by-phase work breakdown with acceptance criteria and test plans.
 
-When asked to scaffold the project, follow the decisions in the Technical Plan's "Decision log" (§9) and the structure of "Phase 0 — Foundation" in the Build & Test Plan. Don't relitigate stack choices unless the user asks.
+When the plans and the code disagree, treat it as a bug in one of them: fix the code to match the spec, or update the spec if the decision has genuinely changed (and note it in the decision log). Don't relitigate settled stack choices unless the user asks.
+
+### Code layout
+
+- `cmd/server/` — entrypoint (`main.go` wires config, DB, router via `http.NewServeMux`; `seed.go` for dev data).
+- `internal/<domain>/` — one package per feature area: `auth`, `connections`, `feed`, `posts`, `profiles`, `notifications`, `media`. Each typically has `handlers.go` (HTTP), `service.go` (business logic), and `*_test.go`.
+- `internal/shared/` — cross-cutting infrastructure: `config`, `db` (connection + embedded goose migrations), `email`, `middleware`, `render` (html/template wrapper).
+- `internal/shared/db/migrations/` — numbered goose SQL migrations (`NNN_name.sql`), embedded via `//go:embed` and applied on startup.
+- `web/templates/` — server-rendered `html/template` files. `web/static/` — CSS/JS (htmx, no build step).
+- `tests/integration/` and `tests/e2e/` — cross-package and Playwright tests.
 
 ## Product in one paragraph
 
 Hearth is a private, invite-only, donation-funded social app for close connections. Hard constraints shape every decision: **<$15/month hosting for ~1,000 users**, **privacy enforced at the data layer**. Many social-architecture assumptions don't apply — no fanout, no ranking, no discovery, no celebrities. It's closer to a private group blog with permissions than to Twitter.
 
-## Planned stack (from Technical Plan §2, §9)
+## Stack (from Technical Plan §2, §9)
 
 - **Backend:** Go (single static binary, low memory footprint).
 - **Frontend:** htmx + server-rendered HTML. No build pipeline, no SPA framework.
@@ -25,7 +34,16 @@ Hearth is a private, invite-only, donation-funded social app for close connectio
 - **Hosting:** Fly.io with a persistent volume for the SQLite file.
 - **Auth:** email+password+verification, argon2id, server-side sessions via HttpOnly/Secure/SameSite=Lax cookies. No JWTs.
 
-Specific Go libraries (router, templating, SQLite driver, sessions) are intentionally deferred — pick boring/well-documented options when the user asks for them.
+Concrete library choices (kept deliberately boring — prefer stdlib, add deps only when they earn their place):
+
+- **Router:** stdlib `net/http.NewServeMux` (Go 1.22+ method+path patterns). No third-party router.
+- **Templating:** stdlib `html/template`, wrapped by `internal/shared/render`.
+- **SQLite driver:** `modernc.org/sqlite` (pure Go, so `CGO_ENABLED=0` static binaries work).
+- **Migrations:** `pressly/goose`, embedded and run at startup.
+- **Sessions:** hand-rolled server-side sessions in `internal/auth` (no session library, no JWTs).
+- **Password hashing:** `golang.org/x/crypto` (argon2id).
+- **R2/object storage:** `aws-sdk-go-v2` S3 client (R2 is S3-compatible).
+- **Logging:** stdlib `log/slog` with `lmittmann/tint` for readable dev output.
 
 ## Architectural rules that are easy to violate
 
