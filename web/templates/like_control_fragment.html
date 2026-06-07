@@ -1,0 +1,5 @@
+{{/* like_control_fragment.html — the bare like toggle returned to htmx
+     requests so liking/unliking swaps in place without a full reload (issue
+     #10). It reuses the "likecontrol" define from base.html, which base.html is
+     always parsed alongside. Expects a value exposing .ID and .LikedByViewer. */}}
+{{define "like_control_fragment.html"}}{{template "likecontrol" .}}{{end}}
