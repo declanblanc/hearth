@@ -19,12 +19,22 @@
 
   // ---- thumbnail previews -------------------------------------------------
 
+  // Keep in step with media.MaxImagesPerPost on the server.
+  var MAX_IMAGES = 5;
+
   function setupPreview(form) {
     var fileInput = form.querySelector('input[type="file"]');
     var list = form.querySelector("[data-preview-list]");
     if (!fileInput || !list) {
       return; // markup not as expected — leave the plain input in place.
     }
+
+    // The accumulated selection is our source of truth. A native file input
+    // *replaces* its FileList every time the picker is used, so without this we
+    // would lose earlier photos each time the user adds another. We keep the
+    // list here and push it back into the input (via DataTransfer) so the form
+    // submits exactly the photos shown as thumbnails.
+    var selected = [];
 
     // Object URLs we've created, so we can revoke them and avoid leaking memory
     // each time the selection changes.
@@ -37,15 +47,40 @@
       objectURLs = [];
     }
 
-    // Rebuild fileInput.files without the file at `removeIndex`, then re-render.
-    function removeAt(removeIndex) {
-      var kept = new DataTransfer();
-      Array.prototype.forEach.call(fileInput.files, function (file, index) {
-        if (index !== removeIndex) {
-          kept.items.add(file);
-        }
+    // Mirror `selected` onto the file input so a normal form POST carries it.
+    function syncInput() {
+      var dt = new DataTransfer();
+      selected.forEach(function (file) {
+        dt.items.add(file);
       });
-      fileInput.files = kept.files;
+      fileInput.files = dt.files;
+    }
+
+    function isAlreadySelected(file) {
+      return selected.some(function (existing) {
+        return (
+          existing.name === file.name &&
+          existing.size === file.size &&
+          existing.lastModified === file.lastModified
+        );
+      });
+    }
+
+    // Merge a freshly picked FileList into the accumulated selection, skipping
+    // duplicates and respecting the per-post image cap.
+    function addFiles(picked) {
+      Array.prototype.forEach.call(picked, function (file) {
+        if (selected.length >= MAX_IMAGES) return;
+        if (isAlreadySelected(file)) return;
+        selected.push(file);
+      });
+      syncInput();
+      render();
+    }
+
+    function removeAt(removeIndex) {
+      selected.splice(removeIndex, 1);
+      syncInput();
       render();
     }
 
@@ -53,14 +88,13 @@
       revokeURLs();
       list.textContent = "";
 
-      var files = fileInput.files;
-      if (!files || files.length === 0) {
+      if (selected.length === 0) {
         list.hidden = true;
         return;
       }
       list.hidden = false;
 
-      Array.prototype.forEach.call(files, function (file, index) {
+      selected.forEach(function (file, index) {
         if (file.type.indexOf("image/") !== 0) {
           return; // skip anything that isn't an image we can render.
         }
@@ -89,7 +123,9 @@
       });
     }
 
-    fileInput.addEventListener("change", render);
+    fileInput.addEventListener("change", function () {
+      addFiles(fileInput.files);
+    });
   }
 
   // ---- upload progress on submit ------------------------------------------
