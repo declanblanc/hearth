@@ -35,7 +35,9 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	profileURL := "/" + u.Username
+	// Profiles live under the /u/ prefix (see profiles.Handlers.Mount); a bare
+	// "/" + username would 404 now that usernames have their own namespace.
+	profileURL := "/u/" + u.Username
 
 	// ParseMultipartForm covers both image-bearing posts (multipart) and
 	// text-only posts submitted as multipart by the compose form. maxMemory is

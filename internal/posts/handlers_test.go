@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/dblanc/hearth/internal/media"
+	"github.com/dblanc/hearth/internal/shared/middleware"
 )
 
 // smallJPEG returns the bytes of a tiny valid JPEG so DetectType accepts it.
@@ -100,5 +101,45 @@ func TestCollectImages_TooManyImages(t *testing.T) {
 
 	if _, code := h.collectImages(req); code != "too_many_images" {
 		t.Fatalf("want code too_many_images, got %q", code)
+	}
+}
+
+// contentRequest builds a multipart POST /posts carrying a single text "content"
+// field, the way the compose form submits a text-only post.
+func contentRequest(t *testing.T, content string) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	if err := w.WriteField("content", content); err != nil {
+		t.Fatalf("WriteField: %v", err)
+	}
+	_ = w.Close()
+	req := httptest.NewRequest(http.MethodPost, "/posts", &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	return req
+}
+
+// Creating a post must redirect to the author's profile under the /u/ prefix.
+// A bare "/" + username would 404 now that profiles live at /u/{username}
+// (regression guard for the post-create redirect).
+func TestCreate_RedirectsToPrefixedProfile(t *testing.T) {
+	d := newTestDB(t)
+	svc := New(d)
+	author := seedUser(t, d, "author")
+	// Renderer is nil: the success path redirects and never renders.
+	h := NewHandlers(svc, nil)
+
+	req := contentRequest(t, "hello world")
+	u := &middleware.User{ID: author, Username: "author", DisplayName: "Author", Verified: true}
+	req = req.WithContext(middleware.WithUser(req.Context(), u))
+
+	rec := httptest.NewRecorder()
+	h.create(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /posts: status = %d, want 303", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/u/author" {
+		t.Errorf("redirect Location = %q, want %q", got, "/u/author")
 	}
 }
