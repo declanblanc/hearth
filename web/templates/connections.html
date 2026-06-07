@@ -39,6 +39,31 @@
 {{end}}
 
 {{/*
+  Outgoing pending connections (issue #15): people whose invite link the viewer
+  accepted, now waiting on that person to confirm. Read-only — only the
+  recipient can confirm or decline — so there are no action buttons here. Each
+  entry disappears once the other person resolves it.
+*/}}
+{{if .Outgoing}}
+  <section class="pending-connections pending-outgoing">
+    <h2>Waiting to connect</h2>
+    <p class="muted">You accepted these invite links. You'll connect once they confirm.</p>
+    <ul class="request-list">
+      {{range .Outgoing}}
+        <li class="request-item">
+          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
+          <div class="request-body">
+            <a href="/u/{{.Username}}" class="request-name">{{.Name}}</a>
+            <span class="muted">@{{.Username}}</span>
+          </div>
+          <span class="request-status muted">Pending</span>
+        </li>
+      {{end}}
+    </ul>
+  </section>
+{{end}}
+
+{{/*
   The invite-generation affordance lives outside the connections list so it is
   always reachable. Gating it on the empty state (the old behaviour) left users
   who already had a connection with no way to invite anyone else — see issue #4.
