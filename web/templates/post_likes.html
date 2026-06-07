@@ -1,0 +1,21 @@
+{{define "post_likes.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Who liked your post — Hearth{{end}}
+{{define "content"}}
+<h1>Who liked your post</h1>
+<p class="muted">Only you can see this. There is no count, here or anywhere.</p>
+
+{{if .Likers}}
+  <ul class="liker-list">
+    {{range .Likers}}
+      <li class="liker-item">
+        <a href="/{{.Username}}">{{.Name}}</a>
+        <span class="muted"> · @{{.Username}}</span>
+      </li>
+    {{end}}
+  </ul>
+{{else}}
+  <p class="muted empty">No one has liked this post yet.</p>
+{{end}}
+
+<p><a href="/{{.User.Username}}">← Back to your profile</a></p>
+{{end}}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/dblanc/hearth/internal/likes"
 	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/shared/middleware"
@@ -15,10 +16,11 @@ type Handlers struct {
 	Svc      *Service
 	Renderer *render.Renderer
 	Media    media.Store // may be nil in dev (post images won't render)
+	Likes    *likes.Service
 }
 
-func NewHandlers(svc *Service, r *render.Renderer, m media.Store) *Handlers {
-	return &Handlers{Svc: svc, Renderer: r, Media: m}
+func NewHandlers(svc *Service, r *render.Renderer, m media.Store, likeSvc *likes.Service) *Handlers {
+	return &Handlers{Svc: svc, Renderer: r, Media: m, Likes: likeSvc}
 }
 
 // Mount registers the feed at the site root and the "load older" partial.
@@ -48,6 +50,16 @@ func (h *Handlers) index(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
+	// Reflect which of these posts the viewer has already liked so the like
+	// control renders in its toggled state. Every feed post is a connection's,
+	// never the viewer's own.
+	for _, group := range [][]posts.Post{res.New, res.Old} {
+		if err := h.Likes.MarkViewerLikes(r.Context(), u.ID, group); err != nil {
+			slog.Error("feed: mark likes", "user_id", u.ID, "err", err)
+			h.Renderer.Error(w, http.StatusInternalServerError)
+			return
+		}
+	}
 	h.Renderer.HTML(w, "home.html", render.Page(u, render.M{
 		"New":        res.New,
 		"Old":        res.Old,
@@ -69,6 +81,11 @@ func (h *Handlers) older(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := posts.SignMediaURLs(r.Context(), h.Media, rows); err != nil {
 		slog.Error("feed: sign media", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	if err := h.Likes.MarkViewerLikes(r.Context(), u.ID, rows); err != nil {
+		slog.Error("feed: mark likes", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}

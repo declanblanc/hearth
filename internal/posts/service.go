@@ -50,6 +50,11 @@ type Post struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Media          []PostMedia
+	// LikedByViewer reports whether the current viewer has liked this post. It
+	// drives the like control's toggled state and is populated per-request by
+	// the likes package; it is never a count and says nothing about other users'
+	// likes (CLAUDE.md §11).
+	LikedByViewer bool
 }
 
 // PostMedia is one image attached to a post. Key/ContentType come from the
@@ -279,6 +284,11 @@ func (s *Service) Delete(ctx context.Context, postID, requesterID int64) error {
 	}
 	defer tx.Rollback() //nolint:errcheck
 	if _, err := tx.ExecContext(ctx, `DELETE FROM post_media WHERE post_id = ?`, postID); err != nil {
+		return err
+	}
+	// Likes are recorded per (post, user); drop them with the post so a deleted
+	// post leaves no liker rows behind (CLAUDE.md §10 delete cascade).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM likes WHERE post_id = ?`, postID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,

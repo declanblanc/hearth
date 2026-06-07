@@ -14,6 +14,9 @@
           {{else if eq .Type "connection_accepted"}}
             {{if .ActorUsername}}<a href="/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
             accepted your connection request.
+          {{else if eq .Type "like_on_post"}}
+            {{if .ActorUsername}}<a href="/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
+            liked your post.
           {{else}}
             You have a new notification.
           {{end}}

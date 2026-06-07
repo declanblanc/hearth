@@ -52,12 +52,18 @@
         </header>
         {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
         {{template "postmedia" .}}
-        {{if $.Owner}}
-          <form method="post" action="/posts/{{.ID}}/delete" class="post-actions"
-                onsubmit="return confirm('Delete this post? This cannot be undone.');">
-            <button type="submit" class="linklike danger">Delete</button>
-          </form>
-        {{end}}
+        <div class="post-actions">
+          {{if $.Owner}}
+            {{/* The author can see who liked, never a count, and only they can. */}}
+            <a href="/posts/{{.ID}}/likes" class="likers-link">See who liked</a>
+            <form method="post" action="/posts/{{.ID}}/delete" class="inline-form"
+                  onsubmit="return confirm('Delete this post? This cannot be undone.');">
+              <button type="submit" class="linklike danger">Delete</button>
+            </form>
+          {{else}}
+            {{template "likecontrol" .}}
+          {{end}}
+        </div>
       </article>
     {{end}}
   {{else}}

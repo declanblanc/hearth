@@ -609,7 +609,53 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.post-actions { margin-top: 0.6rem; }
+.post-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.inline-form { display: inline; }
+
+/* The private like toggle. Quiet by default; warms to ember once liked. No
+   count is ever shown — the heart's fill is the only state (CLAUDE.md §11). */
+.like-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.like-button svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.like-button:hover { color: var(--ember); }
+.like-button.liked { color: var(--ember); }
+
+.likers-link {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.liker-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.liker-item {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.liker-item:last-child { border-bottom: 0; }
 
 /* Attached images. A single image sits full-width; two or more tile into a
    responsive grid. Each image keeps its aspect ratio and never overflows. */

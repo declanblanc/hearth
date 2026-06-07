@@ -74,7 +74,29 @@
   </header>
   {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
   {{template "postmedia" .}}
+  <div class="post-actions">{{template "likecontrol" .}}</div>
 </article>
+{{end}}
+
+{{/* likecontrol renders the private like toggle for a post the viewer did not
+     author. There is no count and no indication of who else liked — just the
+     viewer's own on/off state (CLAUDE.md §11). Expects a posts.Post. */}}
+{{define "likecontrol"}}
+{{if .LikedByViewer}}
+  <form method="post" action="/posts/{{.ID}}/unlike" class="like-form">
+    <button type="submit" class="like-button liked" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-6.7-4.35-9.33-8.07C.9 10.27 1.4 7.1 3.86 5.66a4.6 4.6 0 0 1 5.64.9L12 9.06l2.5-2.5a4.6 4.6 0 0 1 5.64-.9c2.46 1.44 2.96 4.61 1.19 7.27C18.7 16.65 12 21 12 21Z"/></svg>
+      <span>Liked</span>
+    </button>
+  </form>
+{{else}}
+  <form method="post" action="/posts/{{.ID}}/like" class="like-form">
+    <button type="submit" class="like-button" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.7-4.35-9.33-8.07C.9 10.27 1.4 7.1 3.86 5.66a4.6 4.6 0 0 1 5.64.9L12 9.06l2.5-2.5a4.6 4.6 0 0 1 5.64-.9c2.46 1.44 2.96 4.61 1.19 7.27C18.7 16.65 12 21 12 21Z"/></svg>
+      <span>Like</span>
+    </button>
+  </form>
+{{end}}
 {{end}}
 
 {{/* postmedia renders a post's attached images. Expects a posts.Post; each
