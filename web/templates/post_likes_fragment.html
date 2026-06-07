@@ -1,0 +1,5 @@
+{{/* The liker list without the page chrome, loaded into the likes modal by
+     likes-modal.js. The standalone post_likes.html serves the same content as a
+     full page for the no-JS fallback. */}}
+{{define "post_likes_fragment.html"}}<h2 class="likes-modal-title">Who liked your post</h2>
+{{template "likeslist" .}}{{end}}

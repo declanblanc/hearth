@@ -54,8 +54,10 @@
         {{template "postmedia" .}}
         <div class="post-actions">
           {{if $.Owner}}
-            {{/* The author can see who liked, never a count, and only they can. */}}
-            <a href="/posts/{{.ID}}/likes" class="likers-link">See who liked</a>
+            {{/* The author can see who liked, never a count, and only they can.
+                 likes-modal.js enhances this into a dialog; the href is the
+                 no-JS fallback to the standalone page. */}}
+            <a href="/posts/{{.ID}}/likes" class="likers-link" data-likes-trigger>See who liked</a>
             <form method="post" action="/posts/{{.ID}}/delete" class="inline-form"
                   onsubmit="return confirm('Delete this post? This cannot be undone.');">
               <button type="submit" class="linklike danger">Delete</button>
@@ -70,5 +72,15 @@
     <p class="muted empty">{{.Profile.FirstName}} hasn't posted yet.</p>
   {{end}}
 </section>
+
+{{if .Owner}}
+  {{/* Single reused dialog; likes-modal.js loads each post's liker list into
+       it on demand. Owner-only, so non-owners never receive this markup. */}}
+  <dialog id="likes-dialog" class="likes-dialog">
+    <button type="button" class="likes-dialog-close" data-likes-close aria-label="Close">&times;</button>
+    <div data-likes-body></div>
+  </dialog>
 {{end}}
-{{define "scripts"}}<script src="/static/post-images.js" defer></script>{{end}}
+{{end}}
+{{define "scripts"}}<script src="/static/post-images.js" defer></script>
+{{if .Owner}}<script src="/static/likes-modal.js" defer></script>{{end}}{{end}}

@@ -78,6 +78,25 @@
 </article>
 {{end}}
 
+{{/* likeslist renders a post's liker names — author-only, never a count
+     (CLAUDE.md §2, §11). Shared by the standalone page and the modal fragment.
+     Expects a map with a .Likers slice. */}}
+{{define "likeslist"}}
+<p class="muted">Only you can see this. There is no count, here or anywhere.</p>
+{{if .Likers}}
+  <ul class="liker-list">
+    {{range .Likers}}
+      <li class="liker-item">
+        <a href="/{{.Username}}">{{.Name}}</a>
+        <span class="muted"> · @{{.Username}}</span>
+      </li>
+    {{end}}
+  </ul>
+{{else}}
+  <p class="muted empty">No one has liked this post yet.</p>
+{{end}}
+{{end}}
+
 {{/* likecontrol renders the private like toggle for a post the viewer did not
      author. There is no count and no indication of who else liked — just the
      viewer's own on/off state (CLAUDE.md §11). Expects a posts.Post. */}}

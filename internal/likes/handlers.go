@@ -84,7 +84,13 @@ func (h *Handlers) likers(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.Renderer.HTML(w, "post_likes.html", render.Page(u, render.M{"Likers": likers}))
+	// likes-modal.js requests the bare list (X-Fragment) to drop into a dialog;
+	// a direct visit renders the standalone page (the no-JS fallback).
+	template := "post_likes.html"
+	if r.Header.Get("X-Fragment") == "1" {
+		template = "post_likes_fragment.html"
+	}
+	h.Renderer.HTML(w, template, render.Page(u, render.M{"Likers": likers}))
 }
 
 // postID parses the {id} path value, writing a 400 and returning ok=false when
