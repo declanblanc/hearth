@@ -36,7 +36,6 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 
 	// Authenticated.
 	mux.Handle("POST /invites", authed(h.createInvite))
-	mux.Handle("GET /settings/invites", authed(h.listInvites))
 	mux.Handle("POST /i/{token}/request", authed(h.submitRequest))
 	mux.Handle("GET /requests", authed(h.listRequests))
 	mux.Handle("POST /requests/{id}/accept", authed(h.acceptRequest))
@@ -135,50 +134,31 @@ func (h *Handlers) createInvite(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	_, err := h.Svc.CreateInvite(r.Context(), u.ID)
+	token, err := h.Svc.CreateInvite(r.Context(), u.ID)
 	if err != nil {
 		var rl *RateLimitError
 		if errors.As(err, &rl) {
-			h.renderInvites(w, r, u, http.StatusTooManyRequests, rateLimitMessage(rl))
+			h.renderInviteLink(w, r, u, http.StatusTooManyRequests, "", rateLimitMessage(rl))
 			return
 		}
 		slog.Error("connections: create invite", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.renderInvites(w, r, u, http.StatusOK, "")
+	h.renderInviteLink(w, r, u, http.StatusOK, h.Svc.inviteURL(token), "")
 }
 
-func (h *Handlers) listInvites(w http.ResponseWriter, r *http.Request) {
-	h.renderInvites(w, r, middleware.UserFrom(r.Context()), http.StatusOK, "")
-}
-
-func (h *Handlers) renderInvites(w http.ResponseWriter, r *http.Request, u *middleware.User, status int, errMsg string) {
-	invites, err := h.Svc.ListInvites(r.Context(), u.ID)
-	_ = err // listing is best-effort for rendering; a DB error surfaces as empty
-	links := make([]inviteView, 0, len(invites))
-	for _, inv := range invites {
-		links = append(links, inviteView{
-			URL:       h.Svc.inviteURL(inv.Token),
-			CreatedAt: inv.CreatedAt,
-			ExpiresAt: inv.ExpiresAt,
-			Consumed:  inv.Consumed,
-			Expired:   inv.Expired,
-			Active:    !inv.Consumed && !inv.Expired,
-		})
+// renderInviteLink shows a freshly minted, single-use invitation link. The
+// connections-page modal (invite-modal.js) requests just the link fragment via
+// X-Fragment; a plain form POST with no JavaScript instead gets the standalone
+// page, so the flow still works without scripts. Invites are one-time use, so
+// there is nothing to list — each generation just hands back the new link.
+func (h *Handlers) renderInviteLink(w http.ResponseWriter, r *http.Request, u *middleware.User, status int, url, errMsg string) {
+	if r.Header.Get("X-Fragment") == "1" {
+		h.Renderer.Status(w, status, "invite_link_fragment.html", render.M{"URL": url, "Error": errMsg})
+		return
 	}
-	h.Renderer.Status(w, status, "settings_invites.html", render.Page(u, render.M{
-		"Invites": links, "Error": errMsg,
-	}))
-}
-
-type inviteView struct {
-	URL       string
-	CreatedAt time.Time
-	ExpiresAt time.Time
-	Consumed  bool
-	Expired   bool
-	Active    bool
+	h.Renderer.Status(w, status, "invite_created.html", render.Page(u, render.M{"URL": url, "Error": errMsg}))
 }
 
 // ---- requests ----

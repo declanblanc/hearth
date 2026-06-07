@@ -42,7 +42,9 @@ func newConnectionsHandlers(t *testing.T) (*Handlers, *Service) {
 		"base.html": {Data: []byte(
 			`{{define "base"}}{{block "content" .}}{{end}}{{end}}`,
 		)},
-		"connections.html": {Data: mustReadTemplate(t, "connections.html")},
+		"connections.html":          {Data: mustReadTemplate(t, "connections.html")},
+		"invite_link_fragment.html": {Data: mustReadTemplate(t, "invite_link_fragment.html")},
+		"invite_created.html":       {Data: mustReadTemplate(t, "invite_created.html")},
 		"error.html": {Data: []byte(
 			`{{define "error.html"}}error {{.Status}}{{end}}`,
 		)},
@@ -78,8 +80,65 @@ func renderConnectionsPage(t *testing.T, h *Handlers, userID int64, username str
 // The invite-generation control must always be present, regardless of how many
 // connections the user already has. This is the regression guard for issue #4:
 // previously the affordance was gated on the empty state, so anyone with a
-// connection could never invite again.
-const inviteControlMarker = `href="/settings/invites"`
+// connection could never invite again. The control is a form that POSTs to
+// /invites; invite-modal.js intercepts it to show the link in a dialog.
+const inviteControlMarker = `action="/invites"`
+
+// createInvite serves the bare link fragment when the connections-page modal
+// asks for it (X-Fragment), so invite-modal.js can drop a copyable link into the
+// dialog without a page navigation.
+func TestCreateInvite_FragmentReturnsCopyableLink(t *testing.T) {
+	h, _ := newConnectionsHandlers(t)
+	user := seedUser(t, h.Svc.DB, "inviter")
+
+	req := httptest.NewRequest(http.MethodPost, "/invites", nil)
+	req.Header.Set("X-Fragment", "1")
+	u := &middleware.User{ID: user, Username: "inviter", DisplayName: "inviter", Verified: true}
+	req = req.WithContext(middleware.WithUser(req.Context(), u))
+
+	rec := httptest.NewRecorder()
+	h.createInvite(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /invites (fragment): status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "/i/") {
+		t.Errorf("fragment should contain the invite URL;\nbody:\n%s", body)
+	}
+	if !strings.Contains(body, "data-invite-copy") {
+		t.Errorf("fragment should contain a copy button;\nbody:\n%s", body)
+	}
+	// The fragment is a bare snippet — it must not drag in the full page chrome.
+	if strings.Contains(body, "Back to connections") {
+		t.Errorf("fragment should not include the standalone-page chrome;\nbody:\n%s", body)
+	}
+}
+
+// Without the X-Fragment header (no JavaScript), the same POST renders the
+// standalone invite_created.html page so the flow still works.
+func TestCreateInvite_NoFragmentRendersStandalonePage(t *testing.T) {
+	h, _ := newConnectionsHandlers(t)
+	user := seedUser(t, h.Svc.DB, "inviter")
+
+	req := httptest.NewRequest(http.MethodPost, "/invites", nil)
+	u := &middleware.User{ID: user, Username: "inviter", DisplayName: "inviter", Verified: true}
+	req = req.WithContext(middleware.WithUser(req.Context(), u))
+
+	rec := httptest.NewRecorder()
+	h.createInvite(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /invites (no fragment): status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "/i/") {
+		t.Errorf("standalone page should contain the invite URL;\nbody:\n%s", body)
+	}
+	if !strings.Contains(body, "Back to connections") {
+		t.Errorf("standalone page should link back to connections;\nbody:\n%s", body)
+	}
+}
 
 func TestConnectionsPage_ShowsInviteControl_WhenUserHasNoConnections(t *testing.T) {
 	h, _ := newConnectionsHandlers(t)

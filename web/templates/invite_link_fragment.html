@@ -1,0 +1,9 @@
+{{/* The freshly minted invitation link, loaded into the connections-page modal
+     by invite-modal.js. The standalone invite_created.html serves the same
+     content as a full page for the no-JS fallback. */}}
+{{define "invite_link_fragment.html"}}{{if .Error}}<div class="banner error">{{.Error}}</div>{{else}}<h2 class="invite-modal-title">Your invitation link</h2>
+<p class="muted">Share this with one person you'd like to connect with. It works once and expires after 72 hours.</p>
+<div class="invite-copy-row">
+  <input class="invite-url" type="text" readonly value="{{.URL}}" data-invite-url onclick="this.select()">
+  <button type="button" class="button-secondary" data-invite-copy>Copy</button>
+</div>{{end}}{{end}}

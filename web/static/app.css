@@ -691,6 +691,47 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .likes-dialog-close:hover { color: var(--ember); }
 
+/* Invitation-link modal on the connections page. Shares the quiet-card look of
+   the likes modal; adds a row that pairs the read-only link with a copy button. */
+.invite-dialog {
+  width: min(30rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 1.5rem 1.6rem;
+  background: var(--raised);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.invite-dialog::backdrop {
+  background: rgba(28, 20, 14, 0.45);
+}
+.invite-modal-title {
+  margin: 0 2rem 0.4rem 0;
+  font-size: 1.25rem;
+}
+.invite-dialog-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.75rem;
+  background: none;
+  border: 0;
+  padding: 0.2rem 0.4rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.invite-dialog-close:hover { color: var(--ember); }
+.invite-copy-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.invite-copy-row .invite-url { flex: 1; }
+.invite-copy-row .button-secondary { flex-shrink: 0; }
+
 /* Attached images. A single image sits full-width; two or more tile into a
    responsive grid. Each image keeps its aspect ratio and never overflows. */
 .post-media {
