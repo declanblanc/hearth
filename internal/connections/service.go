@@ -377,6 +377,34 @@ func (s *Service) ListPendingRequests(ctx context.Context, recipientID int64) ([
 	return reqs, rows.Err()
 }
 
+// PendingRequestFrom looks up the id of a pending incoming connection request
+// where requesterID asked to connect with recipientID. It returns ok=false when
+// no such pending request exists.
+//
+// This powers the profile preview (issue #3): a viewer may peek at a profile
+// only when that profile's owner has an outstanding request to them, and the
+// preview needs the request id to wire its Accept/Decline forms to the existing
+// /requests/{id}/accept and /requests/{id}/deny endpoints. The lookup is
+// deliberately narrow — only status='pending', and only when the requester is
+// not soft-deleted — so it can never widen into a general profile-view bypass
+// (CLAUDE.md §1). It mirrors the filters used by ListPendingRequests.
+func (s *Service) PendingRequestFrom(ctx context.Context, recipientID, requesterID int64) (requestID int64, ok bool, err error) {
+	err = s.DB.QueryRowContext(ctx, `
+		SELECT cr.id
+		  FROM connection_requests cr
+		  JOIN users u ON u.id = cr.requester_id AND u.deleted_at IS NULL
+		 WHERE cr.recipient_id = ? AND cr.requester_id = ? AND cr.status = 'pending'
+		 LIMIT 1`, recipientID, requesterID,
+	).Scan(&requestID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return requestID, true, nil
+}
+
 // AcceptRequest accepts a pending request, creating the canonical connection
 // row and notifying the original requester. Enforces the 10-accepts-per-7-days
 // limit inside the immediate transaction.

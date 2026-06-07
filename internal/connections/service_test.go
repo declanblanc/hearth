@@ -363,6 +363,70 @@ func TestDeny_SilentNoConnectionNoNotification(t *testing.T) {
 	}
 }
 
+func TestPendingRequestFrom(t *testing.T) {
+	d := newTestDB(t)
+	svc := newSvc(d)
+	ctx := context.Background()
+	recipient := seedUser(t, d, "recipient")
+	requester := seedUser(t, d, "requester")
+	stranger := seedUser(t, d, "stranger")
+	token, _ := svc.CreateInvite(ctx, recipient)
+	if err := svc.CreateRequest(ctx, token, requester); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	reqs, _ := svc.ListPendingRequests(ctx, recipient)
+	wantID := reqs[0].ID
+
+	// The matching (recipient, requester) pair resolves to the request id.
+	gotID, ok, err := svc.PendingRequestFrom(ctx, recipient, requester)
+	if err != nil {
+		t.Fatalf("PendingRequestFrom: %v", err)
+	}
+	if !ok || gotID != wantID {
+		t.Errorf("want request id %d (ok), got id=%d ok=%v", wantID, gotID, ok)
+	}
+
+	// Reversed direction does not match: the request is one-directional.
+	if _, ok, _ := svc.PendingRequestFrom(ctx, requester, recipient); ok {
+		t.Error("reversed (requester as recipient) should not match")
+	}
+
+	// An unrelated viewer has no pending request.
+	if _, ok, _ := svc.PendingRequestFrom(ctx, recipient, stranger); ok {
+		t.Error("stranger should not match")
+	}
+
+	// Once the request is resolved (accepted), it is no longer 'pending' and
+	// must stop matching — the preview access ends when the request does.
+	if err := svc.AcceptRequest(ctx, wantID, recipient); err != nil {
+		t.Fatalf("AcceptRequest: %v", err)
+	}
+	if _, ok, _ := svc.PendingRequestFrom(ctx, recipient, requester); ok {
+		t.Error("accepted request should no longer be pending")
+	}
+}
+
+func TestPendingRequestFrom_IgnoresSoftDeletedRequester(t *testing.T) {
+	d := newTestDB(t)
+	svc := newSvc(d)
+	ctx := context.Background()
+	recipient := seedUser(t, d, "recipient")
+	requester := seedUser(t, d, "requester")
+	token, _ := svc.CreateInvite(ctx, recipient)
+	if err := svc.CreateRequest(ctx, token, requester); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	// Soft-delete the requester; their pending request must stop matching so a
+	// deleted account can't keep granting a profile preview.
+	if _, err := d.Exec(`UPDATE users SET deleted_at = ? WHERE id = ?`, time.Now(), requester); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := svc.PendingRequestFrom(ctx, recipient, requester); ok {
+		t.Error("soft-deleted requester should not match")
+	}
+}
+
 func TestDisconnect_RemovesRowBothWays(t *testing.T) {
 	d := newTestDB(t)
 	svc := newSvc(d)

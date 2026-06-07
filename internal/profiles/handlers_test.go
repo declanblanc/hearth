@@ -71,6 +71,12 @@ func newTestRenderer(t *testing.T) *render.Renderer {
 			`{{define "profile_unavailable.html"}}{{template "base" .}}{{end}}` +
 				`{{define "content"}}This profile isn't available. Ask them for an invite link.{{end}}`,
 		)},
+		"profile_preview.html": {Data: []byte(
+			`{{define "profile_preview.html"}}{{template "base" .}}{{end}}` +
+				`{{define "content"}}preview {{.Profile.FullName}} bio={{.Profile.Bio}} ` +
+				`<form action="/requests/{{.RequestID}}/accept">accept</form>` +
+				`<form action="/requests/{{.RequestID}}/deny">decline</form>{{end}}`,
+		)},
 		"error.html": {Data: []byte(
 			`{{define "error.html"}}error {{.Status}}{{end}}`,
 		)},
@@ -624,6 +630,129 @@ func TestViewProfile_OwnerSeesProfile(t *testing.T) {
 	h.viewProfile(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("owner view: want 200, got %d", rr.Code)
+	}
+}
+
+// seedPendingRequest makes `requester` send `recipient` a pending connection
+// request and returns nothing — the handler looks the request up by the
+// (recipient, requester) pair. It drives the real connections service so the
+// data shape matches production exactly.
+func seedPendingRequest(t *testing.T, h *Handlers, requesterID, recipientID int64) {
+	t.Helper()
+	ctx := context.Background()
+	token, err := h.Conns.CreateInvite(ctx, recipientID)
+	if err != nil {
+		t.Fatalf("CreateInvite: %v", err)
+	}
+	if err := h.Conns.CreateRequest(ctx, token, requesterID); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+}
+
+// TestViewProfile_PendingRequesterSeesPreview covers issue #3's core grant: a
+// viewer with a pending incoming request from the profile owner gets the
+// limited preview (profile fields + working Accept/Decline), not the privacy
+// page — and crucially never the owner's posts.
+func TestViewProfile_PendingRequesterSeesPreview(t *testing.T) {
+	d := newTestDB(t)
+	h, authSvc, profileSvc := newHandlers(t, d, nil)
+	ctx := context.Background()
+
+	// "nina" invited "owen"; owen accepted the invite, creating a pending
+	// request from owen -> nina. So when nina views owen's profile, she should
+	// see the preview.
+	ninaID := createUser(t, authSvc, "nina")
+	owenID := createUser(t, authSvc, "owen")
+	if err := profileSvc.Update(ctx, owenID, UpdateInput{
+		FirstName: "Owen", LastName: "Owens", Bio: "owen-secret-bio", Pronouns: "he/him",
+	}); err != nil {
+		t.Fatalf("seed owen profile: %v", err)
+	}
+	// Owen has a post; the preview must NOT surface it.
+	postSvc := posts.New(d)
+	if _, err := postSvc.Create(ctx, owenID, "owen-secret-post", nil); err != nil {
+		t.Fatalf("seed owen post: %v", err)
+	}
+	seedPendingRequest(t, h, owenID, ninaID) // owen requested nina
+
+	rr := probeProfile(h, "owen", &middleware.User{ID: ninaID, Username: "nina", Verified: true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("pending requester preview: want 200, got %d\nbody: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Owen Owens") {
+		t.Errorf("preview should show the owner's name, got: %q", body)
+	}
+	if !strings.Contains(body, "owen-secret-bio") {
+		t.Errorf("preview should show the owner's bio, got: %q", body)
+	}
+	// Accept/Decline controls must be present and point at the request endpoints.
+	reqs, _ := h.Conns.ListPendingRequests(ctx, ninaID)
+	if len(reqs) != 1 {
+		t.Fatalf("expected one pending request, got %d", len(reqs))
+	}
+	acceptAction := fmt.Sprintf("/requests/%d/accept", reqs[0].ID)
+	denyAction := fmt.Sprintf("/requests/%d/deny", reqs[0].ID)
+	if !strings.Contains(body, acceptAction) {
+		t.Errorf("preview missing accept control %q, got: %q", acceptAction, body)
+	}
+	if !strings.Contains(body, denyAction) {
+		t.Errorf("preview missing decline control %q, got: %q", denyAction, body)
+	}
+	// The preview must not leak posts.
+	if strings.Contains(body, "owen-secret-post") {
+		t.Errorf("preview leaked the owner's post content: %q", body)
+	}
+}
+
+// TestViewProfile_NoPendingRequestStillUnavailable proves the grant is narrow:
+// a viewer with no relationship to the owner still gets the identical issue #2
+// privacy page, so the preview can't be used as a general profile-view bypass.
+func TestViewProfile_NoPendingRequestStillUnavailable(t *testing.T) {
+	d := newTestDB(t)
+	h, authSvc, _ := newHandlers(t, d, nil)
+
+	_ = createUser(t, authSvc, "paula")
+	strangerID := createUser(t, authSvc, "quinn")
+
+	// Quinn has no pending request from paula, so the response must match the
+	// "no such account" baseline byte-for-byte (issue #2 guarantee).
+	stranger := &middleware.User{ID: strangerID, Username: "quinn", Verified: true}
+	existing := probeProfile(h, "paula", stranger)
+	missing := probeProfile(h, "nobody-home", stranger)
+
+	if existing.Code != http.StatusNotFound {
+		t.Fatalf("no-relationship view: want 404, got %d", existing.Code)
+	}
+	if existing.Code != missing.Code || existing.Body.String() != missing.Body.String() {
+		t.Fatalf("no-relationship viewer can distinguish existing from missing account:\n"+
+			"existing: %d %q\nmissing:  %d %q",
+			existing.Code, existing.Body.String(), missing.Code, missing.Body.String())
+	}
+	if !strings.Contains(existing.Body.String(), "isn't available") {
+		t.Errorf("expected privacy page, got: %q", existing.Body.String())
+	}
+}
+
+// TestViewProfile_PreviewIsOneDirectional guards against treating the request as
+// symmetric: the *recipient* of a request previews the *requester*, never the
+// other way around. The requester (owen) viewing the recipient (nina) must
+// still get the privacy page, because nina sent owen nothing.
+func TestViewProfile_PreviewIsOneDirectional(t *testing.T) {
+	d := newTestDB(t)
+	h, authSvc, _ := newHandlers(t, d, nil)
+
+	ninaID := createUser(t, authSvc, "nina")
+	owenID := createUser(t, authSvc, "owen")
+	seedPendingRequest(t, h, owenID, ninaID) // owen -> nina
+
+	// Owen (the requester) views nina (the recipient): no preview for him.
+	rr := probeProfile(h, "nina", &middleware.User{ID: owenID, Username: "owen", Verified: true})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("requester viewing recipient: want 404, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "isn't available") {
+		t.Errorf("requester should see the privacy page, got: %q", rr.Body.String())
 	}
 }
 
