@@ -67,6 +67,10 @@ func newTestRenderer(t *testing.T) *render.Renderer {
 			`{{define "account_deleted.html"}}{{template "base" .}}{{end}}` +
 				`{{define "content"}}deleted{{end}}`,
 		)},
+		"profile_unavailable.html": {Data: []byte(
+			`{{define "profile_unavailable.html"}}{{template "base" .}}{{end}}` +
+				`{{define "content"}}This profile isn't available. Ask them for an invite link.{{end}}`,
+		)},
 		"error.html": {Data: []byte(
 			`{{define "error.html"}}error {{.Status}}{{end}}`,
 		)},
@@ -534,6 +538,78 @@ func TestViewProfile_NonOwnerGets404(t *testing.T) {
 	h.viewProfile(rr, req)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("non-owner view: want 404, got %d", rr.Code)
+	}
+}
+
+// probeProfile issues a GET /{username} as the given viewer and returns the
+// recorded response. A nil viewer simulates a logged-out visitor (no user in
+// the request context). It mirrors how http.ServeMux would populate the path
+// value in production.
+func probeProfile(h *Handlers, username string, viewer *middleware.User) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "/"+username, nil)
+	if viewer != nil {
+		req = req.WithContext(middleware.WithUser(req.Context(), viewer))
+	}
+	req.SetPathValue("username", username)
+	rr := httptest.NewRecorder()
+	h.viewProfile(rr, req)
+	return rr
+}
+
+// TestViewProfile_InaccessibleProfilesAreIndistinguishable is the core privacy
+// guarantee from issue #2: probing /{username} must not reveal whether an
+// account exists. The response for an existing-but-not-connected user and the
+// response for a username with no account at all must be byte-for-byte
+// identical — same status code AND same body — for the same viewer. Otherwise
+// an attacker could enumerate Hearth's membership by diffing responses
+// (CLAUDE.md §1: non-existence is part of the privacy model).
+func TestViewProfile_InaccessibleProfilesAreIndistinguishable(t *testing.T) {
+	d := newTestDB(t)
+	h, authSvc, _ := newHandlers(t, d, nil)
+
+	// "mona" exists but the viewer is not connected to her; "ghosttown" is a
+	// username that was never registered.
+	_ = createUser(t, authSvc, "mona")
+	const missingUsername = "ghosttown"
+
+	// A logged-out visitor is the purest probe: no viewer-specific chrome can
+	// differ between the two requests, so any divergence would be a real leak.
+	existingResp := probeProfile(h, "mona", nil)
+	missingResp := probeProfile(h, missingUsername, nil)
+
+	if existingResp.Code != missingResp.Code {
+		t.Fatalf("status codes differ: existing=%d missing=%d (existence leaked)",
+			existingResp.Code, missingResp.Code)
+	}
+	if existingResp.Code != http.StatusNotFound {
+		t.Fatalf("inaccessible profile: want status 404, got %d", existingResp.Code)
+	}
+	if existingResp.Body.String() != missingResp.Body.String() {
+		t.Fatalf("response bodies differ — account existence is leaked:\nexisting: %q\nmissing:  %q",
+			existingResp.Body.String(), missingResp.Body.String())
+	}
+
+	// The page must be the descriptive one, not a raw generic error. Our test
+	// error.html renders "error 404"; the unavailable page must not look like it.
+	body := existingResp.Body.String()
+	if !strings.Contains(body, "isn't available") {
+		t.Errorf("expected descriptive copy in body, got: %q", body)
+	}
+	if strings.Contains(body, "error 404") {
+		t.Errorf("inaccessible profile served the raw generic error page: %q", body)
+	}
+
+	// The identity must also hold for a logged-in, non-connected viewer: the
+	// same person probing two usernames must not be able to tell them apart.
+	loggedInViewer := &middleware.User{ID: 999999, Username: "snoop", DisplayName: "Snoop", Verified: true}
+	existingForViewer := probeProfile(h, "mona", loggedInViewer)
+	missingForViewer := probeProfile(h, missingUsername, loggedInViewer)
+	if existingForViewer.Code != missingForViewer.Code ||
+		existingForViewer.Body.String() != missingForViewer.Body.String() {
+		t.Fatalf("logged-in viewer can distinguish existing from missing account:\n"+
+			"existing: %d %q\nmissing:  %d %q",
+			existingForViewer.Code, existingForViewer.Body.String(),
+			missingForViewer.Code, missingForViewer.Body.String())
 	}
 }
 

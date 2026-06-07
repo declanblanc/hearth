@@ -221,7 +221,11 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
 	p, err := h.Svc.GetByUsername(r.Context(), username)
 	if errors.Is(err, ErrNotFound) {
-		h.Renderer.Error(w, http.StatusNotFound)
+		// No such account. Serve the same descriptive page as the
+		// "not connected" branch below so the two cases are byte-for-byte
+		// identical — otherwise probing /{username} would leak whether an
+		// account exists (CLAUDE.md §1).
+		h.renderProfileUnavailable(w, r)
 		return
 	}
 	if err != nil {
@@ -240,8 +244,9 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !owner && !connected {
-		// Privacy by 404 for anyone not connected to this user.
-		h.Renderer.Error(w, http.StatusNotFound)
+		// Privacy by 404 for anyone not connected to this user. Identical
+		// output to the "no such account" branch above keeps existence hidden.
+		h.renderProfileUnavailable(w, r)
 		return
 	}
 
@@ -273,6 +278,21 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		"PhotoURL":  h.photoURL(p.PhotoKey),
 		"PostError": postError(r.URL.Query().Get("post_error")),
 	}))
+}
+
+// renderProfileUnavailable serves the descriptive "this profile isn't
+// available" page with a 404 status. Both inaccessible cases — the username has
+// no account, and the username exists but the viewer isn't connected — funnel
+// through this single helper so their responses are byte-for-byte identical.
+// That identity is the privacy property: it stops anyone from probing
+// /{username} to learn whether an account exists (CLAUDE.md §1).
+//
+// The page data deliberately depends only on the viewer (for the nav/footer
+// chrome), never on the requested profile, so nothing about the target account
+// can leak into the rendered bytes.
+func (h *Handlers) renderProfileUnavailable(w http.ResponseWriter, r *http.Request) {
+	viewer := middleware.UserFrom(r.Context())
+	h.Renderer.Status(w, http.StatusNotFound, "profile_unavailable.html", render.Page(viewer, nil))
 }
 
 func (h *Handlers) photoURL(key string) string {

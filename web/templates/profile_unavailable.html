@@ -1,0 +1,22 @@
+{{define "profile_unavailable.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Profile unavailable — Hearth{{end}}
+{{define "content"}}
+{{/*
+  This page is served identically for two distinct situations: a profile that
+  exists but isn't shared with the viewer, and a username with no account at
+  all. Keeping the copy generic — and never referencing the requested username
+  or any account detail — is what makes those two cases indistinguishable, so a
+  probe of /{username} can't be used to enumerate who is or isn't on Hearth
+  (CLAUDE.md rule #1: non-existence is part of the privacy model).
+*/}}
+<h1>This profile isn't available</h1>
+<p>
+  Hearth profiles are private. You can only see someone's profile once you're
+  connected with them, so there's nothing to show here.
+</p>
+<p>
+  If you know this person, ask them for an invite link — that's the only way to
+  connect on Hearth.
+</p>
+{{if .User}}<p><a href="/">Back to your feed</a></p>{{else}}<p><a href="/login">Log in</a></p>{{end}}
+{{end}}
