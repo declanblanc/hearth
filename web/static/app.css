@@ -519,6 +519,35 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   transform: scale(1.08);
 }
 
+/* Upload progress, shown by post-images.js between clicking Post and the page
+   navigating to the result. A thin track with an ember fill plus a status word. */
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.9rem;
+}
+.upload-progress-track {
+  flex: 1;
+  height: 0.5rem;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.upload-progress-bar {
+  width: 0;
+  height: 100%;
+  background: var(--ember);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.upload-progress-label {
+  flex-shrink: 0;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
 /* ---- Feed & posts -------------------------------------------------------- */
 .feed-group { margin-top: 2.25rem; }
 .group-label {

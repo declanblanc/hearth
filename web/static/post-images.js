@@ -1,19 +1,27 @@
-// post-images.js — thumbnail previews for the compose image picker. Pure
-// progressive enhancement: without this script the plain <input type="file">
-// still selects and submits the images; the only thing lost is the preview.
+// post-images.js — compose-box enhancements for creating a post:
 //
-// Wiring (see profile_view.html): a container carries data-image-preview with
-// the file <input> somewhere inside it and an empty [data-preview-list] element
-// where thumbnails are rendered. Each thumbnail has a remove button; removing
-// one rebuilds the input's FileList (via DataTransfer) so the preview and the
-// files that actually POST stay in sync.
+//   1. Thumbnail previews of the images chosen in the file picker, each with a
+//      remove button that keeps the input's FileList in sync.
+//   2. An upload progress indicator shown after the user clicks "Post", so a
+//      large/slow upload doesn't make the page look frozen.
+//
+// Both are pure progressive enhancement. Without this script the plain
+// <input type="file"> still selects images and the form still submits normally;
+// the only things lost are the preview thumbnails and the progress bar.
+//
+// Wiring (see profile_view.html): the <form> carries data-image-preview and
+// contains a file <input>, an empty [data-preview-list] for thumbnails, and a
+// hidden [data-upload-progress] block (with [data-upload-bar] and
+// [data-upload-label]) for the progress UI.
 
 (function () {
   "use strict";
 
-  function setupPreview(root) {
-    var fileInput = root.querySelector('input[type="file"]');
-    var list = root.querySelector("[data-preview-list]");
+  // ---- thumbnail previews -------------------------------------------------
+
+  function setupPreview(form) {
+    var fileInput = form.querySelector('input[type="file"]');
+    var list = form.querySelector("[data-preview-list]");
     if (!fileInput || !list) {
       return; // markup not as expected — leave the plain input in place.
     }
@@ -84,5 +92,104 @@
     fileInput.addEventListener("change", render);
   }
 
-  document.querySelectorAll("[data-image-preview]").forEach(setupPreview);
+  // ---- upload progress on submit ------------------------------------------
+
+  function setupSubmit(form) {
+    // If the browser can't do an XHR upload with progress events, leave the
+    // native submit alone — the post still works, just without a progress bar.
+    if (!window.FormData || !window.XMLHttpRequest || !new XMLHttpRequest().upload) {
+      return;
+    }
+
+    var button = form.querySelector('button[type="submit"]') || form.querySelector("button");
+    var progress = form.querySelector("[data-upload-progress]");
+    var bar = form.querySelector("[data-upload-bar]");
+    var label = form.querySelector("[data-upload-label]");
+    var buttonLabel = button ? button.textContent : "";
+    var submitting = false;
+
+    function setLabel(text) {
+      if (label) label.textContent = text;
+    }
+
+    function setPercent(percent) {
+      if (bar) bar.style.width = percent + "%";
+      if (progress) progress.setAttribute("aria-valuenow", String(percent));
+    }
+
+    function showProgress() {
+      if (progress) {
+        progress.hidden = false;
+        progress.setAttribute("role", "progressbar");
+        progress.setAttribute("aria-valuemin", "0");
+        progress.setAttribute("aria-valuemax", "100");
+      }
+      setPercent(0);
+      setLabel("Uploading…");
+    }
+
+    // Restore the form to its idle state so the user can retry after a failure.
+    function reset() {
+      submitting = false;
+      if (button) {
+        button.disabled = false;
+        button.textContent = buttonLabel;
+      }
+      if (progress) progress.hidden = true;
+    }
+
+    form.addEventListener("submit", function (event) {
+      if (submitting) {
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      submitting = true;
+
+      // Where to land once the server responds. The server replies with a 303
+      // redirect (to the profile, or back to it with ?post_error=…); XHR follows
+      // it transparently, and xhr.responseURL is the final landing page. If the
+      // browser doesn't expose responseURL, fall back to the current path — the
+      // compose box only ever appears on the author's own profile.
+      var fallbackURL = window.location.pathname;
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Posting…";
+      }
+      showProgress();
+
+      var xhr = new XMLHttpRequest();
+      xhr.open(form.method || "post", form.action, true);
+
+      xhr.upload.addEventListener("progress", function (e) {
+        if (!e.lengthComputable) {
+          return; // size unknown — leave the bar at its indeterminate start.
+        }
+        var percent = Math.round((e.loaded / e.total) * 100);
+        setPercent(percent);
+        // Once the bytes are all sent, the server still has to store and process
+        // the images, so reflect that the work isn't quite done.
+        setLabel(percent >= 100 ? "Processing…" : "Uploading… " + percent + "%");
+      });
+
+      xhr.addEventListener("load", function () {
+        window.location.href = xhr.responseURL || fallbackURL;
+      });
+
+      xhr.addEventListener("error", function () {
+        setLabel("Upload failed — please try again.");
+        reset();
+      });
+
+      xhr.addEventListener("abort", reset);
+
+      xhr.send(new FormData(form));
+    });
+  }
+
+  document.querySelectorAll("[data-image-preview]").forEach(function (form) {
+    setupPreview(form);
+    setupSubmit(form);
+  });
 })();
