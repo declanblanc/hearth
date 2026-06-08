@@ -85,18 +85,22 @@
   function show() {
     imageEl.src = gallery[index];
     var multi = gallery.length > 1;
-    prevBtn.hidden = !multi;
-    nextBtn.hidden = !multi;
+    // Only offer an arrow when there's actually a photo in that direction: none
+    // for a single photo, right-only on the first, left-only on the last.
+    prevBtn.hidden = index === 0;
+    nextBtn.hidden = index === gallery.length - 1;
     counterEl.hidden = !multi;
     if (multi) {
       counterEl.textContent = index + 1 + " / " + gallery.length;
     }
   }
 
-  // Move through the gallery, wrapping around at the ends.
+  // Move through the gallery. The ends are hard stops — no wrap-around — to match
+  // the arrows, which are hidden when there's nowhere to go in that direction.
   function step(delta) {
-    if (gallery.length < 2) return;
-    index = (index + delta + gallery.length) % gallery.length;
+    var next = index + delta;
+    if (next < 0 || next >= gallery.length) return;
+    index = next;
     show();
   }
 
