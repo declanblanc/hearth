@@ -23,7 +23,7 @@
 <section class="profile-posts">
   {{if .Posts}}
     {{range .Posts}}
-      <article class="post">
+      <article class="post" id="post-{{.ID}}">
         <header class="post-meta">
           <span class="muted"><time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
         </header>
