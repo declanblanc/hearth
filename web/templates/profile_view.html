@@ -25,7 +25,7 @@
     {{range .Posts}}
       <article class="post">
         <header class="post-meta">
-          <span class="muted"><time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
+          <span class="muted"><time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
         </header>
         {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
         {{template "postmedia" .}}

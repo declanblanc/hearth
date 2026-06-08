@@ -128,12 +128,27 @@ func (r *Renderer) Error(w http.ResponseWriter, status int) {
 func funcMap() template.FuncMap {
 	return template.FuncMap{
 		"safe": func(s string) template.HTML { return template.HTML(s) }, //nolint:gosec
-		// datetime renders a timestamp for display, e.g. "Jan 2, 2006, 3:04 PM".
+		// datetime renders a human-readable fallback for a timestamp, e.g.
+		// "Jan 2, 2006, 3:04 PM UTC". Timestamps are stored in UTC, so we
+		// format in UTC and label it as such — this is the text shown when the
+		// client-side localtime.js enhancement does not run. When it does run,
+		// this text is replaced with the value converted to the viewer's local
+		// timezone (see web/static/localtime.js).
 		"datetime": func(t time.Time) string {
 			if t.IsZero() {
 				return ""
 			}
-			return t.Format("Jan 2, 2006, 3:04 PM")
+			return t.UTC().Format("Jan 2, 2006, 3:04 PM") + " UTC"
+		},
+		// isodatetime renders a machine-readable ISO-8601 timestamp in UTC,
+		// suitable for a <time datetime="..."> attribute. The trailing "Z"
+		// marks it as UTC so the browser (and localtime.js) can parse and
+		// convert it to the viewer's local timezone unambiguously.
+		"isodatetime": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.UTC().Format(time.RFC3339)
 		},
 	}
 }
