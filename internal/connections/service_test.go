@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -102,7 +103,7 @@ func TestCreateInvite_AndList(t *testing.T) {
 	if len(invites) != 1 || invites[0].Token != token {
 		t.Fatalf("expected the created invite in the list")
 	}
-	if invites[0].Consumed || invites[0].Expired {
+	if invites[0].Exhausted || invites[0].Expired {
 		t.Error("a fresh invite should be active")
 	}
 }
@@ -208,21 +209,22 @@ func TestResolve_ExpiredAndConsumed(t *testing.T) {
 		t.Errorf("expired invite should be invalid, got %d", r.State)
 	}
 
-	// Consumed invite.
-	consumedTok := randToken(t)
+	// Exhausted invite: accept_count has reached max_uses, so the link is spent
+	// even though it has not expired (issue #28).
+	exhaustedTok := randToken(t)
 	if _, err := d.Exec(
-		`INSERT INTO invites (sender_id, token, created_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?)`,
-		sender, consumedTok, time.Now(), time.Now().Add(InviteLifetime), time.Now()); err != nil {
+		`INSERT INTO invites (sender_id, token, created_at, expires_at, accept_count, max_uses) VALUES (?, ?, ?, ?, ?, ?)`,
+		sender, exhaustedTok, time.Now(), time.Now().Add(InviteLifetime), InviteMaxUses, InviteMaxUses); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := svc.Resolve(ctx, consumedTok, 0); r.State != StateInvalid {
-		t.Errorf("consumed invite should be invalid, got %d", r.State)
+	if r, _ := svc.Resolve(ctx, exhaustedTok, 0); r.State != StateInvalid {
+		t.Errorf("exhausted invite should be invalid, got %d", r.State)
 	}
 }
 
 // ---- request / accept / deny ----
 
-func TestCreateRequest_ConsumesInviteAndRecordsPending(t *testing.T) {
+func TestCreateRequest_RecordsPending(t *testing.T) {
 	d := newTestDB(t)
 	svc := newSvc(d)
 	ctx := context.Background()
@@ -234,9 +236,13 @@ func TestCreateRequest_ConsumesInviteAndRecordsPending(t *testing.T) {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
-	// Invite is now consumed — a second request fails.
-	if err := svc.CreateRequest(ctx, token, requester); !errors.Is(err, ErrInviteInvalid) {
-		t.Errorf("second request on a consumed invite should fail, got %v", err)
+	// A repeat accept by the SAME requester is idempotent: it succeeds without
+	// burning another of the link's uses or creating a duplicate pending row.
+	if err := svc.CreateRequest(ctx, token, requester); err != nil {
+		t.Errorf("repeat accept by same requester should be a no-op, got %v", err)
+	}
+	if reqs, _ := svc.ListPendingRequests(ctx, sender); len(reqs) != 1 {
+		t.Errorf("repeat accept should not duplicate the pending request, got %d", len(reqs))
 	}
 
 	// No connection_request notification is created: the pending connection
@@ -263,6 +269,65 @@ func TestCreateRequest_ConsumesInviteAndRecordsPending(t *testing.T) {
 	}
 	if dot, _ := svc.HasPendingRequests(ctx, requester); dot {
 		t.Error("HasPendingRequests(requester) = true, want false")
+	}
+}
+
+// TestCreateRequest_MultiUseUpToCap proves a single invite link can be accepted
+// by InviteMaxUses distinct people, and the (cap+1)th is rejected as exhausted
+// (issue #28). The cap enforced here is the real backend cap (10), independent
+// of the lower figure shown in the UI (InviteShownUses).
+func TestCreateRequest_MultiUseUpToCap(t *testing.T) {
+	d := newTestDB(t)
+	svc := newSvc(d)
+	ctx := context.Background()
+	sender := seedUser(t, d, "sender")
+	token, _ := svc.CreateInvite(ctx, sender)
+
+	// InviteMaxUses distinct requesters can each accept the same link.
+	for i := 0; i < InviteMaxUses; i++ {
+		requester := seedUser(t, d, fmt.Sprintf("requester%d", i))
+		if err := svc.CreateRequest(ctx, token, requester); err != nil {
+			t.Fatalf("accept %d/%d should succeed: %v", i+1, InviteMaxUses, err)
+		}
+	}
+
+	// All slots are now claimed; the next accept must be rejected.
+	overflow := seedUser(t, d, "overflow")
+	if err := svc.CreateRequest(ctx, token, overflow); !errors.Is(err, ErrInviteInvalid) {
+		t.Errorf("accept %d (past the cap) should fail with ErrInviteInvalid, got %v", InviteMaxUses+1, err)
+	}
+
+	// The exhausted link now resolves as invalid for a fresh viewer too.
+	if r, _ := svc.Resolve(ctx, token, 0); r.State != StateInvalid {
+		t.Errorf("exhausted link should resolve StateInvalid, got %d", r.State)
+	}
+
+	// Exactly InviteMaxUses pending requests were recorded — no more.
+	reqs, _ := svc.ListPendingRequests(ctx, sender)
+	if len(reqs) != InviteMaxUses {
+		t.Errorf("want %d pending requests, got %d", InviteMaxUses, len(reqs))
+	}
+}
+
+// TestCreateRequest_ExpiredLinkRejected proves the 72-hour expiry still rejects
+// accepts independently of the new multi-use capacity (issue #28).
+func TestCreateRequest_ExpiredLinkRejected(t *testing.T) {
+	d := newTestDB(t)
+	svc := newSvc(d)
+	ctx := context.Background()
+	sender := seedUser(t, d, "sender")
+	requester := seedUser(t, d, "requester")
+
+	// A fresh (unused) link whose expiry is already in the past.
+	past := time.Now().Add(-time.Hour)
+	expiredTok := randToken(t)
+	if _, err := d.Exec(
+		`INSERT INTO invites (sender_id, token, created_at, expires_at, accept_count, max_uses) VALUES (?, ?, ?, ?, 0, ?)`,
+		sender, expiredTok, past.Add(-InviteLifetime), past, InviteMaxUses); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CreateRequest(ctx, expiredTok, requester); !errors.Is(err, ErrInviteInvalid) {
+		t.Errorf("accept on an expired link should fail, got %v", err)
 	}
 }
 

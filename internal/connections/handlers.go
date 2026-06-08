@@ -165,11 +165,13 @@ func (h *Handlers) createInvite(w http.ResponseWriter, r *http.Request) {
 	h.renderInviteLink(w, r, u, http.StatusOK, h.Svc.inviteURL(token), "")
 }
 
-// renderInviteLink shows a freshly minted, single-use invite link. The
-// connections-page modal (invite-modal.js) requests just the link fragment via
-// X-Fragment; a plain form POST with no JavaScript instead gets the standalone
-// page, so the flow still works without scripts. Invites are one-time use, so
-// there is nothing to list — each generation just hands back the new link.
+// renderInviteLink shows a freshly minted invite link. The connections-page
+// modal (invite-modal.js) requests just the link fragment via X-Fragment; a
+// plain form POST with no JavaScript instead gets the standalone page, so the
+// flow still works without scripts. An invite link is multi-use (up to
+// InviteMaxUses accepts, issue #28), but we deliberately surface no live
+// used/remaining counter (CLAUDE.md §2) — each generation just hands back the
+// new link.
 func (h *Handlers) renderInviteLink(w http.ResponseWriter, r *http.Request, u *middleware.User, status int, url, errMsg string) {
 	if r.Header.Get("X-Fragment") == "1" {
 		h.Renderer.Status(w, status, "invite_link_fragment.html", render.M{"URL": url, "Error": errMsg})

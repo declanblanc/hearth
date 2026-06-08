@@ -20,12 +20,26 @@ const (
 	InviteWindow   = 7 * 24 * time.Hour
 	InviteLimit    = 20
 
+	// InviteMaxUses is the real, enforced number of times a single invite link
+	// can be accepted before it is exhausted (issue #28). Expiry (InviteLifetime)
+	// is independent and unchanged.
+	//
+	// DELIBERATE DISCREPANCY: the product UI tells users a link is good for 5
+	// people (see InviteShownUses and the invite templates), but the backend
+	// allows 10. This 5-shown / 10-enforced gap is intentional per issue #28 —
+	// do not "fix" it to make the two numbers match.
+	InviteMaxUses = 10
+	// InviteShownUses is the capacity figure shown to users in the UI. It is
+	// deliberately lower than InviteMaxUses (see above). It is static copy, not a
+	// live used/remaining counter — the product shows no counts (CLAUDE.md §2).
+	InviteShownUses = 5
+
 	ConnectWindow = 7 * 24 * time.Hour
 	ConnectLimit  = 10
 )
 
 var (
-	ErrInviteInvalid    = errors.New("connections: invite not found, expired, or already used")
+	ErrInviteInvalid    = errors.New("connections: invite not found, expired, or exhausted")
 	ErrSelfConnect      = errors.New("connections: cannot connect to yourself")
 	ErrAlreadyConnected = errors.New("connections: already connected")
 	ErrRequestNotFound  = errors.New("connections: request not found")
@@ -150,7 +164,10 @@ type Invite struct {
 	Token     string
 	CreatedAt time.Time
 	ExpiresAt time.Time
-	Consumed  bool
+	// Exhausted reports that the link has been accepted its full max_uses times
+	// and can no longer be used. (Formerly "consumed" under the single-use model;
+	// now an invite supports up to InviteMaxUses accepts — issue #28.)
+	Exhausted bool
 	Expired   bool
 }
 
@@ -184,8 +201,8 @@ func (s *Service) CreateInvite(ctx context.Context, senderID int64) (string, err
 			return &RateLimitError{Kind: "invite", LiftAt: oldest.Add(InviteWindow)}
 		}
 		_, err := conn.ExecContext(ctx,
-			`INSERT INTO invites (sender_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)`,
-			senderID, token, now, now.Add(InviteLifetime))
+			`INSERT INTO invites (sender_id, token, created_at, expires_at, max_uses) VALUES (?, ?, ?, ?, ?)`,
+			senderID, token, now, now.Add(InviteLifetime), InviteMaxUses)
 		return err
 	})
 	if err != nil {
@@ -198,7 +215,7 @@ func (s *Service) CreateInvite(ctx context.Context, senderID int64) (string, err
 // consumed/expired for display.
 func (s *Service) ListInvites(ctx context.Context, senderID int64) ([]Invite, error) {
 	rows, err := s.DB.QueryContext(ctx,
-		`SELECT token, created_at, expires_at, consumed_at
+		`SELECT token, created_at, expires_at, accept_count, max_uses
 		   FROM invites WHERE sender_id = ? ORDER BY created_at DESC`, senderID)
 	if err != nil {
 		return nil, err
@@ -208,14 +225,14 @@ func (s *Service) ListInvites(ctx context.Context, senderID int64) ([]Invite, er
 	var invites []Invite
 	for rows.Next() {
 		var (
-			inv      Invite
-			consumed sql.NullTime
+			inv                  Invite
+			acceptCount, maxUses int
 		)
-		if err := rows.Scan(&inv.Token, &inv.CreatedAt, &inv.ExpiresAt, &consumed); err != nil {
+		if err := rows.Scan(&inv.Token, &inv.CreatedAt, &inv.ExpiresAt, &acceptCount, &maxUses); err != nil {
 			return nil, err
 		}
-		inv.Consumed = consumed.Valid
-		inv.Expired = !inv.Consumed && now.After(inv.ExpiresAt)
+		inv.Exhausted = acceptCount >= maxUses
+		inv.Expired = !inv.Exhausted && now.After(inv.ExpiresAt)
 		invites = append(invites, inv)
 	}
 	return invites, rows.Err()
@@ -226,7 +243,8 @@ func (s *Service) ListInvites(ctx context.Context, senderID int64) ([]Invite, er
 type InviteState int
 
 const (
-	// StateInvalid means not found, expired, consumed, or the sender is gone.
+	// StateInvalid means not found, expired, exhausted (all uses claimed), or the
+	// sender is gone.
 	StateInvalid InviteState = iota
 	StateSelf
 	StateAlreadyConnected
@@ -246,20 +264,20 @@ type Resolution struct {
 // 0 for anonymous visitors. The result maps directly onto the §4.2 state table.
 func (s *Service) Resolve(ctx context.Context, token string, viewerID int64) (Resolution, error) {
 	var (
-		res         Resolution
-		expiresAt   time.Time
-		consumed    sql.NullTime
-		first, last string
-		photo       sql.NullString
-		deletedAt   sql.NullTime
+		res                  Resolution
+		expiresAt            time.Time
+		acceptCount, maxUses int
+		first, last          string
+		photo                sql.NullString
+		deletedAt            sql.NullTime
 	)
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT i.id, i.sender_id, i.expires_at, i.consumed_at,
+		SELECT i.id, i.sender_id, i.expires_at, i.accept_count, i.max_uses,
 		       u.username, u.first_name, u.last_name, u.photo_key, u.deleted_at
 		  FROM invites i
 		  JOIN users u ON u.id = i.sender_id
 		 WHERE i.token = ?`, token,
-	).Scan(&res.InviteID, &res.SenderID, &expiresAt, &consumed,
+	).Scan(&res.InviteID, &res.SenderID, &expiresAt, &acceptCount, &maxUses,
 		&res.SenderUsername, &first, &last, &photo, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Resolution{State: StateInvalid}, nil
@@ -267,7 +285,9 @@ func (s *Service) Resolve(ctx context.Context, token string, viewerID int64) (Re
 	if err != nil {
 		return Resolution{}, err
 	}
-	if consumed.Valid || deletedAt.Valid || s.Now().After(expiresAt) {
+	// Invalid if the sender is gone, the link has expired, or it has been
+	// accepted its full max_uses times (exhausted). Multi-use per issue #28.
+	if deletedAt.Valid || s.Now().After(expiresAt) || acceptCount >= maxUses {
 		return Resolution{State: StateInvalid}, nil
 	}
 	res.SenderName = fullName(first, last)
@@ -295,11 +315,12 @@ func (s *Service) Resolve(ctx context.Context, token string, viewerID int64) (Re
 
 // ---- connection requests ----
 
-// CreateRequest consumes the invite and records a pending connection request
-// from requesterID to the invite's sender. The invite is consumed here (not at
-// link-open time, CLAUDE.md §5). Returns ErrInviteInvalid if the invite was
-// already used or is otherwise unusable, and ErrSelfConnect /
-// ErrAlreadyConnected for those states.
+// CreateRequest claims one use of the invite and records a pending connection
+// request from requesterID to the invite's sender. A use is claimed here (not at
+// link-open time, CLAUDE.md §5). An invite link can be accepted up to
+// InviteMaxUses times before it is exhausted (issue #28). Returns
+// ErrInviteInvalid if the invite is exhausted, expired, or otherwise unusable,
+// and ErrSelfConnect / ErrAlreadyConnected for those states.
 //
 // No notification row is created for the sender: a pending connection already
 // surfaces at the top of the sender's connections page and as a dot on the
@@ -320,10 +341,31 @@ func (s *Service) CreateRequest(ctx context.Context, token string, requesterID i
 	}
 
 	return db.WithImmediate(ctx, s.DB, func(conn *sql.Conn) error {
-		// Consume the invite atomically; 0 rows means someone beat us to it.
+		// Guard against the same person accepting the same link twice (e.g. a
+		// double-submit). That would otherwise burn two of the link's slots and
+		// create two pending rows for one requester. Idempotent: a repeat accept
+		// succeeds silently without consuming another slot.
+		var existing int
+		err := conn.QueryRowContext(ctx,
+			`SELECT 1 FROM connection_requests
+			  WHERE invite_id = ? AND requester_id = ? AND status = 'pending' LIMIT 1`,
+			res.InviteID, requesterID).Scan(&existing)
+		if err == nil {
+			return nil // already accepted by this requester; nothing to do
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		// Claim one of the link's uses atomically. accept_count < max_uses gates
+		// the multi-use cap inside BEGIN IMMEDIATE so concurrent accepts can never
+		// push the link past its real cap of InviteMaxUses (CLAUDE.md §7). 0 rows
+		// affected means the link is exhausted (or someone just took the last
+		// slot).
 		r, err := conn.ExecContext(ctx,
-			`UPDATE invites SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL`,
-			s.Now(), res.InviteID)
+			`UPDATE invites SET accept_count = accept_count + 1
+			  WHERE id = ? AND accept_count < max_uses`,
+			res.InviteID)
 		if err != nil {
 			return err
 		}

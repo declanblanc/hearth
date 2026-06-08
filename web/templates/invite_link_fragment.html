@@ -2,7 +2,11 @@
      by invite-modal.js. The standalone invite_created.html serves the same
      content as a full page for the no-JS fallback. */}}
 {{define "invite_link_fragment.html"}}{{if .Error}}<div class="banner error">{{.Error}}</div>{{else}}<h2 class="invite-modal-title">Your invite link</h2>
-<p class="invite-single-use"><strong>This invite link is for one person only.</strong> Send it to just the person you want to connect with — it works a single time and expires after 72 hours.</p>
+{{/* Capacity copy is intentionally static "up to 5 people" — the product shows
+     no live used/remaining counts (CLAUDE.md §2). NOTE: the backend actually
+     allows 10 accepts (InviteMaxUses); we deliberately tell users 5
+     (InviteShownUses) per issue #28. Do not "fix" this to match the backend. */}}
+<p class="invite-single-use"><strong>This invite link can invite up to 5 people.</strong> Share it with the people you'd like to connect with — it stays active for 72 hours.</p>
 <div class="invite-copy-row">
   <input class="invite-url" type="text" readonly value="{{.URL}}" data-invite-url onclick="this.select()">
   <button type="button" class="button-secondary" data-invite-copy>Copy</button>
