@@ -65,6 +65,132 @@ func TestCreateAndList(t *testing.T) {
 	}
 }
 
+// seedPost inserts a bare post row authored by the given user and returns its
+// ID. Post-targeted notifications reference a real post so the FK and the read
+// path both have something to resolve.
+func seedPost(t *testing.T, d *sql.DB, authorID int64) int64 {
+	t.Helper()
+	res, err := d.Exec(
+		`INSERT INTO posts (author_id, content, status) VALUES (?, 'hello', 'active')`,
+		authorID)
+	if err != nil {
+		t.Fatalf("seed post: %v", err)
+	}
+	id, _ := res.LastInsertId()
+	return id
+}
+
+// TestList_CarriesPostAndCommentIDs guards the issue #22 regression: List must
+// surface post_id/comment_id so the template can deep-link to the liked or
+// commented-on post. Before the fix these columns were never selected, leaving
+// every post-targeted notification without a link.
+func TestList_CarriesPostAndCommentIDs(t *testing.T) {
+	d := newTestDB(t)
+	svc := New(d)
+	ctx := context.Background()
+
+	author := seedUser(t, d, "author")
+	actor := seedUser(t, d, "commenter")
+	postID := seedPost(t, d, author)
+
+	if err := svc.Create(ctx, nil, Params{
+		UserID:    author,
+		Type:      TypeCommentOnPost,
+		ActorID:   actor,
+		PostID:    postID,
+		CommentID: 99,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	items, err := svc.List(ctx, author)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("want 1 notification, got %d", len(items))
+	}
+	got := items[0]
+	if got.Type != TypeCommentOnPost {
+		t.Errorf("type: got %q, want %q", got.Type, TypeCommentOnPost)
+	}
+	if got.PostID != postID {
+		t.Errorf("PostID: got %d, want %d", got.PostID, postID)
+	}
+	if got.CommentID != 99 {
+		t.Errorf("CommentID: got %d, want 99", got.CommentID)
+	}
+	if got.ActorUsername != "commenter" {
+		t.Errorf("actor username: got %q", got.ActorUsername)
+	}
+	// The deep link is built from the post author's username, not the
+	// recipient's — they coincide here (comment notifications go to the
+	// author) but the read path must surface it regardless.
+	if got.PostAuthorUsername != "author" {
+		t.Errorf("post author username: got %q, want %q", got.PostAuthorUsername, "author")
+	}
+}
+
+// TestList_ReplyLinksToPostAuthorNotRecipient guards the subtle case behind
+// issue #22: a reply_to_comment notification goes to the parent comment's
+// author, who is NOT the post author. The deep link must still resolve to the
+// post on its real author's profile, so PostAuthorUsername must reflect the
+// post's owner, not the notification recipient.
+func TestList_ReplyLinksToPostAuthorNotRecipient(t *testing.T) {
+	d := newTestDB(t)
+	svc := New(d)
+	ctx := context.Background()
+
+	postAuthor := seedUser(t, d, "postauthor")
+	commenter := seedUser(t, d, "commenter") // recipient of the reply notification
+	replier := seedUser(t, d, "replier")     // actor
+	postID := seedPost(t, d, postAuthor)
+
+	// The reply notification's recipient is the commenter, not the post author.
+	if err := svc.Create(ctx, nil, Params{
+		UserID:    commenter,
+		Type:      TypeReplyToComment,
+		ActorID:   replier,
+		PostID:    postID,
+		CommentID: 5,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	items, err := svc.List(ctx, commenter)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("want 1, got %d", len(items))
+	}
+	if items[0].PostAuthorUsername != "postauthor" {
+		t.Errorf("link must target the post author's profile; got %q, want %q",
+			items[0].PostAuthorUsername, "postauthor")
+	}
+}
+
+// TestList_NoTargetLeavesIDsZero confirms connection notifications (which carry
+// no post) report zero IDs, so the template renders no broken link.
+func TestList_NoTargetLeavesIDsZero(t *testing.T) {
+	d := newTestDB(t)
+	svc := New(d)
+	ctx := context.Background()
+	recipient := seedUser(t, d, "r")
+
+	if err := svc.Create(ctx, nil, Params{UserID: recipient, Type: TypeConnectionAccepted}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	items, _ := svc.List(ctx, recipient)
+	if len(items) != 1 {
+		t.Fatalf("want 1, got %d", len(items))
+	}
+	if items[0].PostID != 0 || items[0].CommentID != 0 {
+		t.Errorf("connection notification should have zero IDs, got post=%d comment=%d",
+			items[0].PostID, items[0].CommentID)
+	}
+}
+
 func TestList_NewestFirst(t *testing.T) {
 	d := newTestDB(t)
 	svc := New(d)

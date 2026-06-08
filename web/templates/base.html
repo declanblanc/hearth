@@ -67,7 +67,7 @@
 
 {{/* postcard renders a single post. Expects a posts.Post as its data. */}}
 {{define "postcard"}}
-<article class="post">
+<article class="post" id="post-{{.ID}}">
   <header class="post-meta">
     <a href="/u/{{.AuthorUsername}}" class="post-author">{{.AuthorName}}</a>
     <span class="muted"> · <time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
