@@ -5,7 +5,10 @@
 {{if .Error}}
   <div class="banner error">{{.Error}}</div>
 {{else}}
-  <p class="invite-single-use"><strong>This invite link is for one person only.</strong> Send it to just the person you want to connect with — it works a single time and expires after 72 hours.</p>
+  {{/* Static "up to 5 people" copy — no live used/remaining counts (CLAUDE.md
+       §2). The backend actually allows 10 accepts (InviteMaxUses); we tell users
+       5 (InviteShownUses) on purpose per issue #28. Do not "fix" to match. */}}
+  <p class="invite-single-use"><strong>This invite link can invite up to 5 people.</strong> Share it with the people you'd like to connect with — it stays active for 72 hours.</p>
   <div class="invite-copy-row">
     <input class="invite-url" type="text" readonly value="{{.URL}}"
            onclick="this.select();document.execCommand('copy')">

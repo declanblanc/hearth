@@ -23,6 +23,7 @@
 <script src="/static/htmx.min.js" defer></script>
 <script src="/static/theme-toggle.js" defer></script>
 <script src="/static/post-lightbox.js" defer></script>
+<script src="/static/localtime.js" defer></script>
 </head>
 <body>
 <header class="site-header">
@@ -67,10 +68,10 @@
 
 {{/* postcard renders a single post. Expects a posts.Post as its data. */}}
 {{define "postcard"}}
-<article class="post">
+<article class="post" id="post-{{.ID}}">
   <header class="post-meta">
     <a href="/u/{{.AuthorUsername}}" class="post-author">{{.AuthorName}}</a>
-    <span class="muted"> · <time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
+    <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </header>
   {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
   {{template "postmedia" .}}
@@ -220,7 +221,7 @@
     {{else}}
       <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
     {{end}}
-    <span class="muted"> · <time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
+    <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </div>
   {{if not .Deleted}}<div class="comment-content">{{.Content}}</div>{{end}}
   {{if not .Deleted}}

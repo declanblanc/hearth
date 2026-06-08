@@ -67,7 +67,8 @@
   The invite-generation affordance lives outside the connections list so it is
   always reachable. Gating it on the empty state (the old behaviour) left users
   who already had a connection with no way to invite anyone else — see issue #4.
-  Invites are single-use, so there's nothing to list: the form mints one link
+  Invite links are multi-use (issue #28) but we surface no used/remaining count
+  (CLAUDE.md §2), so there's nothing to list: the form mints a link
   (POST /invites) and invite-modal.js shows it in the dialog below with a copy
   button. Without JavaScript the same POST renders invite_created.html instead.
 */}}

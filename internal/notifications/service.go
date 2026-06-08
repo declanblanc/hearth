@@ -77,23 +77,37 @@ type Execer interface {
 }
 
 // Item is a notification prepared for rendering, with the actor's display
-// fields joined in.
+// fields joined in. PostID and CommentID are zero when the notification type
+// has no associated target (e.g. connection events); the template uses them to
+// build a deep link to the post that was liked or commented on.
+//
+// PostAuthorUsername is the username of the post's author, joined in so the
+// template can deep-link to where the post actually lives (/u/{author}#post-N).
+// This must come from the post — not the notification recipient — because for
+// reply_to_comment the recipient is the parent comment's author, who is not
+// necessarily the post author.
 type Item struct {
-	ID            int64
-	Type          string
-	ActorUsername string
-	ActorName     string
-	CreatedAt     time.Time
-	Read          bool
+	ID                 int64
+	Type               string
+	ActorUsername      string
+	ActorName          string
+	PostID             int64
+	PostAuthorUsername string
+	CommentID          int64
+	CreatedAt          time.Time
+	Read               bool
 }
 
 // List returns the user's notifications, newest first.
 func (s *Service) List(ctx context.Context, userID int64) ([]Item, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT n.id, n.type, n.created_at, n.read_at,
-		       COALESCE(a.username, ''), COALESCE(a.first_name, ''), COALESCE(a.last_name, '')
+		SELECT n.id, n.type, n.created_at, n.read_at, n.post_id, n.comment_id,
+		       COALESCE(a.username, ''), COALESCE(a.first_name, ''), COALESCE(a.last_name, ''),
+		       COALESCE(pa.username, '')
 		  FROM notifications n
 		  LEFT JOIN users a ON a.id = n.actor_id AND a.deleted_at IS NULL
+		  LEFT JOIN posts p ON p.id = n.post_id
+		  LEFT JOIN users pa ON pa.id = p.author_id AND pa.deleted_at IS NULL
 		 WHERE n.user_id = ?
 		 ORDER BY n.created_at DESC, n.id DESC`, userID)
 	if err != nil {
@@ -106,13 +120,18 @@ func (s *Service) List(ctx context.Context, userID int64) ([]Item, error) {
 		var (
 			it                    Item
 			readAt                sql.NullTime
+			postID, commentID     sql.NullInt64
 			username, first, last string
+			postAuthorUsername    string
 		)
-		if err := rows.Scan(&it.ID, &it.Type, &it.CreatedAt, &readAt, &username, &first, &last); err != nil {
+		if err := rows.Scan(&it.ID, &it.Type, &it.CreatedAt, &readAt, &postID, &commentID, &username, &first, &last, &postAuthorUsername); err != nil {
 			return nil, err
 		}
 		it.ActorUsername = username
 		it.ActorName = fullName(first, last)
+		it.PostID = postID.Int64
+		it.PostAuthorUsername = postAuthorUsername
+		it.CommentID = commentID.Int64
 		it.Read = readAt.Valid
 		items = append(items, it)
 	}
