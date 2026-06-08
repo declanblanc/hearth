@@ -21,7 +21,7 @@
             You have a new notification.
           {{end}}
         </span>
-        <span class="muted notification-time"><time datetime="{{.CreatedAt}}">{{datetime .CreatedAt}}</time></span>
+        <span class="muted notification-time"><time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
       </li>
     {{end}}
   </ul>
