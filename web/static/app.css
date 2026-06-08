@@ -813,6 +813,10 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
    posts that carry several. Built and toggled entirely by the script; absent it
    the photos just render inline. */
 .lightbox-open { overflow: hidden; } /* freeze the page behind the overlay */
+/* The display:flex below would otherwise override the UA [hidden] rule, leaving
+   the overlay on screen after close() sets .hidden — so the × and backdrop
+   appear not to close it. Keep it hidden until the script reveals it. */
+.lightbox[hidden] { display: none; }
 .lightbox {
   position: fixed;
   inset: 0;
@@ -857,6 +861,9 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .lightbox-close:hover,
 .lightbox-nav:hover { background: rgba(255, 253, 248, 0.28); }
+/* As above: display:flex would override the UA [hidden] rule, so a nav arrow the
+   script hides (no photo in that direction) would stay visible. */
+.lightbox-nav[hidden] { display: none; }
 .lightbox-close {
   top: 1rem;
   right: 1rem;
