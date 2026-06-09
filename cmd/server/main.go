@@ -102,7 +102,7 @@ func main() {
 	profileSvc.Media = mediaStore
 
 	// Handlers.
-	authH := auth.NewHandlers(authSvc, r, cfg.CookieSecret, cfg.IsProd())
+	authH := auth.NewHandlers(authSvc, r, cfg.CookieSecret, cfg.IsProd(), mediaStore)
 	notifH := notifications.NewHandlers(notifSvc, r)
 	connH := connections.NewHandlers(connSvc, r, mediaStore, cfg.CookieSecret, cfg.IsProd())
 	postH := posts.NewHandlers(postSvc, r)

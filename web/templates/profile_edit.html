@@ -22,7 +22,7 @@
   </label>
   <div class="avatar-field" data-avatar-crop>
     <span class="field-label">Profile photo</span>
-    {{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="Current profile photo" class="avatar-current">{{end}}
+    {{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="Current profile photo" class="avatar-current">{{else}}{{template "avatarfallback" "avatar-current"}}{{end}}
     <input type="file" name="photo" accept="image/jpeg,image/png,image/webp">
     {{/* The cropper stage is revealed by avatar-crop.js once a file is chosen.
          Without JS it stays hidden and the server center-crops the upload. */}}
