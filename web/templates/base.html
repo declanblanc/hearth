@@ -41,6 +41,12 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
       <path d="M3 6h18M3 12h18M3 18h18"/>
     </svg>
+    {{/* The unread dot surfaces on the closed hamburger so a collapsed menu still
+         signals notifications (issue #39). It mirrors the in-menu Notifications
+         dot via the same .User.UnreadDot condition; CSS hides it on desktop and
+         while the menu is open, where the in-nav dot is already visible. Never a
+         count (CLAUDE.md §2). */}}
+    {{if and .User .User.UnreadDot}}<span class="dot nav-toggle-dot" aria-label="unread notifications"></span>{{end}}
   </button>
   <nav id="site-nav">
     {{if .User}}
@@ -86,7 +92,14 @@
 {{define "postcard"}}
 <article class="post" id="post-{{.ID}}">
   <header class="post-meta">
-    <a href="/u/{{.AuthorUsername}}" class="post-author">{{.AuthorName}}</a>
+    {{/* Author avatar to the left of their name (issue #40). AuthorPhotoURL is a
+         short-lived signed URL minted at render time; when the author has no
+         photo (or no media store is configured) it's empty and we fall back to
+         the shared silhouette, matching the profile page. */}}
+    <a href="/u/{{.AuthorUsername}}" class="post-author">
+      {{if .AuthorPhotoURL}}<img src="{{.AuthorPhotoURL}}" alt="" class="post-avatar">{{else}}{{template "avatarfallback" "post-avatar"}}{{end}}
+      <span class="post-author-name">{{.AuthorName}}</span>
+    </a>
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </header>
   {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}

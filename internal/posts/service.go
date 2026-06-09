@@ -46,6 +46,15 @@ type Post struct {
 	AuthorID       int64
 	AuthorUsername string
 	AuthorName     string
+	// AuthorPhotoKey is the author's profile-photo object key (empty if none).
+	// It is joined in alongside the other author columns so the feed and profile
+	// can render the author's avatar next to their name (issue #40).
+	AuthorPhotoKey string
+	// AuthorPhotoURL is a short-lived signed URL for the author's profile photo,
+	// minted at render time by SignAvatarURLs only after the viewer's access to
+	// the author is confirmed (CLAUDE.md §6). Empty until signed, or when the
+	// author has no photo.
+	AuthorPhotoURL string
 	Content        string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
@@ -172,7 +181,7 @@ func (s *Service) cleanupKeys(ctx context.Context, keys []string) {
 func (s *Service) ListByAuthor(ctx context.Context, authorID int64) ([]Post, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT p.id, p.author_id, u.username, u.first_name, u.last_name,
-		       p.content, p.created_at, p.updated_at
+		       u.photo_key, p.content, p.created_at, p.updated_at
 		  FROM posts p
 		  JOIN users u ON u.id = p.author_id
 		 WHERE p.author_id = ? AND p.status = 'active'
@@ -335,8 +344,31 @@ func mediaKeys(ctx context.Context, sqldb *sql.DB, postID int64) ([]string, erro
 	return keys, rows.Err()
 }
 
+// SignAvatarURLs mints a short-lived signed URL for each post author's profile
+// photo, in place. Like SignMediaURLs, the caller MUST have already confirmed
+// the viewer may see the author(s) — signing is the last render step, never an
+// access check in itself (CLAUDE.md §6). Authors without a photo, and a nil
+// store (dev without R2), leave AuthorPhotoURL empty so the template falls back
+// to the avatar placeholder.
+func SignAvatarURLs(ctx context.Context, store media.Store, ps []Post) error {
+	if store == nil {
+		return nil
+	}
+	for i := range ps {
+		if ps[i].AuthorPhotoKey == "" {
+			continue
+		}
+		url, err := store.PresignGet(ctx, ps[i].AuthorPhotoKey, MediaURLTTL)
+		if err != nil {
+			return err
+		}
+		ps[i].AuthorPhotoURL = url
+	}
+	return nil
+}
+
 // ScanRows reads a posts query result into a slice. The SELECT column order
-// must be: id, author_id, username, first_name, last_name, content,
+// must be: id, author_id, username, first_name, last_name, photo_key, content,
 // created_at, updated_at. Shared with the feed package so the row shape stays
 // consistent across both queries.
 func ScanRows(rows *sql.Rows) ([]Post, error) {
@@ -345,12 +377,14 @@ func ScanRows(rows *sql.Rows) ([]Post, error) {
 		var (
 			p           Post
 			first, last string
+			photoKey    sql.NullString
 		)
 		if err := rows.Scan(&p.ID, &p.AuthorID, &p.AuthorUsername, &first, &last,
-			&p.Content, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			&photoKey, &p.Content, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.AuthorName = fullName(first, last)
+		p.AuthorPhotoKey = photoKey.String
 		out = append(out, p)
 	}
 	return out, rows.Err()

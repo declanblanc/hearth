@@ -268,3 +268,37 @@ func TestDelete_RemovesMediaObjects(t *testing.T) {
 		}
 	}
 }
+
+// TestSignAvatarURLs covers issue #40: signing mints a short-lived URL for each
+// author's photo in place, leaves authors without a photo untouched, and never
+// mutates the underlying key. A nil store is a safe no-op.
+func TestSignAvatarURLs(t *testing.T) {
+	ctx := context.Background()
+	store := media.NewStub()
+
+	ps := []Post{
+		{AuthorPhotoKey: "profile/has-photo.jpg"},
+		{AuthorPhotoKey: ""},
+	}
+	if err := SignAvatarURLs(ctx, store, ps); err != nil {
+		t.Fatalf("SignAvatarURLs: %v", err)
+	}
+	if ps[0].AuthorPhotoURL == "" {
+		t.Error("author with a photo should get a signed avatar URL")
+	}
+	if ps[0].AuthorPhotoKey != "profile/has-photo.jpg" {
+		t.Errorf("signing must not mutate the key, got %q", ps[0].AuthorPhotoKey)
+	}
+	if ps[1].AuthorPhotoURL != "" {
+		t.Errorf("author without a photo should have no URL, got %q", ps[1].AuthorPhotoURL)
+	}
+
+	// A nil store (dev without R2) leaves everything empty rather than erroring.
+	none := []Post{{AuthorPhotoKey: "profile/x.jpg"}}
+	if err := SignAvatarURLs(ctx, nil, none); err != nil {
+		t.Fatalf("SignAvatarURLs(nil store): %v", err)
+	}
+	if none[0].AuthorPhotoURL != "" {
+		t.Error("nil store should leave AuthorPhotoURL empty")
+	}
+}
