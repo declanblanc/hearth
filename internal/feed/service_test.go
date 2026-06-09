@@ -219,6 +219,63 @@ func TestFeed_EmptyWhenNoConnections(t *testing.T) {
 		t.Fatalf("FirstPage: %v", err)
 	}
 	if len(res.New)+len(res.Old) != 0 {
-		t.Error("a user with no connections should have an empty feed")
+		t.Error("a user with no connections and no own posts should have an empty feed")
+	}
+}
+
+// TestFeed_IncludesOwnPosts covers issue #41: the viewer's own posts appear in
+// the home feed even with no connections, while a stranger's posts stay hidden.
+func TestFeed_IncludesOwnPosts(t *testing.T) {
+	d := newTestDB(t)
+	ctx := context.Background()
+	viewer := seedUser(t, d, "viewer")
+	stranger := seedUser(t, d, "stranger")
+
+	now := time.Now()
+	insertPost(t, d, viewer, "my own post", now, "active")
+	insertPost(t, d, stranger, "from stranger", now, "active")
+
+	res, err := newFeed(d).FirstPage(ctx, viewer)
+	if err != nil {
+		t.Fatalf("FirstPage: %v", err)
+	}
+	all := append(res.New, res.Old...)
+	if len(all) != 1 {
+		t.Fatalf("want exactly 1 visible post, got %d", len(all))
+	}
+	if all[0].Content != "my own post" {
+		t.Errorf("got %q; viewer should see their own post and not the stranger's", all[0].Content)
+	}
+}
+
+// TestFeed_OwnPostsAlongsideConnections verifies the viewer's own posts are
+// interleaved with connections' posts and subject to the same new/old split.
+func TestFeed_OwnPostsAlongsideConnections(t *testing.T) {
+	d := newTestDB(t)
+	ctx := context.Background()
+	viewer := seedUser(t, d, "viewer")
+	friend := seedUser(t, d, "friend")
+	connect(t, d, viewer, friend)
+
+	mid := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
+	insertPost(t, d, viewer, "my old post", mid.Add(-time.Hour), "active")
+	insertPost(t, d, friend, "friend new post", mid.Add(time.Hour), "active")
+	insertPost(t, d, viewer, "my new post", mid.Add(2*time.Hour), "active")
+	setLastLoaded(t, d, viewer, mid)
+
+	res, err := newFeed(d).FirstPage(ctx, viewer)
+	if err != nil {
+		t.Fatalf("FirstPage: %v", err)
+	}
+
+	newContents := map[string]bool{}
+	for _, p := range res.New {
+		newContents[p.Content] = true
+	}
+	if !newContents["my new post"] || !newContents["friend new post"] {
+		t.Errorf("New should contain the viewer's and friend's recent posts, got %+v", res.New)
+	}
+	if len(res.Old) != 1 || res.Old[0].Content != "my old post" {
+		t.Errorf("Old should contain the viewer's older post, got %+v", res.Old)
 	}
 }

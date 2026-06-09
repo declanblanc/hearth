@@ -96,16 +96,17 @@ func (s *Service) lastFeedLoadedAt(ctx context.Context, userID int64) (sql.NullT
 	return t, err
 }
 
-// queryPosts runs the feed query for a user's connections. before==0 means the
-// first page (no cursor).
+// queryPosts runs the feed query for a user's connections plus the viewer's own
+// posts (issue #41). before==0 means the first page (no cursor).
 func (s *Service) queryPosts(ctx context.Context, userID, before int64) ([]posts.Post, error) {
 	ids, err := s.Conns.ConnectionIDs(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	if len(ids) == 0 {
-		return nil, nil
-	}
+	// Always include the viewer so their own posts appear in the home feed
+	// alongside their connections' posts. This also means a user with no
+	// connections still sees their own posts.
+	ids = append(ids, userID)
 
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	args := make([]any, 0, len(ids)+2)
