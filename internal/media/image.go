@@ -3,6 +3,7 @@ package media
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/draw"
 	"image/jpeg"
@@ -15,6 +16,33 @@ import (
 // ErrUnreadableImage is returned when image data cannot be decoded — e.g. a
 // truncated upload or a file whose declared type doesn't match its bytes.
 var ErrUnreadableImage = errors.New("media: unreadable image")
+
+// ProcessProfilePhoto validates and normalizes the raw bytes of an uploaded
+// profile photo, returning the re-encoded square JPEG ready for storage along
+// with its content type and extension. It is the single chokepoint shared by the
+// signup and profile-edit flows so the rules stay identical in both places.
+//
+// When the upload is rejected for a reason the user can fix — too large, an
+// unsupported type, or undecodable image data — it returns a non-empty userMsg
+// describing the problem and leaves err nil; callers surface userMsg as an inline
+// field error. A non-nil err signals an unexpected internal failure.
+func ProcessProfilePhoto(data []byte) (out []byte, contentType, ext, userMsg string, err error) {
+	if int64(len(data)) > MaxProfilePhotoSize {
+		return nil, "", "", fmt.Sprintf("Photo must be %d MB or smaller.", MaxProfilePhotoSize/(1024*1024)), nil
+	}
+	if _, _, derr := DetectType(data); errors.Is(derr, ErrUnsupportedType) {
+		return nil, "", "", "Only JPEG, PNG, and WebP photos are supported.", nil
+	} else if derr != nil {
+		return nil, "", "", "", derr
+	}
+	normalized, ct, e, nerr := NormalizeProfilePhoto(data)
+	if errors.Is(nerr, ErrUnreadableImage) {
+		return nil, "", "", "That photo couldn't be read. Please try another.", nil
+	} else if nerr != nil {
+		return nil, "", "", "", nerr
+	}
+	return normalized, ct, e, "", nil
+}
 
 // ProfilePhotoSize is the edge length, in pixels, of the square we store for
 // every profile photo. Photos are center-cropped to a square and scaled to this

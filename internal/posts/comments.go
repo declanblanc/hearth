@@ -25,6 +25,10 @@ var (
 	ErrCommentTooLong   = errors.New("comments: content exceeds 1000 characters")
 	ErrCommentNotFound  = errors.New("comments: not found")
 	ErrCommentForbidden = errors.New("comments: not permitted")
+	// ErrReplyTooDeep is returned when someone tries to reply to a comment that
+	// is itself a reply. Threads are capped at one level: a top-level comment may
+	// have replies, but those replies cannot (issue #24).
+	ErrReplyTooDeep = errors.New("comments: cannot reply to a reply")
 )
 
 // Connections is the slice of the connection graph comments need: the single
@@ -33,6 +37,9 @@ var (
 // graph acyclic, mirroring the likes package.
 type Connections interface {
 	IsConnected(ctx context.Context, viewerID, authorID int64) (bool, error)
+	// ConnectionIDs returns the user IDs the given user is connected to, used to
+	// decide which other people's comments a viewer may see (issue #23).
+	ConnectionIDs(ctx context.Context, userID int64) ([]int64, error)
 }
 
 // CommentService owns threaded comments: creating top-level comments and
@@ -162,12 +169,13 @@ func (s *CommentService) Reply(ctx context.Context, parentID, authorID int64, co
 
 	var (
 		postID         int64
+		parentParentID sql.NullInt64
 		parentAuthorID int64
 		parentStatus   string
 	)
 	err = s.DB.QueryRowContext(ctx,
-		`SELECT post_id, author_id, status FROM comments WHERE id = ?`, parentID,
-	).Scan(&postID, &parentAuthorID, &parentStatus)
+		`SELECT post_id, parent_comment_id, author_id, status FROM comments WHERE id = ?`, parentID,
+	).Scan(&postID, &parentParentID, &parentAuthorID, &parentStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrCommentNotFound
 	}
@@ -177,6 +185,10 @@ func (s *CommentService) Reply(ctx context.Context, parentID, authorID int64, co
 	if parentStatus != "active" {
 		// A deleted comment is a tombstone; you can't reply to it.
 		return nil, ErrCommentNotFound
+	}
+	if parentParentID.Valid {
+		// The parent is already a reply. Threads stop at one level (issue #24).
+		return nil, ErrReplyTooDeep
 	}
 	if _, err := s.requirePostAccess(ctx, postID, authorID); err != nil {
 		return nil, err
@@ -269,11 +281,15 @@ func (s *CommentService) ListThread(ctx context.Context, postID, viewerID int64)
 	if err != nil {
 		return nil, err
 	}
+	connected, err := s.connectedSet(ctx, viewerID)
+	if err != nil {
+		return nil, err
+	}
 	flat, err := s.queryForPosts(ctx, []int64{postID})
 	if err != nil {
 		return nil, err
 	}
-	roots := buildThreads(flat[postID], viewerID, postAuthorID)
+	roots := buildThreads(flat[postID], viewerID, postAuthorID, connected)
 	return roots, nil
 }
 
@@ -290,14 +306,33 @@ func (s *CommentService) AttachToPosts(ctx context.Context, viewerID int64, ps [
 	for i := range ps {
 		ids[i] = ps[i].ID
 	}
+	connected, err := s.connectedSet(ctx, viewerID)
+	if err != nil {
+		return err
+	}
 	flat, err := s.queryForPosts(ctx, ids)
 	if err != nil {
 		return err
 	}
 	for i := range ps {
-		ps[i].Comments = buildThreads(flat[ps[i].ID], viewerID, ps[i].AuthorID)
+		ps[i].Comments = buildThreads(flat[ps[i].ID], viewerID, ps[i].AuthorID, connected)
 	}
 	return nil
+}
+
+// connectedSet loads the viewer's connections as a lookup set, so buildThreads
+// can decide in O(1) whether each comment's author is visible to them (issue
+// #23). Fetched once per request rather than per comment.
+func (s *CommentService) connectedSet(ctx context.Context, viewerID int64) (map[int64]bool, error) {
+	ids, err := s.Conns.ConnectionIDs(ctx, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set, nil
 }
 
 // loadOne reads a single comment with its author display fields. Newly created
@@ -379,16 +414,24 @@ func (s *CommentService) queryForPosts(ctx context.Context, postIDs []int64) (ma
 
 // buildThreads assembles a flat, time-ordered comment slice into a tree of
 // top-level roots with replies nested under each parent, preserving order.
-// Replies whose parent is missing are skipped defensively. viewerID/postAuthorID
-// drive the per-comment CanDelete flag (the comment's author or the post author).
-func buildThreads(flat []*Comment, viewerID, postAuthorID int64) []*Comment {
+// Comments authored by someone the viewer may not see are filtered out first
+// (issue #23, CLAUDE.md §1); replies whose parent is thereby missing are skipped
+// defensively, so a hidden comment takes its sub-thread with it. viewerID/
+// postAuthorID drive the per-comment CanDelete flag (the comment's author or the
+// post author).
+func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[int64]bool) []*Comment {
 	byID := make(map[int64]*Comment, len(flat))
+	visible := make([]*Comment, 0, len(flat))
 	for _, c := range flat {
+		if !visibleToViewer(c, viewerID, postAuthorID, connected) {
+			continue
+		}
 		c.Children = nil
 		byID[c.ID] = c
+		visible = append(visible, c)
 	}
 	var roots []*Comment
-	for _, c := range flat {
+	for _, c := range visible {
 		// A deleted comment can't be acted on; otherwise the author or the post
 		// owner may delete it.
 		c.CanDelete = !c.Deleted && (viewerID == c.AuthorID || viewerID == postAuthorID)
@@ -400,5 +443,33 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64) []*Comment {
 			parent.Children = append(parent.Children, c)
 		}
 	}
-	return roots
+	return pruneEmptyTombstones(roots)
+}
+
+// visibleToViewer reports whether a comment may be shown to the viewer. A viewer
+// always sees their own comments and the post author's; anyone else's are visible
+// only if the viewer is connected to that author (issue #23). A deleted comment
+// is a tombstone carrying no author or content, so it stays visible to anchor any
+// replies the viewer *can* see — pruneEmptyTombstones drops it later if none do.
+func visibleToViewer(c *Comment, viewerID, postAuthorID int64, connected map[int64]bool) bool {
+	if c.Deleted {
+		return true
+	}
+	return c.AuthorID == viewerID || c.AuthorID == postAuthorID || connected[c.AuthorID]
+}
+
+// pruneEmptyTombstones removes deleted placeholder comments that have no visible
+// replies left beneath them, so hiding a non-connected author's comment doesn't
+// leave a bare "[deleted]" node behind (issue #23). It works bottom-up so a
+// tombstone whose only children were themselves pruned is removed too.
+func pruneEmptyTombstones(nodes []*Comment) []*Comment {
+	kept := nodes[:0]
+	for _, n := range nodes {
+		n.Children = pruneEmptyTombstones(n.Children)
+		if n.Deleted && len(n.Children) == 0 {
+			continue
+		}
+		kept = append(kept, n)
+	}
+	return kept
 }

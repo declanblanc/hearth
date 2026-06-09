@@ -10,7 +10,7 @@
 */}}
 <p class="muted">{{.Profile.FirstName}} wants to connect with you on Hearth.</p>
 
-{{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="{{.Profile.FullName}}" class="profile-photo">{{end}}
+{{if .PhotoURL}}<img src="{{.PhotoURL}}" alt="{{.Profile.FullName}}" class="profile-photo">{{else}}{{template "avatarfallback" "profile-photo"}}{{end}}
 <h1>{{.Profile.FullName}}</h1>
 <p class="muted">@{{.Profile.Username}}{{if .Profile.Pronouns}} · {{.Profile.Pronouns}}{{end}}</p>
 {{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}

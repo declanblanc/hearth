@@ -160,6 +160,66 @@ func TestReply_NotifiesParentAuthorOnly(t *testing.T) {
 	}
 }
 
+func TestReply_CannotReplyToReply(t *testing.T) {
+	d := newTestDB(t)
+	svc := newCommentSvc(d)
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+	commenter := seedUser(t, d, "commenter")
+	connect(t, d, author, commenter)
+	post := seedActivePost(t, d, author)
+
+	top, _ := svc.Create(ctx, post, commenter, "top-level")
+	reply, err := svc.Reply(ctx, top.ID, author, "a reply")
+	if err != nil {
+		t.Fatalf("Reply to top-level: %v", err)
+	}
+	// Threads stop at one level: replying to a reply is rejected (issue #24).
+	if _, err := svc.Reply(ctx, reply.ID, commenter, "reply to a reply"); !errors.Is(err, ErrReplyTooDeep) {
+		t.Errorf("replying to a reply should be ErrReplyTooDeep, got %v", err)
+	}
+}
+
+// TestListThread_HidesNonConnectedAuthors is issue #23's exact scenario: Bob
+// comments on Alice's post; Eve is connected to Alice but not Bob, so Eve must
+// not see Bob's comment — and any reply nested under it goes with it.
+func TestListThread_HidesNonConnectedAuthors(t *testing.T) {
+	d := newTestDB(t)
+	svc := newCommentSvc(d)
+	ctx := context.Background()
+	alice := seedUser(t, d, "alice")
+	bob := seedUser(t, d, "bob")
+	eve := seedUser(t, d, "eve")
+	connect(t, d, alice, bob)
+	connect(t, d, alice, eve) // Eve and Bob are NOT connected
+	post := seedActivePost(t, d, alice)
+
+	aliceComment, _ := svc.Create(ctx, post, alice, "alice's note")
+	bobComment, _ := svc.Create(ctx, post, bob, "bob's note")
+	// Alice replies under Bob's comment; Eve can't see Bob's, so this goes too.
+	_, _ = svc.Reply(ctx, bobComment.ID, alice, "alice replying to bob")
+
+	roots, err := svc.ListThread(ctx, post, eve)
+	if err != nil {
+		t.Fatalf("ListThread: %v", err)
+	}
+	if len(roots) != 1 || roots[0].ID != aliceComment.ID {
+		t.Fatalf("Eve should see only Alice's comment, got %+v", roots)
+	}
+	if len(roots[0].Children) != 0 {
+		t.Errorf("no replies should leak under a hidden comment, got %+v", roots[0].Children)
+	}
+
+	// Alice (connected to both) still sees the whole thread.
+	roots, err = svc.ListThread(ctx, post, alice)
+	if err != nil {
+		t.Fatalf("ListThread for alice: %v", err)
+	}
+	if len(roots) != 2 {
+		t.Errorf("post author should see both top-level comments, got %d", len(roots))
+	}
+}
+
 func TestReply_NoSelfNotification(t *testing.T) {
 	d := newTestDB(t)
 	svc := newCommentSvc(d)
