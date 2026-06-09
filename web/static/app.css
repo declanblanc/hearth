@@ -246,6 +246,29 @@ a:hover { color: var(--ember); }
 .site-header nav .linklike:hover { color: var(--ink); }
 .site-header nav a:hover::after { transform: scaleX(1); }
 
+/* Hamburger toggle — only shown once the nav collapses on narrow screens
+   (issue #33). Sits between the brand and the (then-hidden) nav. */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.nav-toggle:hover {
+  color: var(--ember);
+  background: var(--raised);
+  border-color: var(--line);
+}
+.nav-toggle svg { width: 1.4rem; height: 1.4rem; display: block; }
+
 /* Theme toggle — a small icon button in the header. Shows a sun in dark mode
    and a moon in light mode (the icon represents what clicking will switch TO).
    The two SVGs are stacked; CSS shows the right one for the current theme. */
@@ -1171,9 +1194,36 @@ span.invite-url { box-shadow: none; }
 }
 
 /* ---- Responsive ---------------------------------------------------------- */
-@media (max-width: 540px) {
-  .site-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
-  .container { margin-top: 1.75rem; }
+/* 640px is just above the width at which the full signed-in nav (Feed,
+   Notifications, Connections, Profile, Log out, theme toggle) stops fitting on
+   one row beside the brand, so the hamburger takes over before any wrapping
+   shows (issue #33). */
+@media (max-width: 640px) {
+  /* The nav links no longer wrap onto a second row (issue #33): the hamburger
+     appears and the links drop into a panel beneath the header, shown only when
+     nav-toggle.js adds .nav-open. The header itself stays a single tidy row of
+     brand + toggle. */
+  .nav-toggle { display: inline-flex; }
+  .site-header nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.1rem;
+    padding: 0.5rem clamp(1rem, 4vw, 2rem) 0.85rem;
+    /* Opaque so the page content behind the dropdown never bleeds through. */
+    background: var(--raised);
+    border-bottom: 1px solid var(--line);
+    box-shadow: var(--shadow-md);
+  }
+  .site-header.nav-open nav { display: flex; }
+  .site-header nav a,
+  .site-header nav .linklike { padding: 0.6rem; font-size: 1rem; text-align: left; }
+  .site-header nav form { width: 100%; }
+  .site-header nav .theme-toggle { margin-left: 0; }
 }
 
 /* ---- Reduced motion ------------------------------------------------------ */

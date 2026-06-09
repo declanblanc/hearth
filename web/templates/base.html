@@ -21,6 +21,7 @@
   })();
 </script>
 <script src="/static/htmx.min.js" defer></script>
+<script src="/static/nav-toggle.js" defer></script>
 <script src="/static/theme-toggle.js" defer></script>
 <script src="/static/post-lightbox.js" defer></script>
 <script src="/static/localtime.js" defer></script>
@@ -33,7 +34,15 @@
     </svg>
     <span>Hearth</span>
   </a>
-  <nav>
+  {{/* On narrow screens the nav links collapse behind this button (issue #33);
+       nav-toggle.js wires it to .site-header.nav-open. Hidden on wide screens
+       via CSS, where the links sit inline as before. */}}
+  <button type="button" class="nav-toggle" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <path d="M3 6h18M3 12h18M3 18h18"/>
+    </svg>
+  </button>
+  <nav id="site-nav">
     {{if .User}}
       <a href="/">Feed</a>
       <a href="/notifications" class="nav-notifications">Notifications{{if .User.UnreadDot}}<span class="dot" aria-label="unread notifications"></span>{{end}}</a>
