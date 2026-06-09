@@ -99,6 +99,9 @@ func (h *CommentHandlers) handleWriteError(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, ErrCommentEmpty), errors.Is(err, ErrCommentTooLong):
 		h.Renderer.Status(w, http.StatusUnprocessableEntity, "error.html",
 			render.M{"Status": http.StatusUnprocessableEntity, "Message": "Your comment couldn’t be posted."})
+	case errors.Is(err, ErrReplyTooDeep):
+		h.Renderer.Status(w, http.StatusUnprocessableEntity, "error.html",
+			render.M{"Status": http.StatusUnprocessableEntity, "Message": "Replies can’t be replied to."})
 	case errors.Is(err, ErrCommentNotFound):
 		h.Renderer.Error(w, http.StatusNotFound)
 	case errors.Is(err, ErrCommentForbidden):
