@@ -41,6 +41,12 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
       <path d="M3 6h18M3 12h18M3 18h18"/>
     </svg>
+    {{/* The unread dot surfaces on the closed hamburger so a collapsed menu still
+         signals notifications (issue #39). It mirrors the in-menu Notifications
+         dot via the same .User.UnreadDot condition; CSS hides it on desktop and
+         while the menu is open, where the in-nav dot is already visible. Never a
+         count (CLAUDE.md §2). */}}
+    {{if and .User .User.UnreadDot}}<span class="dot nav-toggle-dot" aria-label="unread notifications"></span>{{end}}
   </button>
   <nav id="site-nav">
     {{if .User}}

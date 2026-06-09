@@ -250,6 +250,7 @@ a:hover { color: var(--ember); }
    (issue #33). Sits between the brand and the (then-hidden) nav. */
 .nav-toggle {
   display: none;
+  position: relative;
   align-items: center;
   justify-content: center;
   width: 2.25rem;
@@ -471,6 +472,19 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   0%   { box-shadow: 0 0 0 0 rgba(189, 75, 39, 0.5); }
   70%  { box-shadow: 0 0 0 6px rgba(189, 75, 39, 0); }
   100% { box-shadow: 0 0 0 0 rgba(189, 75, 39, 0); }
+}
+/* The same dot pinned to the hamburger's top-right corner (issue #39). It only
+   matters when the nav is collapsed behind the toggle, so it's hidden by default
+   (the toggle itself is hidden on wide screens) and revealed only on narrow
+   screens with the menu closed — see the max-width media query below. Opening
+   the menu hides it again, since the in-nav Notifications dot is then visible. */
+.nav-toggle-dot {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin-left: 0;
+  vertical-align: baseline;
 }
 
 /* ---- Compose ------------------------------------------------------------- */
@@ -1442,6 +1456,10 @@ span.invite-url { box-shadow: none; }
      nav-toggle.js adds .nav-open. The header itself stays a single tidy row of
      brand + toggle. */
   .nav-toggle { display: inline-flex; }
+  /* Show the unread dot on the closed hamburger; hide it once the menu opens,
+     where the in-nav Notifications dot takes over (issue #39). */
+  .nav-toggle-dot { display: inline-block; }
+  .site-header.nav-open .nav-toggle-dot { display: none; }
   .site-header nav {
     display: none;
     position: absolute;
