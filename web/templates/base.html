@@ -226,7 +226,11 @@
   {{if not .Deleted}}<div class="comment-content">{{.Content}}</div>{{end}}
   {{if not .Deleted}}
   <div class="comment-actions">
-    <button type="button" class="linklike comment-reply-toggle" data-reply-toggle="reply-{{.ID}}">Reply</button>
+    {{/* Only top-level comments accept replies — threads stop at one level
+         (issue #24). Replies (ParentID != 0) show no reply control. */}}
+    {{if eq .ParentID 0}}
+      <button type="button" class="linklike comment-reply-toggle" data-reply-toggle="reply-{{.ID}}">Reply</button>
+    {{end}}
     {{if .CanDelete}}
       <form method="post" action="/comments/{{.ID}}/delete" class="inline-form"
             hx-post="/comments/{{.ID}}/delete" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML"
@@ -235,6 +239,7 @@
       </form>
     {{end}}
   </div>
+  {{if eq .ParentID 0}}
   <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
         method="post" action="/comments/{{.ID}}/replies"
         hx-post="/comments/{{.ID}}/replies" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML">
@@ -243,6 +248,7 @@
               placeholder="Write a reply…" required></textarea>
     <button type="submit" class="button-secondary">Reply</button>
   </form>
+  {{end}}
   {{end}}
   {{if .Children}}
     <ul class="comment-list comment-replies">
