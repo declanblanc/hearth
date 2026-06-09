@@ -276,9 +276,9 @@ a:hover { color: var(--ember); }
 :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
 /* ---- Buttons & links ----------------------------------------------------- */
-/* The :not() guards keep the filled style off link- and secondary-style
-   submit buttons, which would otherwise win on specificity. */
-button[type=submit]:not(.linklike):not(.button-secondary),
+/* The :not() guards keep the filled style off link-, secondary-, and
+   like-style submit buttons, which would otherwise win on specificity. */
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button),
 .button-link {
   display: inline-block;
   padding: 0.6rem 1.15rem;
@@ -295,16 +295,16 @@ button[type=submit]:not(.linklike):not(.button-secondary),
   box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   transition: transform 0.14s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
-button[type=submit]:not(.linklike):not(.button-secondary):hover,
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button):hover,
 .button-link:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   filter: brightness(1.04);
   color: #fff;
 }
-button[type=submit]:not(.linklike):not(.button-secondary):active,
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button):active,
 .button-link:active { transform: translateY(0); filter: brightness(0.97); }
-button[type=submit]:not(.linklike):not(.button-secondary):disabled {
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button):disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
