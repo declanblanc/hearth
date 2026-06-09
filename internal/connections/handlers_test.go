@@ -41,7 +41,8 @@ func newConnectionsHandlers(t *testing.T) (*Handlers, *Service) {
 	// block. error.html covers the renderer's failure path.
 	fsys := fstest.MapFS{
 		"base.html": {Data: []byte(
-			`{{define "base"}}{{block "content" .}}{{end}}{{end}}`,
+			`{{define "base"}}{{block "content" .}}{{end}}{{end}}` +
+				`{{define "avatarfallback"}}<svg class="{{.}} avatar-placeholder"></svg>{{end}}`,
 		)},
 		"connections.html":          {Data: mustReadTemplate(t, "connections.html")},
 		"invite_link_fragment.html": {Data: mustReadTemplate(t, "invite_link_fragment.html")},

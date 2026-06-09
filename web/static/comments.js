@@ -1,20 +1,24 @@
-// comments.js — reveals the per-comment reply box (issue #11).
+// comments.js — reveals the otherwise-hidden comment and reply boxes (issues
+// #11, #29).
 //
-// Each comment has a "Reply" button carrying data-reply-toggle="<id>" pointing
-// at a hidden reply <form id="<id>">. Clicking it shows the form and focuses the
-// textarea; clicking again hides it. A single delegated listener covers comments
-// that arrive later via htmx swaps. Without this script the reply forms stay
-// hidden, but the top-level add-comment box still works, so commenting degrades
-// gracefully.
+// Both the top-level "Comment" button and each comment's "Reply" button carry
+// data-toggle-target="<form id>" pointing at a hidden <form>. Clicking shows the
+// form and focuses its textarea; clicking again hides it. A single delegated
+// listener covers forms that arrive later via htmx swaps.
+//
+// Without this script every comment box stays hidden. That is a deliberate
+// trade-off (#29): commenting requires JS, which the app already assumes for the
+// composer and like controls. The toggle buttons are real <button>s, so they
+// simply do nothing rather than appearing broken.
 
 (function () {
   "use strict";
 
   document.addEventListener("click", function (event) {
-    var toggle = event.target.closest("[data-reply-toggle]");
+    var toggle = event.target.closest("[data-toggle-target]");
     if (!toggle) return;
 
-    var form = document.getElementById(toggle.getAttribute("data-reply-toggle"));
+    var form = document.getElementById(toggle.getAttribute("data-toggle-target"));
     if (!form) return;
 
     var nowHidden = form.hasAttribute("hidden");

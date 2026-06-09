@@ -69,3 +69,33 @@ func TestNormalizeProfilePhotoRejectsGarbage(t *testing.T) {
 		t.Fatalf("got %v, want ErrUnreadableImage", err)
 	}
 }
+
+func TestProcessProfilePhotoAcceptsValidImage(t *testing.T) {
+	src := encodePNG(t, 600, 400, color.RGBA{R: 30, G: 60, B: 90, A: 255})
+
+	out, ct, ext, userMsg, err := ProcessProfilePhoto(src)
+	if err != nil {
+		t.Fatalf("ProcessProfilePhoto: %v", err)
+	}
+	if userMsg != "" {
+		t.Fatalf("valid image rejected: %q", userMsg)
+	}
+	if ct != "image/jpeg" || ext != ".jpg" || len(out) == 0 {
+		t.Fatalf("got type %q ext %q len %d, want a non-empty image/jpeg .jpg", ct, ext, len(out))
+	}
+}
+
+func TestProcessProfilePhotoReportsFixableProblems(t *testing.T) {
+	// An unsupported type and undecodable data both come back as a user-facing
+	// message with no error, so callers can show them inline rather than 500.
+	if _, _, _, msg, err := ProcessProfilePhoto([]byte("GIF89a not allowed")); err != nil || msg == "" {
+		t.Errorf("unsupported type: got msg %q err %v, want a message and no error", msg, err)
+	}
+
+	// PNG-typed but truncated bytes: passes type sniffing, fails to decode.
+	valid := encodePNG(t, 40, 40, color.RGBA{A: 255})
+	truncated := valid[:len(valid)/2]
+	if _, _, _, msg, err := ProcessProfilePhoto(truncated); err != nil || msg == "" {
+		t.Errorf("unreadable image: got msg %q err %v, want a message and no error", msg, err)
+	}
+}

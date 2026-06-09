@@ -7,16 +7,42 @@
   all. Keeping the copy generic — and never referencing the requested username
   or any account detail — is what makes those two cases indistinguishable, so a
   probe of /{username} can't be used to enumerate who is or isn't on Hearth
-  (CLAUDE.md rule #1: non-existence is part of the privacy model).
+  (CLAUDE.md rule #1: non-existence is part of the privacy model). Everything
+  below branches only on .User (the viewer), never on the requested profile, so
+  the byte-for-byte identity between the two cases is preserved — including the
+  invite affordance, which suggests connecting generically without confirming
+  that any particular account exists (issue #34).
 */}}
 <h1>This profile isn't available</h1>
 <p>
   Hearth profiles are private. You can only see someone's profile once you're
   connected with them, so there's nothing to show here.
 </p>
-<p>
-  If you know this person, ask them for an invite link — that's the only way to
-  connect on Hearth.
-</p>
-{{if .User}}<p><a href="/">Back to your feed</a></p>{{else}}<p><a href="/login">Log in</a></p>{{end}}
+{{if .User}}
+  <p>
+    If this is someone you'd like to connect with, create an invite link and
+    send it to them. When they accept, you'll confirm the connection — and their
+    profile will show up here.
+  </p>
+  {{/* Reuses the connections page's invite flow: invite-modal.js intercepts this
+       form and shows the new link in the dialog below; without JS it POSTs to
+       /invites and renders invite_created.html instead. */}}
+  <form method="post" action="/invites" data-invite-form>
+    <button type="submit" class="button-link">Create an invite link</button>
+  </form>
+  <p><a href="/">Back to your feed</a></p>
+  <dialog id="invite-dialog" class="invite-dialog">
+    <button type="button" class="invite-dialog-close" data-invite-close aria-label="Close">&times;</button>
+    <div data-invite-body></div>
+  </dialog>
+{{else}}
+  <p>
+    If you know this person, ask them for an invite link — that's the only way to
+    connect on Hearth.
+  </p>
+  <p><a href="/login">Log in</a></p>
 {{end}}
+{{end}}
+{{/* Only the signed-in invite affordance needs JS; loading it is keyed on .User
+     alone, so both privacy cases still render identically (issue #34). */}}
+{{define "scripts"}}{{if .User}}<script src="/static/invite-modal.js" defer></script>{{end}}{{end}}

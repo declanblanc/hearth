@@ -246,6 +246,29 @@ a:hover { color: var(--ember); }
 .site-header nav .linklike:hover { color: var(--ink); }
 .site-header nav a:hover::after { transform: scaleX(1); }
 
+/* Hamburger toggle — only shown once the nav collapses on narrow screens
+   (issue #33). Sits between the brand and the (then-hidden) nav. */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.nav-toggle:hover {
+  color: var(--ember);
+  background: var(--raised);
+  border-color: var(--line);
+}
+.nav-toggle svg { width: 1.4rem; height: 1.4rem; display: block; }
+
 /* Theme toggle — a small icon button in the header. Shows a sun in dark mode
    and a moon in light mode (the icon represents what clicking will switch TO).
    The two SVGs are stacked; CSS shows the right one for the current theme. */
@@ -276,9 +299,9 @@ a:hover { color: var(--ember); }
 :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
 /* ---- Buttons & links ----------------------------------------------------- */
-/* The :not() guards keep the filled style off link- and secondary-style
-   submit buttons, which would otherwise win on specificity. */
-button[type=submit]:not(.linklike):not(.button-secondary),
+/* The :not() guards keep the filled style off link-, secondary-, and
+   like-style submit buttons, which would otherwise win on specificity. */
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button),
 .button-link {
   display: inline-block;
   padding: 0.6rem 1.15rem;
@@ -295,16 +318,16 @@ button[type=submit]:not(.linklike):not(.button-secondary),
   box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   transition: transform 0.14s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
-button[type=submit]:not(.linklike):not(.button-secondary):hover,
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button):hover,
 .button-link:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   filter: brightness(1.04);
   color: #fff;
 }
-button[type=submit]:not(.linklike):not(.button-secondary):active,
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button):active,
 .button-link:active { transform: translateY(0); filter: brightness(0.97); }
-button[type=submit]:not(.linklike):not(.button-secondary):disabled {
+button[type=submit]:not(.linklike):not(.button-secondary):not(.like-button):disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -702,6 +725,89 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .likes-dialog-close:hover { color: var(--ember); }
 
+/* ---- Comments ------------------------------------------------------------ *
+   A quiet conversation beneath each post. No bullets, no counts — comments read
+   as a stack of small notes, replies tucked one level in behind an ember rule
+   (issue #24). Threads stop at one level, so the indentation never compounds. */
+.comments {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line-soft);
+}
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+/* Replies sit slightly inset, marked off by a soft ember rule rather than a
+   bullet — clearly subordinate without shouting. */
+.comment-replies {
+  margin-top: 0.85rem;
+  margin-left: 1.1rem;
+  padding-left: 0.95rem;
+  border-left: 2px solid var(--line);
+}
+.comment {
+  font-family: var(--sans);
+}
+.comment-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.1rem;
+  font-size: 0.85rem;
+}
+.comment-author {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+.comment-author:hover { color: var(--ember); }
+.comment-content {
+  margin-top: 0.2rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* A soft-deleted comment is a faded tombstone that only anchors its replies. */
+.comment-deleted .comment-author { font-style: italic; }
+.comment-actions {
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+.comment-actions .linklike {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+/* The comment and reply composers: a single quiet line that grows on focus,
+   matching the post composer's restraint. */
+.comment-form {
+  margin-top: 0.85rem;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+.comment-reply-form {
+  margin-top: 0.6rem;
+  margin-left: 1.1rem;
+}
+.comment-form textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 2.4rem;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+}
+.comment-form .button-secondary { flex-shrink: 0; }
+
 /* Invitation-link modal on the connections page. Shares the quiet-card look of
    the likes modal; adds a row that pairs the read-only link with a copy button. */
 .invite-dialog {
@@ -930,7 +1036,143 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 
 #load-older { margin-top: 1.75rem; text-align: center; }
 
+/* ---- Comments ------------------------------------------------------------ *
+   A post is set in the serif display face and divided from its neighbours by a
+   solid hairline; its comments are deliberately the opposite — compact
+   sans-serif cards, fenced off below the post by a dashed rule and stepped
+   inward as the thread nests — so a reply is never mistaken for a post (#29). */
+.comments { margin-top: 0.4rem; }
+/* Fence the conversation off from the post with a dashed rule — but only once
+   there is a conversation (existing comments) or the add-comment box is open.
+   An empty, closed thread shows no stray line under the post. */
+.comments:has(.comment-list),
+.comments:has(.comment-form:not([hidden])) {
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--line);
+}
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.comment {
+  padding: 0.65rem 0.85rem;
+  background: var(--raised);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+/* A deleted comment is a quiet placeholder, not a card — dashed and flat. */
+.comment-deleted {
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.comment-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.1rem;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+.comment-author {
+  font-weight: 600;
+  font-size: 0.88rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+.comment-author:hover { color: var(--ember); }
+
+.comment-content {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 0.35rem;
+}
+.comment-actions .linklike {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.comment-actions .linklike:hover { text-decoration: underline; }
+
+/* Nested replies step inward with a connecting rule so depth reads at a glance. */
+.comment-replies {
+  margin: 0.7rem 0 0;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--line);
+}
+
+/* ---- Add-comment / reply boxes (hidden until toggled by comments.js) ------ */
+
+/* The "Comment" entry point lives in the post's action row beside Like, so it
+   wears the same quiet treatment — a small icon + label that warms to ember on
+   hover or once its box is open (aria-expanded). */
+.comment-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+.comment-toggle:hover { color: var(--ember); }
+.comment-toggle[aria-expanded="true"] { color: var(--ember); }
+.comment-toggle svg { width: 1.05rem; height: 1.05rem; flex-shrink: 0; }
+
+.comment-form { margin-top: 0.6rem; }
+/* display is set on .comment-form below; restore the UA [hidden] behaviour. */
+.comment-form[hidden] { display: none; }
+.comment-form textarea {
+  margin: 0;
+  resize: vertical;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.comment-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
 /* ---- Profile ------------------------------------------------------------- */
+/* Default avatar: a muted disc with a paper-toned silhouette, shown wherever a
+   user has no photo (issue #26). It carries the same sizing class as the <img>
+   it replaces, so only the fill/figure colours live here; width, height, border,
+   and the circular radius all come from that class. */
+.avatar-placeholder {
+  background: var(--paper-deep);
+  /* --ink-soft is theme-aware, so the figure keeps a gentle but legible contrast
+     against the disc in both light and dark modes. */
+  color: var(--ink-soft);
+}
+
 .profile-photo {
   width: 92px;
   height: 92px;
@@ -967,6 +1209,9 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   gap: 0.5rem;
   max-width: 240px;
 }
+/* The display:flex above would otherwise override the UA [hidden] rule, leaving
+   an empty cropper circle visible before any file is chosen. */
+.avatar-crop-stage[hidden] { display: none; }
 .avatar-crop-stage canvas {
   border-radius: 50%;
   cursor: grab;
@@ -1171,9 +1416,36 @@ span.invite-url { box-shadow: none; }
 }
 
 /* ---- Responsive ---------------------------------------------------------- */
-@media (max-width: 540px) {
-  .site-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
-  .container { margin-top: 1.75rem; }
+/* 640px is just above the width at which the full signed-in nav (Feed,
+   Notifications, Connections, Profile, Log out, theme toggle) stops fitting on
+   one row beside the brand, so the hamburger takes over before any wrapping
+   shows (issue #33). */
+@media (max-width: 640px) {
+  /* The nav links no longer wrap onto a second row (issue #33): the hamburger
+     appears and the links drop into a panel beneath the header, shown only when
+     nav-toggle.js adds .nav-open. The header itself stays a single tidy row of
+     brand + toggle. */
+  .nav-toggle { display: inline-flex; }
+  .site-header nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.1rem;
+    padding: 0.5rem clamp(1rem, 4vw, 2rem) 0.85rem;
+    /* Opaque so the page content behind the dropdown never bleeds through. */
+    background: var(--raised);
+    border-bottom: 1px solid var(--line);
+    box-shadow: var(--shadow-md);
+  }
+  .site-header.nav-open nav { display: flex; }
+  .site-header nav a,
+  .site-header nav .linklike { padding: 0.6rem; font-size: 1rem; text-align: left; }
+  .site-header nav form { width: 100%; }
+  .site-header nav .theme-toggle { margin-left: 0; }
 }
 
 /* ---- Reduced motion ------------------------------------------------------ */
