@@ -116,7 +116,7 @@ func (s *Service) queryPosts(ctx context.Context, userID, before int64) ([]posts
 
 	query := `
 		SELECT p.id, p.author_id, u.username, u.first_name, u.last_name,
-		       p.content, p.created_at, p.updated_at
+		       u.photo_key, p.content, p.created_at, p.updated_at
 		  FROM posts p
 		  JOIN users u ON u.id = p.author_id
 		 WHERE p.author_id IN (` + placeholders + `)

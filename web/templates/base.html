@@ -86,7 +86,14 @@
 {{define "postcard"}}
 <article class="post" id="post-{{.ID}}">
   <header class="post-meta">
-    <a href="/u/{{.AuthorUsername}}" class="post-author">{{.AuthorName}}</a>
+    {{/* Author avatar to the left of their name (issue #40). AuthorPhotoURL is a
+         short-lived signed URL minted at render time; when the author has no
+         photo (or no media store is configured) it's empty and we fall back to
+         the shared silhouette, matching the profile page. */}}
+    <a href="/u/{{.AuthorUsername}}" class="post-author">
+      {{if .AuthorPhotoURL}}<img src="{{.AuthorPhotoURL}}" alt="" class="post-avatar">{{else}}{{template "avatarfallback" "post-avatar"}}{{end}}
+      <span class="post-author-name">{{.AuthorName}}</span>
+    </a>
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </header>
   {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}

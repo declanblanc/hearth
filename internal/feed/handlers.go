@@ -51,6 +51,18 @@ func (h *Handlers) index(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
+	// Sign each author's avatar for rendering next to their name (issue #40).
+	// Same connection-gating rationale as the post images above.
+	if err := posts.SignAvatarURLs(r.Context(), h.Media, res.New); err != nil {
+		slog.Error("feed: sign avatars", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	if err := posts.SignAvatarURLs(r.Context(), h.Media, res.Old); err != nil {
+		slog.Error("feed: sign avatars", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
 	// Reflect which of these posts the viewer has already liked so the like
 	// control renders in its toggled state. Every feed post is a connection's,
 	// never the viewer's own.
@@ -89,6 +101,11 @@ func (h *Handlers) older(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := posts.SignMediaURLs(r.Context(), h.Media, rows); err != nil {
 		slog.Error("feed: sign media", "user_id", u.ID, "err", err)
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	if err := posts.SignAvatarURLs(r.Context(), h.Media, rows); err != nil {
+		slog.Error("feed: sign avatars", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}

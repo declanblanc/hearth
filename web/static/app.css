@@ -622,8 +622,24 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   font-weight: 600;
   text-decoration: none;
   color: var(--ink);
+  /* Avatar sits to the left of the name, vertically centred with it (issue #40). */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  vertical-align: middle;
 }
 .post-author:hover { color: var(--ember); }
+.post-author:hover .post-author-name { color: var(--ember); }
+/* Small circular avatar shown beside the author's name in feed/profile posts.
+   The placeholder silhouette reuses this same class for matching size/shape. */
+.post-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+}
 .post-content {
   font-family: var(--display);
   font-optical-sizing: auto;

@@ -73,6 +73,46 @@ func setLastLoaded(t *testing.T, d *sql.DB, userID int64, at time.Time) {
 	}
 }
 
+func setPhotoKey(t *testing.T, d *sql.DB, userID int64, key string) {
+	t.Helper()
+	if _, err := d.Exec(`UPDATE users SET photo_key = ? WHERE id = ?`, key, userID); err != nil {
+		t.Fatalf("set photo_key: %v", err)
+	}
+}
+
+// TestFeed_ExposesAuthorPhotoKey covers issue #40: the feed query joins in each
+// author's profile-photo key so the template can render the avatar next to the
+// author's name. Authors without a photo carry an empty key (not an error).
+func TestFeed_ExposesAuthorPhotoKey(t *testing.T) {
+	d := newTestDB(t)
+	ctx := context.Background()
+	viewer := seedUser(t, d, "viewer")
+	withPhoto := seedUser(t, d, "withphoto")
+	noPhoto := seedUser(t, d, "nophoto")
+	connect(t, d, viewer, withPhoto)
+	connect(t, d, viewer, noPhoto)
+	setPhotoKey(t, d, withPhoto, "profile/abc.jpg")
+
+	now := time.Now()
+	insertPost(t, d, withPhoto, "has avatar", now, "active")
+	insertPost(t, d, noPhoto, "no avatar", now.Add(-time.Minute), "active")
+
+	res, err := newFeed(d).FirstPage(ctx, viewer)
+	if err != nil {
+		t.Fatalf("FirstPage: %v", err)
+	}
+	byContent := map[string]string{}
+	for _, p := range append(res.New, res.Old...) {
+		byContent[p.Content] = p.AuthorPhotoKey
+	}
+	if got := byContent["has avatar"]; got != "profile/abc.jpg" {
+		t.Errorf("author with photo: want key %q, got %q", "profile/abc.jpg", got)
+	}
+	if got := byContent["no avatar"]; got != "" {
+		t.Errorf("author without photo: want empty key, got %q", got)
+	}
+}
+
 func TestFeed_OnlyConnectedActivePosts(t *testing.T) {
 	d := newTestDB(t)
 	ctx := context.Background()
