@@ -101,38 +101,29 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 		photoExt  string
 	)
 	if h.Media != nil {
-		file, fh, ferr := r.FormFile("photo")
+		file, _, ferr := r.FormFile("photo")
 		if ferr == nil {
 			defer file.Close()
-			_ = fh
 			data, err := io.ReadAll(io.LimitReader(file, media.MaxProfilePhotoSize+1))
 			if err != nil {
 				h.Renderer.Error(w, http.StatusInternalServerError)
 				return
 			}
-			if int64(len(data)) > media.MaxProfilePhotoSize {
-				errs.Add("photo", fmt.Sprintf("Photo must be %d MB or smaller.", media.MaxProfilePhotoSize/(1024*1024)))
-			} else if _, _, err := media.DetectType(data); errors.Is(err, media.ErrUnsupportedType) {
-				errs.Add("photo", "Only JPEG, PNG, and WebP photos are supported.")
-			} else if err != nil {
+			// One shared chokepoint validates, center-crops, and re-encodes the
+			// upload server-side, so the stored object is always a known-good
+			// fixed-size JPEG whether or not the browser pre-cropped it (CLAUDE.md
+			// §6). A non-empty userMsg is a fixable problem shown inline.
+			normalized, ct, ext, userMsg, perr := media.ProcessProfilePhoto(data)
+			if perr != nil {
 				h.Renderer.Error(w, http.StatusInternalServerError)
 				return
+			}
+			if userMsg != "" {
+				errs.Add("photo", userMsg)
 			} else {
-				// Center-crop to a square and re-encode server-side, so the
-				// stored object is always a known-good fixed-size JPEG — whether
-				// or not the browser pre-cropped it (CLAUDE.md §6: media access
-				// control and storage stay server-controlled).
-				normalized, ct, ext, nerr := media.NormalizeProfilePhoto(data)
-				if errors.Is(nerr, media.ErrUnreadableImage) {
-					errs.Add("photo", "That photo couldn't be read. Please try another.")
-				} else if nerr != nil {
-					h.Renderer.Error(w, http.StatusInternalServerError)
-					return
-				} else {
-					photoData = normalized
-					photoType = ct
-					photoExt = ext
-				}
+				photoData = normalized
+				photoType = ct
+				photoExt = ext
 			}
 		}
 		// ErrMissingFile is normal — no photo submitted.

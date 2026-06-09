@@ -114,6 +114,16 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (int64, error) {
 	return userID, nil
 }
 
+// SetPhotoKey stores the R2 object key for a user's profile photo. Used by the
+// signup flow to attach an optional photo after the account is created (issue
+// #26); profile edits go through profiles.Service.UpdatePhoto instead, which
+// also returns the previous key for cleanup.
+func (s *Service) SetPhotoKey(ctx context.Context, userID int64, key string) error {
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE users SET photo_key = ? WHERE id = ? AND deleted_at IS NULL`, key, userID)
+	return err
+}
+
 func (s *Service) issueVerificationToken(ctx context.Context, tx *sql.Tx, userID int64) (string, error) {
 	token, err := RandomToken(32)
 	if err != nil {

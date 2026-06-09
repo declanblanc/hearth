@@ -66,6 +66,13 @@
 </body>
 </html>{{end}}
 
+{{/* avatarfallback renders a generic silhouette in place of a missing profile
+     photo, so a user without one shows a neutral placeholder rather than nothing
+     (issue #26). The dot is the CSS class of the <img> it stands in for, so it
+     inherits the same size and circular shape; .avatar-placeholder paints the
+     muted disc behind the figure. */}}
+{{define "avatarfallback"}}<svg class="{{.}} avatar-placeholder" viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="No profile photo"><path d="M12 12.6a4.3 4.3 0 1 0 0-8.6 4.3 4.3 0 0 0 0 8.6Zm0 1.7c-4.2 0-7.6 2.5-7.6 5.6V21h15.2v-1.1c0-3.1-3.4-5.6-7.6-5.6Z"/></svg>{{end}}
+
 {{/* postcard renders a single post. Expects a posts.Post as its data. */}}
 {{define "postcard"}}
 <article class="post" id="post-{{.ID}}">

@@ -931,6 +931,17 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 #load-older { margin-top: 1.75rem; text-align: center; }
 
 /* ---- Profile ------------------------------------------------------------- */
+/* Default avatar: a muted disc with a paper-toned silhouette, shown wherever a
+   user has no photo (issue #26). It carries the same sizing class as the <img>
+   it replaces, so only the fill/figure colours live here; width, height, border,
+   and the circular radius all come from that class. */
+.avatar-placeholder {
+  background: var(--paper-deep);
+  /* --ink-soft is theme-aware, so the figure keeps a gentle but legible contrast
+     against the disc in both light and dark modes. */
+  color: var(--ink-soft);
+}
+
 .profile-photo {
   width: 92px;
   height: 92px;
@@ -967,6 +978,9 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   gap: 0.5rem;
   max-width: 240px;
 }
+/* The display:flex above would otherwise override the UA [hidden] rule, leaving
+   an empty cropper circle visible before any file is chosen. */
+.avatar-crop-stage[hidden] { display: none; }
 .avatar-crop-stage canvas {
   border-radius: 50%;
   cursor: grab;

@@ -2,7 +2,7 @@
 {{define "title"}}Accept invitation — Hearth{{end}}
 {{define "content"}}
 <div class="invite-card">
-  {{if .SenderPhotoURL}}<img class="invite-photo" src="{{.SenderPhotoURL}}" alt="{{.SenderName}}">{{end}}
+  {{if .SenderPhotoURL}}<img class="invite-photo" src="{{.SenderPhotoURL}}" alt="{{.SenderName}}">{{else}}{{template "avatarfallback" "invite-photo"}}{{end}}
   <h1>{{.SenderName}} invited you to connect</h1>
   <p class="muted">@{{.SenderUsername}}</p>
   <p>Connections on Hearth are <em>mutual and intentional</em></p>

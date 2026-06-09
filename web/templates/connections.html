@@ -19,7 +19,7 @@
     <ul class="request-list">
       {{range .Requests}}
         <li class="request-item">
-          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
+          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{else}}{{template "avatarfallback" "request-photo"}}{{end}}
           <div class="request-body">
             <a href="/u/{{.Username}}" class="request-name">{{.Name}}</a>
             <span class="muted">@{{.Username}}</span>
@@ -51,7 +51,7 @@
     <ul class="request-list">
       {{range .Outgoing}}
         <li class="request-item">
-          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
+          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{else}}{{template "avatarfallback" "request-photo"}}{{end}}
           <div class="request-body">
             <a href="/u/{{.Username}}" class="request-name">{{.Name}}</a>
             <span class="muted">@{{.Username}}</span>
@@ -80,7 +80,7 @@
   <ul class="connection-list">
     {{range .People}}
       <li class="connection-item">
-        {{if .PhotoURL}}<img class="connection-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{end}}
+        {{if .PhotoURL}}<img class="connection-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{else}}{{template "avatarfallback" "connection-photo"}}{{end}}
         <div class="connection-body">
           <a href="/u/{{.Username}}" class="connection-name">{{.Name}}</a>
           <span class="muted">@{{.Username}}</span>

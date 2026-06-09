@@ -1,13 +1,16 @@
 package auth
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/dblanc/hearth/internal/connections"
+	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/shared/middleware"
 	"github.com/dblanc/hearth/internal/shared/render"
 )
@@ -16,12 +19,13 @@ import (
 type Handlers struct {
 	Svc      *Service
 	Renderer *render.Renderer
-	Secret   []byte // HMAC key for reading the pending_invite cookie
-	Secure   bool   // true in production — controls Secure cookie flag
+	Secret   []byte      // HMAC key for reading the pending_invite cookie
+	Secure   bool        // true in production — controls Secure cookie flag
+	Media    media.Store // may be nil in dev/test — signup photo upload is then skipped
 }
 
-func NewHandlers(svc *Service, r *render.Renderer, secret []byte, secure bool) *Handlers {
-	return &Handlers{Svc: svc, Renderer: r, Secret: secret, Secure: secure}
+func NewHandlers(svc *Service, r *render.Renderer, secret []byte, secure bool, m media.Store) *Handlers {
+	return &Handlers{Svc: svc, Renderer: r, Secret: secret, Secure: secure, Media: m}
 }
 
 // postAuthRedirect picks where to send a user immediately after they log in or
@@ -69,9 +73,14 @@ func (h *Handlers) signupForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.Renderer.Error(w, http.StatusBadRequest)
-		return
+	// The form is multipart when an optional profile photo is attached, plain
+	// URL-encoded otherwise; fall back to ParseForm so both work (mirrors the
+	// profile-edit handler).
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		if err2 := r.ParseForm(); err2 != nil {
+			h.Renderer.Error(w, http.StatusBadRequest)
+			return
+		}
 	}
 	in := SignupInput{
 		Username:  NormaliseUsername(r.FormValue("username")),
@@ -96,6 +105,37 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 	if m := ValidateLastName(in.LastName); m != "" {
 		errs.Add("last_name", m)
 	}
+
+	// A profile photo is optional at signup (issue #26). Validate and normalize it
+	// up front so any problem surfaces inline with the other fields; the bytes are
+	// only stored once the account is successfully created below.
+	var (
+		photoData []byte
+		photoType string
+		photoExt  string
+	)
+	if h.Media != nil {
+		if file, _, ferr := r.FormFile("photo"); ferr == nil {
+			defer file.Close()
+			data, rerr := io.ReadAll(io.LimitReader(file, media.MaxProfilePhotoSize+1))
+			if rerr != nil {
+				h.Renderer.Error(w, http.StatusInternalServerError)
+				return
+			}
+			normalized, ct, ext, userMsg, perr := media.ProcessProfilePhoto(data)
+			if perr != nil {
+				h.Renderer.Error(w, http.StatusInternalServerError)
+				return
+			}
+			if userMsg != "" {
+				errs.Add("photo", userMsg)
+			} else {
+				photoData, photoType, photoExt = normalized, ct, ext
+			}
+		}
+		// A missing file is normal — the photo is optional.
+	}
+
 	if errs.Has() {
 		h.Renderer.Status(w, http.StatusUnprocessableEntity, "signup.html", render.Page(user(r), render.M{
 			"Username": in.Username, "Email": in.Email,
@@ -104,7 +144,7 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.Svc.Signup(r.Context(), in)
+	userID, err := h.Svc.Signup(r.Context(), in)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUsernameTaken):
@@ -126,6 +166,20 @@ func (h *Handlers) signupSubmit(w http.ResponseWriter, r *http.Request) {
 				"FirstName": in.FirstName, "LastName": in.LastName, "Errors": errs,
 			}))
 			return
+		}
+	}
+
+	// Store the optional photo now that the account exists. This is best-effort:
+	// the account is already created and the verification email sent, so a failed
+	// upload should not block signup — the user can add a photo later from
+	// settings. We therefore log and continue rather than erroring out.
+	if len(photoData) > 0 {
+		key := media.NewProfileKey(photoExt)
+		if uerr := h.Media.Upload(r.Context(), key, bytes.NewReader(photoData), photoType); uerr != nil {
+			slog.Error("signup: profile photo upload", "user_id", userID, "err", uerr)
+		} else if serr := h.Svc.SetPhotoKey(r.Context(), userID, key); serr != nil {
+			_ = h.Media.Delete(r.Context(), key)
+			slog.Error("signup: set photo key", "user_id", userID, "err", serr)
 		}
 	}
 
