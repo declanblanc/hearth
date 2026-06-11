@@ -6,25 +6,23 @@
        redirect carries the token). InviteSender is the inviter's display name
        when the token resolved; otherwise we greet them generically. */}}
   {{if .InviteToken}}
+  {{/* next=/i/{token} sends them back to the invite opener after signing in; the
+       pending-invite cookie also carries the token across the round-trip. The
+       call to action is inline in the sentence rather than separate buttons. */}}
   <div class="banner landing-invite">
     {{if .InviteSender}}<strong>{{.InviteSender}}</strong> invited you to Hearth.{{else}}You've been invited to Hearth.{{end}}
-    Log in or create an account to connect.
+    <a href="/login?next=/i/{{.InviteToken}}">Log in</a> or <a href="/signup">create an account</a> to connect.
   </div>
   {{end}}
 
   {{template "mission" .}}
 
+  {{if not .InviteToken}}
   <div class="landing-actions">
-    {{if .InviteToken}}
-      {{/* next=/i/{token} sends them back to the invite opener after signing in;
-           the pending-invite cookie also carries the token across the round-trip. */}}
-      <a class="button-link" href="/login?next=/i/{{.InviteToken}}">Log in &amp; connect</a>
-      <a class="button-link button-secondary" href="/signup">I'm new — sign up</a>
-    {{else}}
-      <a class="button-link" href="/signup">Create an account</a>
-      <a class="button-link button-secondary" href="/login">Log in</a>
-    {{end}}
+    <a class="button-link" href="/signup">Create an account</a>
+    <a class="button-link button-secondary" href="/login">Log in</a>
   </div>
+  {{end}}
 
   <p class="landing-more"><a href="/about">Why Hearth is different →</a></p>
   {{if .InviteToken}}<p class="muted landing-invite-note">Your invitation is saved for the next 30 minutes, so you'll come right back here after signing in.</p>{{end}}

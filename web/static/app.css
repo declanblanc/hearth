@@ -1359,7 +1359,7 @@ span.invite-url { box-shadow: none; }
 .mission-tail { margin: 0.5rem 0 0; }
 .mission-tail em { font-style: italic; color: var(--ember-deep); }
 
-.mission-rotate { color: var(--ink-soft); min-height: 1.3em; }
+.mission-rotate { min-height: 1.3em; }
 .mission-rotate-word {
   display: inline-block;
   color: var(--ember-deep);
@@ -1381,7 +1381,7 @@ span.invite-url { box-shadow: none; }
   margin: 1.5rem 0 0;
 }
 
-.about-prose { margin-top: 2rem; }
+.about-prose { margin-top: 1rem; }
 .about-points { list-style: none; padding: 0; margin: 1rem 0 0; }
 .about-points li {
   position: relative;
