@@ -1,5 +1,21 @@
 {{define "landing.html"}}{{template "base" .}}{{end}}
 {{define "title"}}Hearth — real connections, with people you really know{{end}}
+{{/* Link-preview (Open Graph / Twitter Card) tags. The invite link resolves to
+     this page, so when someone shares it the scraper (iMessage, etc.) reads
+     these. og:image is an absolute URL — scrapers won't resolve a relative path
+     — built from .BaseURL, which the handlers that render this page supply. */}}
+{{define "head"}}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Hearth">
+<meta property="og:title" content="You've been invited to Hearth">
+<meta property="og:description" content="Real connections with people you really know.">
+<meta property="og:image" content="{{.BaseURL}}/static/hearth.png">
+<meta property="og:url" content="{{.BaseURL}}/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="You've been invited to Hearth">
+<meta name="twitter:description" content="Real connections with people you really know.">
+<meta name="twitter:image" content="{{.BaseURL}}/static/hearth.png">
+{{end}}
 {{define "content"}}
 <section class="landing">
   {{/* Shown when a logged-out visitor arrives via an invite link (the /welcome

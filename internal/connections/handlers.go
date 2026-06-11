@@ -118,7 +118,7 @@ func (h *Handlers) welcome(w http.ResponseWriter, r *http.Request) {
 	// invite-aware call to action. We resolve the token only to greet them by the
 	// inviter's name; an invalid or expired token falls back to the plain landing
 	// page rather than a dead-end error, so the first impression still lands.
-	data := render.M{}
+	data := render.M{"BaseURL": h.Svc.BaseURL}
 	if token != "" {
 		if res, err := h.Svc.Resolve(r.Context(), token, 0); err == nil && res.State == StateValid {
 			data["InviteToken"] = token

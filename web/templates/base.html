@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f4eee2">
 <title>{{block "title" .}}Hearth{{end}}</title>
+{{/* Per-page <head> extras — link-preview (Open Graph / Twitter) tags live here.
+     Most pages add nothing; the landing page (which invite links resolve to)
+     overrides this to describe the invitation for iMessage/social scrapers. */}}
+{{block "head" .}}{{end}}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="/static/app.css">

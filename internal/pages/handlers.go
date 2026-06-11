@@ -18,10 +18,14 @@ type Handlers struct {
 	// signed-in viewers and shows the landing page to everyone else, so the same
 	// "/" URL means "your feed" once you're in and "what is this place" before.
 	FeedRoot http.Handler
+	// BaseURL is the site's public origin (no trailing slash). The landing page
+	// uses it to build absolute Open Graph image/URL tags, since link-preview
+	// scrapers won't resolve relative paths.
+	BaseURL string
 }
 
-func NewHandlers(r *render.Renderer, feedRoot http.Handler) *Handlers {
-	return &Handlers{Renderer: r, FeedRoot: feedRoot}
+func NewHandlers(r *render.Renderer, feedRoot http.Handler, baseURL string) *Handlers {
+	return &Handlers{Renderer: r, FeedRoot: feedRoot, BaseURL: baseURL}
 }
 
 // Mount registers the public root and the About page. Both are bare (no
@@ -41,7 +45,7 @@ func (h *Handlers) root(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A plain logged-out visit: no invite context, just the mission statement.
-	h.Renderer.HTML(w, "landing.html", render.Page(nil, nil))
+	h.Renderer.HTML(w, "landing.html", render.Page(nil, render.M{"BaseURL": h.BaseURL}))
 }
 
 func (h *Handlers) about(w http.ResponseWriter, r *http.Request) {

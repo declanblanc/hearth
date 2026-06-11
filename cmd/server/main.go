@@ -110,7 +110,7 @@ func main() {
 	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, commentSvc, r, mediaStore, cfg.IsProd())
 	// The site root is owned by pages: landing page for logged-out visitors,
 	// feed for signed-in ones (delegated to feedH.Index).
-	pagesH := pages.NewHandlers(r, http.HandlerFunc(feedH.Index))
+	pagesH := pages.NewHandlers(r, http.HandlerFunc(feedH.Index), cfg.BaseURL)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
