@@ -108,12 +108,24 @@ func (h *Handlers) openInvite(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) welcome(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("invite")
-	// An already-signed-in user doesn't need the chooser; send them straight on.
+	// An already-signed-in user doesn't need the landing page; send them straight
+	// to the invite opener.
 	if middleware.UserFrom(r.Context()) != nil && token != "" {
 		http.Redirect(w, r, "/i/"+token, http.StatusSeeOther)
 		return
 	}
-	h.Renderer.HTML(w, "welcome.html", render.Page(nil, render.M{"Token": token}))
+	// Logged-out invitees see the landing page (the mission statement) carrying an
+	// invite-aware call to action. We resolve the token only to greet them by the
+	// inviter's name; an invalid or expired token falls back to the plain landing
+	// page rather than a dead-end error, so the first impression still lands.
+	data := render.M{}
+	if token != "" {
+		if res, err := h.Svc.Resolve(r.Context(), token, 0); err == nil && res.State == StateValid {
+			data["InviteToken"] = token
+			data["InviteSender"] = res.SenderName
+		}
+	}
+	h.Renderer.HTML(w, "landing.html", render.Page(nil, data))
 }
 
 func (h *Handlers) acceptInvite(w http.ResponseWriter, r *http.Request) {

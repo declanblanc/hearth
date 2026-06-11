@@ -1,0 +1,32 @@
+{{define "about.html"}}{{template "base" .}}{{end}}
+{{define "title"}}About — Hearth{{end}}
+{{define "content"}}
+<section class="about">
+  <h1>About Hearth</h1>
+
+  {{template "mission" .}}
+
+  <div class="about-prose">
+    <p>Modern social media platforms are no longer a place for people to connect with one another. It's short-form connect, advanced algorithms designed to keep your attention serving you content you didn't ask for.</p>
+
+    <p>Hearth was founded on the idea that a social media platform <em>can</em> be a positive thing in our lives. A way to stay connected with people we want to be connected with. It may not be for everyone, but that's okay, it's not supposed to be. Hearth is for people who care about mindfulness and intentionality.</p>
+
+    <h2>How Hearth is different</h2>
+    <ul class="about-points">
+      <li><strong>Connecting with others is an off-platform experience.</strong> You can't search for other users, the only way to connect with someone is by sending them an invite link.</li>
+      <li><strong>No likes.</strong> Likes drive engagement, and sure they feel good, but that's not what Hearth is about.</li>
+      <li><strong>Chronological feed.</strong> The posts you see in your feed are shown in order from most recent to least recent. That's it.</li>
+      <li><strong>Your profile is completely private.</strong> Unless you're connected with someone, they can never see your profile or posts.</li>
+    </ul>
+  </div>
+
+  {{/* Sign-up / log-in only make sense for logged-out readers. */}}
+  {{if not .User}}
+  <div class="landing-actions">
+    <a class="button-link" href="/signup">Create an account</a>
+    <a class="button-link button-secondary" href="/login">Log in</a>
+  </div>
+  {{end}}
+</section>
+{{end}}
+{{define "scripts"}}<script src="/static/landing.js" defer></script>{{end}}

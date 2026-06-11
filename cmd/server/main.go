@@ -19,6 +19,7 @@ import (
 	"github.com/dblanc/hearth/internal/feed"
 	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/notifications"
+	"github.com/dblanc/hearth/internal/pages"
 	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/profiles"
 	"github.com/dblanc/hearth/internal/shared/config"
@@ -107,6 +108,9 @@ func main() {
 	commentH := posts.NewCommentHandlers(commentSvc, r)
 	feedH := feed.NewHandlers(feedSvc, r, mediaStore, commentSvc)
 	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, commentSvc, r, mediaStore, cfg.IsProd())
+	// The site root is owned by pages: landing page for logged-out visitors,
+	// feed for signed-in ones (delegated to feedH.Index).
+	pagesH := pages.NewHandlers(r, http.HandlerFunc(feedH.Index))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -121,6 +125,7 @@ func main() {
 	// middleware.RequireAuth internally. Public routes (auth pages, the invite
 	// opener, and /u/{username}) are registered bare and do their own gating.
 	authH.Mount(mux)
+	pagesH.Mount(mux)
 	feedH.Mount(mux)
 	postH.Mount(mux)
 	commentH.Mount(mux)

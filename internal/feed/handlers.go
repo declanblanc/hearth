@@ -22,14 +22,17 @@ func NewHandlers(svc *Service, r *render.Renderer, m media.Store, commentSvc *po
 	return &Handlers{Svc: svc, Renderer: r, Media: m, Comments: commentSvc}
 }
 
-// Mount registers the feed at the site root and the "load older" partial.
-// Caller wraps with RequireAuth.
+// Mount registers the "load older" partial. The site root ("/") is owned by the
+// pages package, which serves the public landing page to logged-out visitors and
+// delegates to Index for authenticated ones.
 func (h *Handlers) Mount(mux *http.ServeMux) {
-	mux.Handle("GET /{$}", middleware.RequireAuth(http.HandlerFunc(h.index)))
 	mux.Handle("GET /feed/older", middleware.RequireAuth(http.HandlerFunc(h.older)))
 }
 
-func (h *Handlers) index(w http.ResponseWriter, r *http.Request) {
+// Index renders the home feed for the signed-in viewer. It assumes an
+// authenticated request (a populated UserFrom); the pages package only routes
+// logged-in visitors here.
+func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	res, err := h.Svc.FirstPage(r.Context(), u.ID)
 	if err != nil {

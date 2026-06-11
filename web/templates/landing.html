@@ -1,0 +1,33 @@
+{{define "landing.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Hearth — real connections, with people you really know{{end}}
+{{define "content"}}
+<section class="landing">
+  {{/* Shown when a logged-out visitor arrives via an invite link (the /welcome
+       redirect carries the token). InviteSender is the inviter's display name
+       when the token resolved; otherwise we greet them generically. */}}
+  {{if .InviteToken}}
+  <div class="banner landing-invite">
+    {{if .InviteSender}}<strong>{{.InviteSender}}</strong> invited you to Hearth.{{else}}You've been invited to Hearth.{{end}}
+    Log in or create an account to connect.
+  </div>
+  {{end}}
+
+  {{template "mission" .}}
+
+  <div class="landing-actions">
+    {{if .InviteToken}}
+      {{/* next=/i/{token} sends them back to the invite opener after signing in;
+           the pending-invite cookie also carries the token across the round-trip. */}}
+      <a class="button-link" href="/login?next=/i/{{.InviteToken}}">Log in &amp; connect</a>
+      <a class="button-link button-secondary" href="/signup">I'm new — sign up</a>
+    {{else}}
+      <a class="button-link" href="/signup">Create an account</a>
+      <a class="button-link button-secondary" href="/login">Log in</a>
+    {{end}}
+  </div>
+
+  <p class="landing-more"><a href="/about">Why Hearth is different →</a></p>
+  {{if .InviteToken}}<p class="muted landing-invite-note">Your invitation is saved for the next 30 minutes, so you'll come right back here after signing in.</p>{{end}}
+</section>
+{{end}}
+{{define "scripts"}}<script src="/static/landing.js" defer></script>{{end}}
