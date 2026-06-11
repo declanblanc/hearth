@@ -11,7 +11,6 @@ import (
 
 	"github.com/dblanc/hearth/internal/auth"
 	"github.com/dblanc/hearth/internal/connections"
-	"github.com/dblanc/hearth/internal/likes"
 	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/shared/middleware"
@@ -23,15 +22,14 @@ type Handlers struct {
 	Auth     *auth.Service
 	Conns    *connections.Service
 	Posts    *posts.Service
-	Likes    *likes.Service
 	Comments *posts.CommentService
 	Renderer *render.Renderer
 	Media    media.Store // may be nil in dev (photo uploads silently skipped)
 	Secure   bool
 }
 
-func NewHandlers(svc *Service, authSvc *auth.Service, conns *connections.Service, postsSvc *posts.Service, likeSvc *likes.Service, commentSvc *posts.CommentService, r *render.Renderer, m media.Store, secure bool) *Handlers {
-	return &Handlers{Svc: svc, Auth: authSvc, Conns: conns, Posts: postsSvc, Likes: likeSvc, Comments: commentSvc, Renderer: r, Media: m, Secure: secure}
+func NewHandlers(svc *Service, authSvc *auth.Service, conns *connections.Service, postsSvc *posts.Service, commentSvc *posts.CommentService, r *render.Renderer, m media.Store, secure bool) *Handlers {
+	return &Handlers{Svc: svc, Auth: authSvc, Conns: conns, Posts: postsSvc, Comments: commentSvc, Renderer: r, Media: m, Secure: secure}
 }
 
 func (h *Handlers) Mount(mux *http.ServeMux) {
@@ -273,15 +271,6 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 	if err := posts.SignMediaURLs(r.Context(), h.Media, authorPosts); err != nil {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
-	}
-	// A connected viewer looking at someone else's posts can like them, so
-	// reflect which they've already liked. The owner sees a liker list instead
-	// of a like button, so their own like state is irrelevant here.
-	if connected {
-		if err := h.Likes.MarkViewerLikes(r.Context(), u.ID, authorPosts); err != nil {
-			h.Renderer.Error(w, http.StatusInternalServerError)
-			return
-		}
 	}
 	// Attach comment threads for rendering. Access was settled above (owner or
 	// connected viewer), so this needs no further connection check.

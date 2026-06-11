@@ -10,10 +10,10 @@ import (
 	"github.com/dblanc/hearth/internal/shared/render"
 )
 
-// CommentHandlers serve the comment endpoints. They follow the same pattern as
-// the like control: an htmx request gets just the re-rendered comment thread to
-// swap in place, while a plain form POST (no JS) is redirected back to the page
-// it came from, where the thread re-renders server-side.
+// CommentHandlers serve the comment endpoints. An htmx request gets just the
+// re-rendered comment thread to swap in place, while a plain form POST (no JS)
+// is redirected back to the page it came from, where the thread re-renders
+// server-side.
 type CommentHandlers struct {
 	Svc      *CommentService
 	Renderer *render.Renderer
@@ -25,7 +25,7 @@ func NewCommentHandlers(svc *CommentService, r *render.Renderer) *CommentHandler
 
 // Mount registers the comment routes. Caller wraps with RequireAuth. Browsers
 // can't issue DELETE from a form, so delete is reachable via both DELETE and a
-// POST fallback, mirroring the posts and likes packages.
+// POST fallback, mirroring the posts package.
 func (h *CommentHandlers) Mount(mux *http.ServeMux) {
 	mux.Handle("POST /posts/{id}/comments", middleware.RequireAuth(http.HandlerFunc(h.create)))
 	mux.Handle("POST /comments/{id}/replies", middleware.RequireAuth(http.HandlerFunc(h.reply)))

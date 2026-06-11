@@ -8,7 +8,7 @@
 //
 // Without this script every comment box stays hidden. That is a deliberate
 // trade-off (#29): commenting requires JS, which the app already assumes for the
-// composer and like controls. The toggle buttons are real <button>s, so they
+// composer. The toggle buttons are real <button>s, so they
 // simply do nothing rather than appearing broken.
 
 (function () {

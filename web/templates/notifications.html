@@ -6,7 +6,7 @@
 {{if .Items}}
   <ul class="notification-list">
     {{range .Items}}
-      {{/* Post-targeted notifications (likes, comments, replies) deep-link to
+      {{/* Post-targeted notifications (comments, replies) deep-link to
            the post on its author's profile, with a #post-{id} fragment that
            scrolls to the post (anchors live in the postcard). The author's
            username comes from the post itself, not the recipient: a
@@ -23,9 +23,6 @@
           {{else if eq .Type "connection_accepted"}}
             {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
             confirmed your connection. You're now connected.
-          {{else if eq .Type "like_on_post"}}
-            {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            liked {{if $postLink}}<a href="{{$postLink}}">your post</a>{{else}}your post{{end}}.
           {{else if eq .Type "comment_on_post"}}
             {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
             commented on {{if $postLink}}<a href="{{$postLink}}">your post</a>{{else}}your post{{end}}.

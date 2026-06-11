@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/dblanc/hearth/internal/likes"
 	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/posts"
 	"github.com/dblanc/hearth/internal/shared/middleware"
@@ -16,12 +15,11 @@ type Handlers struct {
 	Svc      *Service
 	Renderer *render.Renderer
 	Media    media.Store // may be nil in dev (post images won't render)
-	Likes    *likes.Service
 	Comments *posts.CommentService
 }
 
-func NewHandlers(svc *Service, r *render.Renderer, m media.Store, likeSvc *likes.Service, commentSvc *posts.CommentService) *Handlers {
-	return &Handlers{Svc: svc, Renderer: r, Media: m, Likes: likeSvc, Comments: commentSvc}
+func NewHandlers(svc *Service, r *render.Renderer, m media.Store, commentSvc *posts.CommentService) *Handlers {
+	return &Handlers{Svc: svc, Renderer: r, Media: m, Comments: commentSvc}
 }
 
 // Mount registers the feed at the site root and the "load older" partial.
@@ -63,17 +61,9 @@ func (h *Handlers) index(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	// Reflect which of these posts the viewer has already liked so the like
-	// control renders in its toggled state. Every feed post is a connection's,
-	// never the viewer's own.
 	for _, group := range [][]posts.Post{res.New, res.Old} {
-		if err := h.Likes.MarkViewerLikes(r.Context(), u.ID, group); err != nil {
-			slog.Error("feed: mark likes", "user_id", u.ID, "err", err)
-			h.Renderer.Error(w, http.StatusInternalServerError)
-			return
-		}
-		// Comment threads are visible to the viewer for the same reason the posts
-		// are: every feed author is a connection (CLAUDE.md §1).
+		// Comment threads are visible to the viewer because every feed author is a
+		// connection (CLAUDE.md §1).
 		if err := h.Comments.AttachToPosts(r.Context(), u.ID, group); err != nil {
 			slog.Error("feed: attach comments", "user_id", u.ID, "err", err)
 			h.Renderer.Error(w, http.StatusInternalServerError)
@@ -106,11 +96,6 @@ func (h *Handlers) older(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := posts.SignAvatarURLs(r.Context(), h.Media, rows); err != nil {
 		slog.Error("feed: sign avatars", "user_id", u.ID, "err", err)
-		h.Renderer.Error(w, http.StatusInternalServerError)
-		return
-	}
-	if err := h.Likes.MarkViewerLikes(r.Context(), u.ID, rows); err != nil {
-		slog.Error("feed: mark likes", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}

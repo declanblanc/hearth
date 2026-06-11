@@ -17,7 +17,6 @@ import (
 	"github.com/dblanc/hearth/internal/auth"
 	"github.com/dblanc/hearth/internal/connections"
 	"github.com/dblanc/hearth/internal/feed"
-	"github.com/dblanc/hearth/internal/likes"
 	"github.com/dblanc/hearth/internal/media"
 	"github.com/dblanc/hearth/internal/notifications"
 	"github.com/dblanc/hearth/internal/posts"
@@ -97,7 +96,6 @@ func main() {
 	postSvc.Media = mediaStore
 	commentSvc := posts.NewCommentService(database, connSvc, notifSvc)
 	feedSvc := feed.New(database, connSvc)
-	likeSvc := likes.New(database, connSvc, notifSvc)
 	profileSvc := profiles.New(database)
 	profileSvc.Media = mediaStore
 
@@ -107,9 +105,8 @@ func main() {
 	connH := connections.NewHandlers(connSvc, r, mediaStore, cfg.CookieSecret, cfg.IsProd())
 	postH := posts.NewHandlers(postSvc, r)
 	commentH := posts.NewCommentHandlers(commentSvc, r)
-	likeH := likes.NewHandlers(likeSvc, r)
-	feedH := feed.NewHandlers(feedSvc, r, mediaStore, likeSvc, commentSvc)
-	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, likeSvc, commentSvc, r, mediaStore, cfg.IsProd())
+	feedH := feed.NewHandlers(feedSvc, r, mediaStore, commentSvc)
+	profileH := profiles.NewHandlers(profileSvc, authSvc, connSvc, postSvc, commentSvc, r, mediaStore, cfg.IsProd())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -127,7 +124,6 @@ func main() {
 	feedH.Mount(mux)
 	postH.Mount(mux)
 	commentH.Mount(mux)
-	likeH.Mount(mux)
 	notifH.Mount(mux)
 	connH.Mount(mux)
 	profileH.Mount(mux)

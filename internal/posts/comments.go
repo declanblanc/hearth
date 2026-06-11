@@ -34,7 +34,7 @@ var (
 // Connections is the slice of the connection graph comments need: the single
 // privacy chokepoint (CLAUDE.md §1). *connections.Service satisfies it. Declared
 // locally (rather than importing the connections package) to keep the import
-// graph acyclic, mirroring the likes package.
+// graph acyclic.
 type Connections interface {
 	IsConnected(ctx context.Context, viewerID, authorID int64) (bool, error)
 	// ConnectionIDs returns the user IDs the given user is connected to, used to

@@ -18,7 +18,6 @@ const (
 	TypeConnectionAccepted = "connection_accepted"
 	TypeCommentOnPost      = "comment_on_post"
 	TypeReplyToComment     = "reply_to_comment"
-	TypeLikeOnPost         = "like_on_post"
 )
 
 type Service struct {
@@ -50,22 +49,6 @@ func (s *Service) Create(ctx context.Context, e Execer, p Params) error {
 		`INSERT INTO notifications (user_id, type, actor_id, post_id, comment_id, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		p.UserID, p.Type, nullID(p.ActorID), nullID(p.PostID), nullID(p.CommentID), s.Now(),
-	)
-	return err
-}
-
-// DeleteForActorOnPost removes notifications a given actor generated for a given
-// post of a given type. It is used when a like is undone, so the recipient's
-// inbox doesn't keep a stale "{name} liked your post" entry (Technical Plan
-// §4.4.5). Like Create, it accepts an optional execer to join a caller's
-// transaction; pass nil to use the service's own DB handle.
-func (s *Service) DeleteForActorOnPost(ctx context.Context, e Execer, actorID, postID int64, notifType string) error {
-	if e == nil {
-		e = s.DB
-	}
-	_, err := e.ExecContext(ctx,
-		`DELETE FROM notifications WHERE actor_id = ? AND post_id = ? AND type = ?`,
-		actorID, postID, notifType,
 	)
 	return err
 }

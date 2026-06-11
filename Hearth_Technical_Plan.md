@@ -185,20 +185,9 @@ On edit, we insert a snapshot of the _old_ content before overwriting the post. 
 | status            | TEXT       | 'active' \| 'deleted'       |
 | created_at        | TIMESTAMP  |                             |
 
-### `likes`
-
-| column     | type       | notes                       |
-| ---------- | ---------- | --------------------------- |
-| id         | INTEGER PK |                             |
-| post_id    | INTEGER FK |                             |
-| user_id    | INTEGER FK | the user who liked the post |
-| created_at | TIMESTAMP  |                             |
-
-A unique constraint on `(post_id, user_id)` makes a like idempotent — a user can like a given post at most once. This table is the **only** place a like is recorded. It exists to (a) drive the like notification and (b) let the post author see the list of who liked, and nothing else. It is never used to compute or display a count, publicly or privately. See §4.4.5 for the flow and the privacy constraints.
-
 ### `notification_preferences`
 
-One row per user, all flags default to `false`. Categories at MVP: connection requests, comments on your posts, replies to your comments, likes on your posts. These flags only control whether **email** is sent — in-app notifications (below) are always created.
+One row per user, all flags default to `false`. Categories at MVP: connection requests, comments on your posts, replies to your comments. These flags only control whether **email** is sent — in-app notifications (below) are always created.
 
 ### `notifications`
 
@@ -206,7 +195,7 @@ One row per user, all flags default to `false`. Categories at MVP: connection re
 | ---------- | ---------- | ---------------------------------------------------------------------------------------- |
 | id         | INTEGER PK |                                                                                          |
 | user_id    | INTEGER FK | recipient                                                                                |
-| type       | TEXT       | 'connection_request' \| 'connection_accepted' \| 'comment_on_post' \| 'reply_to_comment' \| 'like_on_post' |
+| type       | TEXT       | 'connection_request' \| 'connection_accepted' \| 'comment_on_post' \| 'reply_to_comment' |
 | actor_id   | INTEGER FK | user who triggered it, nullable                                                          |
 | post_id    | INTEGER FK | nullable; set for comment-related notifications                                          |
 | comment_id | INTEGER FK | nullable; set for comment-related notifications                                          |
@@ -217,15 +206,9 @@ Indexes: `(user_id, created_at DESC)` for the notifications view, `(user_id) WHE
 
 ### Counters
 
-Deliberately absent: any aggregate count columns (connection_count, comment_count, like_count). The product is defined by what it doesn't show.
+Deliberately absent: any aggregate count columns (connection_count, comment_count). The product is defined by what it doesn't show.
 
-A `likes` table exists (see above), but it is **not** a counter. Likes are private signals of appreciation, never public metrics:
-
-- Liking a post sends the author a notification ("{name} liked your post") — that is the entire payoff.
-- There is no public indication that a post has been liked, and no like count anywhere — not on the post, not in the author's view, not in any API response.
-- The post author (and only the author) can see the _list of names_ of users who liked a given post. Names, never a number.
-
-In short: the `likes` table feeds a notification and an author-only liker list, and is never aggregated.
+There is no like feature and no `likes` table — likes were removed wholesale (see §9 decision log). No reaction or "favorite" affordance exists in any form.
 
 ---
 
@@ -297,30 +280,9 @@ Note: step 4 happens _after_ the query in step 2, so the same load doesn't re-cl
 - **Archive**: `status = 'archived'`. Excluded from feeds and profile views. Preserved in DB. Author can unarchive.
 - **Delete**: `status = 'deleted'`, content nulled, associated media objects deleted from R2, `post_edits` rows deleted. The post effectively vanishes — including from anyone's "old posts" view, since the feed query filters on `status = 'active'`.
 
-### 4.4.5 Likes (private appreciation, never a metric)
+### 4.4.5 Likes — removed
 
-A like is a one-way, private signal from a reader to a post author. It is the only "reaction" the product has, and it is intentionally invisible to everyone except the author.
-
-```
-POST /posts/{id}/like      (toggle on)
-1. Verify the liker is connected to the post author (privacy check). 404 if not.
-2. INSERT OR IGNORE INTO likes (post_id, user_id, created_at) — unique (post_id, user_id) makes it idempotent.
-3. If the row was newly inserted AND the liker is not the author:
-     CreateNotification(author_id, 'like_on_post', actor_id=liker_id, post_id=id).
-   (Liking your own post is allowed but never notifies you.)
-
-DELETE /posts/{id}/like    (toggle off / unlike)
-1. DELETE FROM likes WHERE post_id = ? AND user_id = ?.
-2. Delete the corresponding 'like_on_post' notification for this (post, actor),
-   so an unliked post doesn't leave a stale "{name} liked your post" entry.
-```
-
-Visibility rules — these are load-bearing:
-
-- **No public indication.** Nothing in the post's rendering tells any viewer (including other likers) that the post has been liked, or by whom.
-- **No count, anywhere.** Not on the post, not in the author's view, not in any response body.
-- **Author-only liker list.** `GET /posts/{id}/likes` returns the display names of users who liked the post. It is authorized for the post author only; everyone else (connected or not) gets a 404. The response is a list of names — never a count.
-- A viewer can see whether _they_ have liked a post (so the like control can render its toggled state), but nothing about anyone else's likes.
+There is no like feature. It was built and then removed wholesale (see §9 decision log): no `POST /posts/{id}/like`, no liker list, no `like_on_post` notification, no `likes` table. The product has no reaction or "favorite" affordance of any kind. Do not reintroduce one.
 
 ### 4.5 Media handling
 
@@ -349,7 +311,7 @@ Use a transaction with `BEGIN IMMEDIATE` in SQLite when inserting to avoid races
 
 ### 4.7 Notifications
 
-Notifiable events at MVP: connection requests, connection accepts, comments on your posts, replies to your comments, and **likes on your posts** (`like_on_post`). When one happens, the server does two things:
+Notifiable events at MVP: connection requests, connection accepts, comments on your posts, and replies to your comments. When one happens, the server does two things:
 
 1. **Always** insert a row in `notifications`. The in-app view is populated regardless of preferences.
 2. **Conditionally** send an email via Resend — only if the recipient's `notification_preferences` flag for that category is `true`. All flags default to `false`, so the MVP default is silent email-wise.
@@ -387,11 +349,11 @@ These are the things the product _doesn't_ do, with a note on how that's enforce
 
 | Anti-feature                 | How it's enforced                                                                                                     |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| No _public_ likes/reactions  | A like exists only as a private notification to the author plus an author-only liker list (§4.4.5). No public like indicator, no reactions, no emoji palette. |
+| No likes/reactions           | There is no like feature at all (§4.4.5, removed). No `likes` table, no like endpoints, no reactions, no emoji palette. |
 | No discovery                 | No user search endpoint. `/u/{username}` returns 404 unless the requesting user is connected. No "people you may know." |
 | No algorithm                 | Feed query is `ORDER BY created_at DESC`. Period.                                                                     |
 | Notifications off by default | All flags in `notification_preferences` default to `false`                                                            |
-| No visible counts            | Connection list returns names only. Comment thread returns comments, never `count`. Likes surface as a notification and an author-only list of names — never a number. |
+| No visible counts            | Connection list returns names only. Comment thread returns comments, never `count`. No `*_count` columns or aggregates anywhere. |
 | No messaging                 | No `messages` table, no endpoints                                                                                     |
 
 ---
@@ -437,7 +399,6 @@ Things I made a judgment call on while drafting. Each is worth a sanity check.
 
 - Image uploads (client compression, R2 storage, signed URLs)
 - Threaded comments (extends the notifications system to comment events)
-- Likes (private: notification to author + author-only liker list, no counts)
 - Post editing + history view
 - Archive + delete
 
@@ -471,7 +432,7 @@ All major architectural decisions are now resolved for MVP:
 - **Auth:** email + password + verification, session cookies
 - **Invite flow:** `pending_invite` cookie carries the token through signup/login round-trips
 - **Notifications:** email-only delivery (opt-in per category), plus an always-on in-app `/notifications` view with a dot indicator for unread
-- **Likes (revised):** the original plan had _no_ like feature at all. Reconsidered: likes are allowed, but strictly private — liking a post notifies the author ("{name} liked your post"), the author can see an author-only list of who liked, and there is no public indicator and no count anywhere (§4.4.5). This preserves the no-public-metrics ethos while allowing lightweight appreciation.
+- **Likes (removed):** the original plan had no like feature; it was then added as a strictly-private signal (notify the author, author-only liker list, no counts), built, and ultimately **removed wholesale**. The feature is gone in its entirety — no `likes` table, no like/unlike endpoints, no liker list, no `like_on_post` notification, no like control in the UI. The product has no reaction or "favorite" affordance of any kind, and one should not be reintroduced.
 - **Beta plan:** deploy to prod and share invite links with friends — no feature flag system
 
 Next document: detailed schema migrations and a complete API endpoint list, after which we can start building.

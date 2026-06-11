@@ -13,7 +13,7 @@ import (
 
 // newCommentSvc wires a CommentService against the real connections and
 // notifications services, so the privacy check and notification fan-out are
-// exercised end to end (mirrors the likes package tests).
+// exercised end to end.
 func newCommentSvc(d *sql.DB) *CommentService {
 	notifSvc := notifications.New(d)
 	connSvc := connections.New(d, notifSvc, "https://hearth.test")

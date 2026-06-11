@@ -18,7 +18,7 @@
   var imageEl = null; // the <img> shown inside the overlay
   var prevBtn = null;
   var nextBtn = null;
-  var counterEl = null; // "2 / 4" position label — a gallery aid, never a like/post count
+  var counterEl = null; // "2 / 4" position label — a gallery aid, never a post count
   var gallery = []; // image sources for the active post
   var index = 0; // current position within `gallery`
   var lastFocused = null; // element to restore focus to on close

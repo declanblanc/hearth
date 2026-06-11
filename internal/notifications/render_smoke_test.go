@@ -13,7 +13,7 @@ import (
 
 // TestRender_NotificationsDeepLinkAndText is a render-path smoke test for issue
 // #22: it renders the real notifications.html template through the production
-// renderer and asserts (a) comment/like notifications produce a deep link to
+// renderer and asserts (a) comment/reply notifications produce a deep link to
 // the post and meaningful text, and (b) the generic "You have a new
 // notification" fallback is never reached for known types.
 func TestRender_NotificationsDeepLinkAndText(t *testing.T) {
@@ -24,8 +24,7 @@ func TestRender_NotificationsDeepLinkAndText(t *testing.T) {
 
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 	items := []Item{
-		// Like and comment notifications go to the post author (alice).
-		{ID: 1, Type: TypeLikeOnPost, ActorUsername: "bob", ActorName: "Bob", PostID: 42, PostAuthorUsername: "alice", CreatedAt: now},
+		// Comment notifications go to the post author (alice).
 		{ID: 2, Type: TypeCommentOnPost, ActorUsername: "carol", ActorName: "Carol", PostID: 7, PostAuthorUsername: "alice", CommentID: 3, CreatedAt: now},
 		// A reply notification can reach alice even when the post is someone
 		// else's (frank's); the link must target frank's profile, not alice's.
@@ -41,12 +40,11 @@ func TestRender_NotificationsDeepLinkAndText(t *testing.T) {
 	}
 	html := rec.Body.String()
 
-	// Like and comment notifications must deep-link to the recipient's own
-	// profile, anchored to the specific post.
+	// Comment and reply notifications must deep-link to the post, anchored to
+	// the specific post.
 	for _, want := range []string{
-		`href="/u/alice#post-42"`, // liked post (author = recipient)
-		`href="/u/alice#post-7"`,  // commented-on post (author = recipient)
-		`href="/u/frank#post-9"`,  // replied-to: link targets the POST author, not the recipient
+		`href="/u/alice#post-7"`, // commented-on post (author = recipient)
+		`href="/u/frank#post-9"`, // replied-to: link targets the POST author, not the recipient
 		"commented on",
 		"replied to",
 	} {

@@ -538,7 +538,7 @@ Implements Technical Plan §4.1 exactly.
 
 ## Goal
 
-Posts get richer: images, threaded comments, private likes, edit history, archive/delete. End of Phase 2: feature-complete for MVP, missing only polish.
+Posts get richer: images, threaded comments, edit history, archive/delete. End of Phase 2: feature-complete for MVP, missing only polish.
 
 ## 2.1 Image uploads
 
@@ -657,7 +657,7 @@ Posts get richer: images, threaded comments, private likes, edit history, archiv
 - `POST /posts/{id}/archive` (author only): `status = 'archived'`.
 - `POST /posts/{id}/unarchive` (author only): `status = 'active'`.
 - Archived posts excluded from feeds and profile views; they remain in DB with comments intact.
-- `DELETE /posts/{id}` (author only): `status = 'deleted'`, null content, delete `post_edits` rows, delete `post_media` rows and the underlying R2 objects, delete `comments` referencing the post, delete `likes` referencing the post.
+- `DELETE /posts/{id}` (author only): `status = 'deleted'`, null content, delete `post_edits` rows, delete `post_media` rows and the underlying R2 objects, delete `comments` referencing the post.
 - `GET /settings/archived`: paginated list of the author's archived posts with unarchive buttons.
 
 ### Acceptance criteria
@@ -682,48 +682,9 @@ Posts get richer: images, threaded comments, private likes, edit history, archiv
 - Unarchive one; confirm it reappears in chronological position.
 - Delete one; confirm it's gone everywhere, including the R2 bucket.
 
-## 2.5 Likes (private)
+## 2.5 Likes — removed
 
-A like is a private signal: it notifies the author and shows up in an author-only liker list, with **no public indicator and no count anywhere**. See Technical Plan §4.4.5.
-
-### Implementation
-
-- `likes` table per Technical Plan §3, with a unique constraint on `(post_id, user_id)`.
-- `POST /posts/{id}/like` (toggle on): privacy-check that the liker is connected to the post author (404 otherwise), then `INSERT OR IGNORE` into `likes`. If the row was newly inserted and the liker is not the author, `CreateNotification(author_id, 'like_on_post', actor_id=liker_id, post_id=id)`.
-- `DELETE /posts/{id}/like` (toggle off): delete the `likes` row for this `(post, user)`, and delete the corresponding `like_on_post` notification so an unliked post leaves no stale entry.
-- Liking your own post is permitted but never notifies you.
-- `GET /posts/{id}/likes`: returns the **display names** of users who liked the post. Authorized for the **post author only** — everyone else (connected or not) gets a 404. Never returns or renders a count.
-- The like control renders its own toggled state (whether _the current viewer_ has liked the post), but exposes nothing about other users' likes. No count, no avatars-of-likers, no "and N others."
-- Extend `CreateNotification` usage to cover the `like_on_post` type; render it in `/notifications` as "{name} liked your post".
-
-### Acceptance criteria
-
-- Liking a post the viewer can see notifies the author exactly once; re-liking (idempotent) does not create duplicate likes or duplicate notifications.
-- Unliking removes the like and removes the corresponding unread notification.
-- Liking your own post creates no notification.
-- A user not connected to the author cannot like the post (404) and cannot reach the liker list.
-- The liker list is visible to the author only and contains names, never a count.
-- No public like indicator or count appears anywhere in any view or response.
-
-### Testing plan
-
-**Automated**
-
-- Integration test: a connected user liking a post inserts one `likes` row and one `like_on_post` notification for the author.
-- Test: liking twice is idempotent — still one row, one notification.
-- Test: unliking deletes the `likes` row and the corresponding notification.
-- Test: liking your own post creates no notification.
-- Test: a non-connected user gets 404 on both `POST /posts/{id}/like` and `GET /posts/{id}/likes`.
-- Test: `GET /posts/{id}/likes` returns 404 for a connected non-author, and the list of names for the author.
-- Test: no response body or template anywhere exposes a like count.
-- Test: deleting a post cascades to its `likes` rows (covered in 2.4).
-
-**Manual**
-
-- Two-user flow: B likes A's post; A sees "{name} liked your post" in `/notifications` and the dot indicator.
-- A opens the liker list for the post; confirms it shows names and no number.
-- B unlikes; confirm B drops off A's liker list.
-- Confirm that from B's side (and any other connected viewer's side) there is no indication the post has been liked by anyone, and no count.
+The like feature was built during Phase 2 and subsequently **removed in its entirety**. There is no `likes` table, no like/unlike endpoints, no author-only liker list, and no `like_on_post` notification. Migration `010_remove_likes.sql` drops the table and the `likes_on_posts` preference column, and tightens the `notifications` type CHECK to exclude `like_on_post`. The product has no reaction or "favorite" affordance of any kind — see Technical Plan §4.4.5 and the §9 decision log. Do not reintroduce one.
 
 ---
 
