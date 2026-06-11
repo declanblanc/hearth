@@ -10,8 +10,8 @@
        pending-invite cookie also carries the token across the round-trip. The
        call to action is inline in the sentence rather than separate buttons. */}}
   <div class="banner landing-invite">
-    {{if .InviteSender}}<strong>{{.InviteSender}}</strong> invited you to Hearth.{{else}}You've been invited to Hearth.{{end}}
-    <a href="/login?next=/i/{{.InviteToken}}">Log in</a> or <a href="/signup">create an account</a> to connect.
+    <p class="landing-invite-lead">{{if .InviteSender}}<strong>{{.InviteSender}}</strong> invited you to Hearth.{{else}}You've been invited to Hearth.{{end}}</p>
+    <p class="landing-invite-cta"><a href="/login?next=/i/{{.InviteToken}}">Log in</a> or <a href="/signup">create an account</a> to connect.</p>
   </div>
   {{end}}
 

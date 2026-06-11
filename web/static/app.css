@@ -1368,7 +1368,31 @@ span.invite-url { box-shadow: none; }
 }
 .mission-rotate-word.is-fading { opacity: 0; }
 
-.landing-invite { margin-bottom: 1.75rem; }
+/* When someone arrives from an invite link this banner is the point of the
+   page, so it's deliberately louder than a standard .banner: a warm ember panel
+   with larger type that takes the eye before the mission copy does. */
+.landing-invite {
+  margin-bottom: 2.25rem;
+  padding: 1.35rem 1.6rem;
+  font-size: 1.2rem;
+  line-height: 1.5;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ember), var(--ember-deep));
+  border: 1px solid var(--glow);
+  border-left: 1px solid var(--glow);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.landing-invite-lead { margin: 0; }
+.landing-invite-cta { margin: 0.35rem 0 0; }
+.landing-invite strong { font-weight: 700; }
+.landing-invite a {
+  color: #fff;
+  font-weight: 600;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.landing-invite a:hover { color: var(--paper); }
 .landing-invite-note { margin-top: 1.5rem; }
 .landing-more { margin: 1rem 0 0; }
 
