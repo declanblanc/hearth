@@ -17,12 +17,12 @@
       {{if and .PostID .PostAuthorUsername}}{{$postLink = printf "/u/%s#post-%d" .PostAuthorUsername .PostID}}{{end}}
       <li class="notification-item{{if not .Read}} unread{{end}}">
         <span class="notification-text">
-          {{if eq .Type "connection_request"}}
+          {{if eq .Type "connection_accepted"}}
+            {{/* Sent to the inviter when their invitation is accepted. The
+                 actor link lets them open the new connection's profile and
+                 disconnect there if they didn't mean to connect. */}}
             {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            accepted your invite link, but wait! You're not connected just yet, head to the <a href="/connections">connections page</a> to confirm or decline this connection.
-          {{else if eq .Type "connection_accepted"}}
-            {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            confirmed your connection. You're now connected.
+            accepted your invitation. You're now connected.
           {{else if eq .Type "comment_on_post"}}
             {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
             commented on {{if $postLink}}<a href="{{$postLink}}">your post</a>{{else}}your post{{end}}.

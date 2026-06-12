@@ -222,78 +222,133 @@ func TestResolve_ExpiredAndConsumed(t *testing.T) {
 	}
 }
 
-// ---- request / accept / deny ----
+// ---- accepting an invite ----
 
-func TestCreateRequest_RecordsPending(t *testing.T) {
+// TestAcceptInvite_ConnectsAndNotifiesSender proves the whole handshake happens
+// in one step: accepting an invite creates the canonical connection and notifies
+// the *sender* (the inviter) that their invitation was accepted, with the
+// accepter as the actor.
+func TestAcceptInvite_ConnectsAndNotifiesSender(t *testing.T) {
 	d := newTestDB(t)
 	svc := newSvc(d)
 	ctx := context.Background()
-	sender := seedUser(t, d, "sender")
-	requester := seedUser(t, d, "requester")
+	// Make the accepter the LOWER id so we can prove canonical ordering.
+	accepter := seedUser(t, d, "accepter") // lower id
+	sender := seedUser(t, d, "sender")     // higher id
 	token, _ := svc.CreateInvite(ctx, sender)
 
-	if err := svc.CreateRequest(ctx, token, requester); err != nil {
-		t.Fatalf("CreateRequest: %v", err)
+	res, err := svc.AcceptInvite(ctx, token, accepter)
+	if err != nil {
+		t.Fatalf("AcceptInvite: %v", err)
+	}
+	if res.SenderUsername != "sender" {
+		t.Errorf("resolution should carry the sender identity, got %+v", res)
 	}
 
-	// A repeat accept by the SAME requester is idempotent: it succeeds without
-	// burning another of the link's uses or creating a duplicate pending row.
-	if err := svc.CreateRequest(ctx, token, requester); err != nil {
-		t.Errorf("repeat accept by same requester should be a no-op, got %v", err)
-	}
-	if reqs, _ := svc.ListPendingRequests(ctx, sender); len(reqs) != 1 {
-		t.Errorf("repeat accept should not duplicate the pending request, got %d", len(reqs))
+	// They are now connected (no pending state).
+	if ok, _ := svc.IsConnected(ctx, accepter, sender); !ok {
+		t.Error("accepter and sender should be connected immediately")
 	}
 
-	// No connection_request notification is created: the pending connection
-	// surfaces on the connections page and as the Connections tab dot, so a
-	// notifications-page entry would be duplicate information (issue #13).
-	if n := unreadCount(t, d, sender, notifications.TypeConnectionRequest); n != 0 {
-		t.Errorf("want 0 connection_request notifications for sender, got %d", n)
+	// Connection stored as (min, max).
+	var a, b int64
+	if err := d.QueryRow(`SELECT user_a_id, user_b_id FROM connections`).Scan(&a, &b); err != nil {
+		t.Fatalf("read connection: %v", err)
+	}
+	if a != min64(sender, accepter) || b != max64(sender, accepter) {
+		t.Errorf("connection not canonical: got (%d,%d)", a, b)
 	}
 
-	// The recipient sees the pending request and its dot is lit.
-	reqs, _ := svc.ListPendingRequests(ctx, sender)
-	if len(reqs) != 1 || reqs[0].RequesterUsername != "requester" {
-		t.Errorf("expected one pending request from requester, got %+v", reqs)
+	// The SENDER (inviter) is notified that the invite was accepted; the
+	// accepter is not notified.
+	if n := unreadCount(t, d, sender, notifications.TypeConnectionAccepted); n != 1 {
+		t.Errorf("want 1 connection_accepted for sender, got %d", n)
 	}
-	if dot, _ := svc.HasPendingRequests(ctx, sender); !dot {
-		t.Error("HasPendingRequests(sender) = false, want true")
+	if n := unreadCount(t, d, accepter, notifications.TypeConnectionAccepted); n != 0 {
+		t.Errorf("want 0 connection_accepted for accepter, got %d", n)
 	}
 
-	// The requester (accepter) sees the connection as outgoing-pending (issue
-	// #15) but has no incoming request and no dot.
-	outgoing, _ := svc.ListOutgoingPending(ctx, requester)
-	if len(outgoing) != 1 || outgoing[0].Username != "sender" {
-		t.Errorf("expected one outgoing pending toward sender, got %+v", outgoing)
+	// The notification's actor is the accepter, so its profile link points at
+	// the new connection (letting the sender disconnect if unintended).
+	var actorID int64
+	if err := d.QueryRow(
+		`SELECT actor_id FROM notifications WHERE user_id = ? AND type = ?`,
+		sender, notifications.TypeConnectionAccepted).Scan(&actorID); err != nil {
+		t.Fatalf("read notification actor: %v", err)
 	}
-	if dot, _ := svc.HasPendingRequests(ctx, requester); dot {
-		t.Error("HasPendingRequests(requester) = true, want false")
+	if actorID != accepter {
+		t.Errorf("notification actor: got %d, want accepter %d", actorID, accepter)
 	}
 }
 
-// TestCreateRequest_MultiUseUpToCap proves a single invite link can be accepted
-// by InviteMaxUses distinct people, and the (cap+1)th is rejected as exhausted
-// (issue #28). The cap enforced here is the real backend cap (10), independent
-// of the lower figure shown in the UI (InviteShownUses).
-func TestCreateRequest_MultiUseUpToCap(t *testing.T) {
+// TestAcceptInvite_Idempotent proves a second accept of the same link by the
+// same person is a harmless no-op: it surfaces ErrAlreadyConnected, claims no
+// extra slot, and creates no duplicate connection or notification.
+func TestAcceptInvite_Idempotent(t *testing.T) {
+	d := newTestDB(t)
+	svc := newSvc(d)
+	ctx := context.Background()
+	sender := seedUser(t, d, "sender")
+	accepter := seedUser(t, d, "accepter")
+	token, _ := svc.CreateInvite(ctx, sender)
+
+	if _, err := svc.AcceptInvite(ctx, token, accepter); err != nil {
+		t.Fatalf("first accept: %v", err)
+	}
+	if _, err := svc.AcceptInvite(ctx, token, accepter); !errors.Is(err, ErrAlreadyConnected) {
+		t.Errorf("second accept should report ErrAlreadyConnected, got %v", err)
+	}
+
+	var conns int
+	_ = d.QueryRow(`SELECT COUNT(*) FROM connections`).Scan(&conns)
+	if conns != 1 {
+		t.Errorf("want exactly 1 connection, got %d", conns)
+	}
+	if n := unreadCount(t, d, sender, notifications.TypeConnectionAccepted); n != 1 {
+		t.Errorf("want exactly 1 notification, got %d", n)
+	}
+	// Only one of the link's uses was claimed.
+	var acceptCount int
+	_ = d.QueryRow(`SELECT accept_count FROM invites WHERE token = ?`, token).Scan(&acceptCount)
+	if acceptCount != 1 {
+		t.Errorf("want accept_count 1, got %d", acceptCount)
+	}
+}
+
+func TestAcceptInvite_Self(t *testing.T) {
 	d := newTestDB(t)
 	svc := newSvc(d)
 	ctx := context.Background()
 	sender := seedUser(t, d, "sender")
 	token, _ := svc.CreateInvite(ctx, sender)
 
-	// InviteMaxUses distinct requesters can each accept the same link.
+	if _, err := svc.AcceptInvite(ctx, token, sender); !errors.Is(err, ErrSelfConnect) {
+		t.Errorf("accepting your own invite should fail with ErrSelfConnect, got %v", err)
+	}
+}
+
+// TestAcceptInvite_MultiUseUpToCap proves a single invite link can be accepted
+// by InviteMaxUses distinct people, and the (cap+1)th is rejected as exhausted
+// (issue #28). The cap enforced here is the real backend cap (10), independent
+// of the lower figure shown in the UI (InviteShownUses).
+func TestAcceptInvite_MultiUseUpToCap(t *testing.T) {
+	d := newTestDB(t)
+	svc := newSvc(d)
+	ctx := context.Background()
+	sender := seedUser(t, d, "sender")
+	token, _ := svc.CreateInvite(ctx, sender)
+
+	// InviteMaxUses distinct accepters can each connect via the same link.
 	for i := 0; i < InviteMaxUses; i++ {
-		requester := seedUser(t, d, fmt.Sprintf("requester%d", i))
-		if err := svc.CreateRequest(ctx, token, requester); err != nil {
+		accepter := seedUser(t, d, fmt.Sprintf("accepter%d", i))
+		if _, err := svc.AcceptInvite(ctx, token, accepter); err != nil {
 			t.Fatalf("accept %d/%d should succeed: %v", i+1, InviteMaxUses, err)
 		}
 	}
 
 	// All slots are now claimed; the next accept must be rejected.
 	overflow := seedUser(t, d, "overflow")
-	if err := svc.CreateRequest(ctx, token, overflow); !errors.Is(err, ErrInviteInvalid) {
+	if _, err := svc.AcceptInvite(ctx, token, overflow); !errors.Is(err, ErrInviteInvalid) {
 		t.Errorf("accept %d (past the cap) should fail with ErrInviteInvalid, got %v", InviteMaxUses+1, err)
 	}
 
@@ -302,21 +357,22 @@ func TestCreateRequest_MultiUseUpToCap(t *testing.T) {
 		t.Errorf("exhausted link should resolve StateInvalid, got %d", r.State)
 	}
 
-	// Exactly InviteMaxUses pending requests were recorded — no more.
-	reqs, _ := svc.ListPendingRequests(ctx, sender)
-	if len(reqs) != InviteMaxUses {
-		t.Errorf("want %d pending requests, got %d", InviteMaxUses, len(reqs))
+	// Exactly InviteMaxUses connections were created — no more.
+	var conns int
+	_ = d.QueryRow(`SELECT COUNT(*) FROM connections WHERE user_a_id = ? OR user_b_id = ?`, sender, sender).Scan(&conns)
+	if conns != InviteMaxUses {
+		t.Errorf("want %d connections, got %d", InviteMaxUses, conns)
 	}
 }
 
-// TestCreateRequest_ExpiredLinkRejected proves the 72-hour expiry still rejects
-// accepts independently of the new multi-use capacity (issue #28).
-func TestCreateRequest_ExpiredLinkRejected(t *testing.T) {
+// TestAcceptInvite_ExpiredLinkRejected proves the 72-hour expiry still rejects
+// accepts independently of the multi-use capacity (issue #28).
+func TestAcceptInvite_ExpiredLinkRejected(t *testing.T) {
 	d := newTestDB(t)
 	svc := newSvc(d)
 	ctx := context.Background()
 	sender := seedUser(t, d, "sender")
-	requester := seedUser(t, d, "requester")
+	accepter := seedUser(t, d, "accepter")
 
 	// A fresh (unused) link whose expiry is already in the past.
 	past := time.Now().Add(-time.Hour)
@@ -326,185 +382,40 @@ func TestCreateRequest_ExpiredLinkRejected(t *testing.T) {
 		sender, expiredTok, past.Add(-InviteLifetime), past, InviteMaxUses); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CreateRequest(ctx, expiredTok, requester); !errors.Is(err, ErrInviteInvalid) {
+	if _, err := svc.AcceptInvite(ctx, expiredTok, accepter); !errors.Is(err, ErrInviteInvalid) {
 		t.Errorf("accept on an expired link should fail, got %v", err)
 	}
 }
 
-func TestAccept_CreatesCanonicalConnectionAndNotifies(t *testing.T) {
-	d := newTestDB(t)
-	svc := newSvc(d)
-	ctx := context.Background()
-	// Make sender the HIGHER id so we can prove canonical ordering on accept.
-	requester := seedUser(t, d, "requester") // lower id
-	sender := seedUser(t, d, "sender")       // higher id
-	token, _ := svc.CreateInvite(ctx, sender)
-	if err := svc.CreateRequest(ctx, token, requester); err != nil {
-		t.Fatal(err)
-	}
-	reqs, _ := svc.ListPendingRequests(ctx, sender)
-	reqID := reqs[0].ID
-
-	if err := svc.AcceptRequest(ctx, reqID, sender); err != nil {
-		t.Fatalf("AcceptRequest: %v", err)
-	}
-
-	// Connection stored as (min, max).
-	var a, b int64
-	if err := d.QueryRow(`SELECT user_a_id, user_b_id FROM connections`).Scan(&a, &b); err != nil {
-		t.Fatalf("read connection: %v", err)
-	}
-	if a != min64(sender, requester) || b != max64(sender, requester) {
-		t.Errorf("connection not canonical: got (%d,%d)", a, b)
-	}
-
-	// Original requester got a connection_accepted notification.
-	if n := unreadCount(t, d, requester, notifications.TypeConnectionAccepted); n != 1 {
-		t.Errorf("want 1 connection_accepted for requester, got %d", n)
-	}
-
-	// Accepting again fails — already resolved.
-	if err := svc.AcceptRequest(ctx, reqID, sender); !errors.Is(err, ErrRequestResolved) {
-		t.Errorf("re-accept should fail, got %v", err)
-	}
-}
-
-func TestAccept_NonRecipientRejected(t *testing.T) {
-	d := newTestDB(t)
-	svc := newSvc(d)
-	ctx := context.Background()
-	sender := seedUser(t, d, "sender")
-	requester := seedUser(t, d, "requester")
-	intruder := seedUser(t, d, "intruder")
-	token, _ := svc.CreateInvite(ctx, sender)
-	_ = svc.CreateRequest(ctx, token, requester)
-	reqs, _ := svc.ListPendingRequests(ctx, sender)
-
-	if err := svc.AcceptRequest(ctx, reqs[0].ID, intruder); !errors.Is(err, ErrNotRecipient) {
-		t.Errorf("a non-recipient must not accept, got %v", err)
-	}
-}
-
-func TestAccept_RateLimit(t *testing.T) {
+// TestAcceptInvite_NotRateLimited proves accepting invites is not rate-limited:
+// a user already holding many recent connections can still accept another invite
+// and connect (the old 10-connections-per-7-days cap was removed).
+func TestAcceptInvite_NotRateLimited(t *testing.T) {
 	d := newTestDB(t)
 	svc := newSvc(d)
 	ctx := context.Background()
 	accepter := seedUser(t, d, "accepter")
 
-	// Seed 10 recent connections so the accepter is at the weekly limit.
-	for i := 0; i < ConnectLimit; i++ {
-		other := seedUser(t, d, "other"+string(rune('a'+i)))
+	// Seed well past the old weekly cap of recent connections.
+	for i := 0; i < 15; i++ {
+		other := seedUser(t, d, fmt.Sprintf("other%d", i))
 		if _, err := d.Exec(`INSERT INTO connections (user_a_id, user_b_id, created_at) VALUES (?, ?, ?)`,
 			min64(accepter, other), max64(accepter, other), time.Now()); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	requester := seedUser(t, d, "requester")
-	token, _ := svc.CreateInvite(ctx, accepter)
-	_ = svc.CreateRequest(ctx, token, requester)
-	reqs, _ := svc.ListPendingRequests(ctx, accepter)
-
-	err := svc.AcceptRequest(ctx, reqs[0].ID, accepter)
-	var rl *RateLimitError
-	if !errors.As(err, &rl) {
-		t.Fatalf("accept at limit should be rate-limited, got %v", err)
-	}
-	if rl.Kind != "connection" {
-		t.Errorf("rate limit kind: got %q", rl.Kind)
-	}
-}
-
-func TestDeny_SilentNoConnectionNoNotification(t *testing.T) {
-	d := newTestDB(t)
-	svc := newSvc(d)
-	ctx := context.Background()
 	sender := seedUser(t, d, "sender")
-	requester := seedUser(t, d, "requester")
 	token, _ := svc.CreateInvite(ctx, sender)
-	_ = svc.CreateRequest(ctx, token, requester)
-	reqs, _ := svc.ListPendingRequests(ctx, sender)
 
-	if err := svc.DenyRequest(ctx, reqs[0].ID, sender); err != nil {
-		t.Fatalf("DenyRequest: %v", err)
+	if _, err := svc.AcceptInvite(ctx, token, accepter); err != nil {
+		t.Fatalf("accept should succeed without a rate limit, got %v", err)
 	}
-
-	var conns int
-	_ = d.QueryRow(`SELECT COUNT(*) FROM connections`).Scan(&conns)
-	if conns != 0 {
-		t.Error("deny must not create a connection")
+	if ok, _ := svc.IsConnected(ctx, accepter, sender); !ok {
+		t.Error("accepter and sender should be connected")
 	}
-	if n := unreadCount(t, d, requester, notifications.TypeConnectionAccepted); n != 0 {
-		t.Error("deny must not notify the requester")
-	}
-	// No longer pending.
-	after, _ := svc.ListPendingRequests(ctx, sender)
-	if len(after) != 0 {
-		t.Error("denied request should no longer be pending")
-	}
-}
-
-func TestPendingRequestFrom(t *testing.T) {
-	d := newTestDB(t)
-	svc := newSvc(d)
-	ctx := context.Background()
-	recipient := seedUser(t, d, "recipient")
-	requester := seedUser(t, d, "requester")
-	stranger := seedUser(t, d, "stranger")
-	token, _ := svc.CreateInvite(ctx, recipient)
-	if err := svc.CreateRequest(ctx, token, requester); err != nil {
-		t.Fatalf("CreateRequest: %v", err)
-	}
-	reqs, _ := svc.ListPendingRequests(ctx, recipient)
-	wantID := reqs[0].ID
-
-	// The matching (recipient, requester) pair resolves to the request id.
-	gotID, ok, err := svc.PendingRequestFrom(ctx, recipient, requester)
-	if err != nil {
-		t.Fatalf("PendingRequestFrom: %v", err)
-	}
-	if !ok || gotID != wantID {
-		t.Errorf("want request id %d (ok), got id=%d ok=%v", wantID, gotID, ok)
-	}
-
-	// Reversed direction does not match: the request is one-directional.
-	if _, ok, _ := svc.PendingRequestFrom(ctx, requester, recipient); ok {
-		t.Error("reversed (requester as recipient) should not match")
-	}
-
-	// An unrelated viewer has no pending request.
-	if _, ok, _ := svc.PendingRequestFrom(ctx, recipient, stranger); ok {
-		t.Error("stranger should not match")
-	}
-
-	// Once the request is resolved (accepted), it is no longer 'pending' and
-	// must stop matching — the preview access ends when the request does.
-	if err := svc.AcceptRequest(ctx, wantID, recipient); err != nil {
-		t.Fatalf("AcceptRequest: %v", err)
-	}
-	if _, ok, _ := svc.PendingRequestFrom(ctx, recipient, requester); ok {
-		t.Error("accepted request should no longer be pending")
-	}
-}
-
-func TestPendingRequestFrom_IgnoresSoftDeletedRequester(t *testing.T) {
-	d := newTestDB(t)
-	svc := newSvc(d)
-	ctx := context.Background()
-	recipient := seedUser(t, d, "recipient")
-	requester := seedUser(t, d, "requester")
-	token, _ := svc.CreateInvite(ctx, recipient)
-	if err := svc.CreateRequest(ctx, token, requester); err != nil {
-		t.Fatalf("CreateRequest: %v", err)
-	}
-
-	// Soft-delete the requester; their pending request must stop matching so a
-	// deleted account can't keep granting a profile preview.
-	if _, err := d.Exec(`UPDATE users SET deleted_at = ? WHERE id = ?`, time.Now(), requester); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok, _ := svc.PendingRequestFrom(ctx, recipient, requester); ok {
-		t.Error("soft-deleted requester should not match")
+	if n := unreadCount(t, d, sender, notifications.TypeConnectionAccepted); n != 1 {
+		t.Errorf("want 1 connection_accepted for sender, got %d", n)
 	}
 }
 

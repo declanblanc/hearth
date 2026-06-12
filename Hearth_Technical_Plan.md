@@ -129,15 +129,17 @@ Storing `(min_id, max_id)` avoids duplicate rows for the same pair. Unique index
 
 ### `connection_requests`
 
-| column       | type       | notes                                |
-| ------------ | ---------- | ------------------------------------ |
-| id           | INTEGER PK |                                      |
-| invite_id    | INTEGER FK | the invite the requester arrived via |
-| requester_id | INTEGER FK |                                      |
-| recipient_id | INTEGER FK |                                      |
-| status       | TEXT       | 'pending' \| 'accepted' \| 'denied'  |
-| created_at   | TIMESTAMP  |                                      |
-| resolved_at  | TIMESTAMP  | nullable                             |
+Audit trail only. Accepting an invite now connects the two users immediately (no pending/confirm step), so every row is born `status='accepted'`. It records which invite produced which connection for abuse review; no part of the app reads it back. Columns are retained as-is to avoid a migration.
+
+| column       | type       | notes                                          |
+| ------------ | ---------- | ---------------------------------------------- |
+| id           | INTEGER PK |                                                |
+| invite_id    | INTEGER FK | the invite the accepter arrived via            |
+| requester_id | INTEGER FK | the accepter (invitee)                         |
+| recipient_id | INTEGER FK | the sender (inviter)                           |
+| status       | TEXT       | always 'accepted' under the immediate-connect flow; 'pending'/'denied' are legacy |
+| created_at   | TIMESTAMP  |                                                |
+| resolved_at  | TIMESTAMP  | set to created_at (resolved on insert)         |
 
 ### `posts`
 
@@ -242,13 +244,13 @@ Note: step 4 happens _after_ the query in step 2, so the same load doesn't re-cl
 
    ```
    GET /i/{token}
-   ├─ Token not found / expired / consumed → "this invite is no longer valid" page.
-   ├─ Requester is signed in:
-   │   ├─ Requester is the sender → "you can't connect to yourself" error.
+   ├─ Token not found / expired / exhausted → "this invite is no longer valid" page.
+   ├─ Invitee is signed in:
+   │   ├─ Invitee is the sender → "you can't connect to yourself" error.
    │   ├─ Already connected → "you're already connected with {name}" page.
-   │   └─ Otherwise → render "Request to connect with {name}" page,
+   │   └─ Otherwise → render "Accept invitation from {name}" page,
    │                  showing A's display name and photo.
-   └─ Requester is NOT signed in:
+   └─ Invitee is NOT signed in:
        1. Set a short-lived signed cookie: `pending_invite={token}`, 30-min expiry.
        2. Redirect to /welcome?invite={token}, a chooser page with two
           buttons: "I have an account → Log in" and "I'm new → Sign up".
@@ -261,10 +263,8 @@ Note: step 4 happens _after_ the query in step 2, so the same load doesn't re-cl
    - The cookie matters even though the token is in the URL, because email verification typically happens in a different browser session (user clicks the link in their email client). The cookie is what carries the pending invite across that gap.
    - The invite is _consumed_ only when B accepts the invitation (step 4), not when the link is opened. Opening `/i/{token}` multiple times during signup doesn't burn the invite.
 
-4. B clicks "Accept invitation" (`POST /i/{token}/accept`): insert `connection_requests` row (pending), mark invite consumed.
-5. A is notified and sees the pending connection pinned to the top of their connections page (`/connections`). There is no separate requests page — the word "request" is avoided in the UI as it doesn't fit the mutual connection model.
-6. A clicks confirm (`POST /connections/{id}/confirm`) → insert `connections` row, set the pending row's status to 'accepted'. (Or declines via `POST /connections/{id}/decline`.)
-   - Reject if A has 10+ accepted connections in the trailing 7 days; show "you've reached your weekly limit, try again on [date]."
+4. B clicks "Accept invitation" (`POST /i/{token}/accept`): in one `BEGIN IMMEDIATE` transaction, claim one of the link's uses, insert the canonical `connections` row, and record an audit `connection_requests` row (`status='accepted'`). **This is the whole handshake — there is no confirm step.** B sees a "you're now connected with {name}" page. Accepting is not rate-limited (only invite creation is — §4.6).
+5. A is notified ("{B} accepted your invitation", `connection_accepted`). The notification's actor name links to B's profile, so if A didn't mean to connect — e.g. the link leaked — A can open it and disconnect. There is no separate requests page and no pending state; the word "request" is avoided in the UI as it doesn't fit the mutual connection model.
 
 ### 4.3 Disconnect
 
@@ -294,24 +294,19 @@ There is no like feature. It was built and then removed wholesale (see §9 decis
 
 ### 4.6 Rate limit enforcement
 
-Both checks are simple count queries on indexed columns:
+Invite *creation* is the only rate-limited action (20 / 7 days). Accepting an invite is not capped — a user can connect via as many invite links as they receive. The check is a simple count query on an indexed column:
 
 ```sql
 -- Invites sent in last 7 days
 SELECT COUNT(*) FROM invites
   WHERE sender_id = ? AND created_at > NOW() - INTERVAL '7 days';
-
--- Connections accepted in last 7 days
-SELECT COUNT(*) FROM connections
-  WHERE (user_a_id = ? OR user_b_id = ?)
-    AND created_at > NOW() - INTERVAL '7 days';
 ```
 
 Use a transaction with `BEGIN IMMEDIATE` in SQLite when inserting to avoid races at the limit boundary.
 
 ### 4.7 Notifications
 
-Notifiable events at MVP: connection requests, connection accepts, comments on your posts, and replies to your comments. When one happens, the server does two things:
+Notifiable events at MVP: invite accepts (the inviter is told their invitation was accepted), comments on your posts, and replies to your comments. When one happens, the server does two things:
 
 1. **Always** insert a row in `notifications`. The in-app view is populated regardless of preferences.
 2. **Conditionally** send an email via Resend — only if the recipient's `notification_preferences` flag for that category is `true`. All flags default to `false`, so the MVP default is silent email-wise.
@@ -385,9 +380,9 @@ Things I made a judgment call on while drafting. Each is worth a sanity check.
 
 ### Phase 1 — Core social loop
 
-- Invites, pending connections, confirm/decline
+- Invites, accept-to-connect (immediate connection on accept; inviter notified)
 - Disconnect
-- Rate limiting (20 invites/week, 10 accepts/week)
+- Rate limiting (20 invites/week; accepting an invite is not rate-limited)
 - Post creation (text only)
 - Feed with new/old split via `last_feed_loaded_at`
 - Other-user profile view (connected only)
@@ -431,6 +426,7 @@ All major architectural decisions are now resolved for MVP:
 - **Email:** Resend
 - **Auth:** email + password + verification, session cookies
 - **Invite flow:** `pending_invite` cookie carries the token through signup/login round-trips
+- **Connection handshake (simplified):** the original flow was three-step — invitee accepts, then the inviter confirms a pending request. This was confusing for new users ("I accepted, why aren't we connected?"). **Now accepting an invite connects the two users immediately** and notifies the inviter ("X accepted your invitation"); the notification links to the new connection's profile so the inviter can disconnect if the link was used by someone unintended. The pending/confirm/decline state, the requests UI, the outgoing-pending "waiting to connect" list, the Connections-tab pending dot, and the pending-request profile preview were all removed. The `connection_requests` table is kept as an append-only audit trail (every row `status='accepted'`), but no code reads it back. The previous 10-accepted-connections-per-7-days cap was also removed — accepting an invite is no longer rate-limited; only invite *creation* is (20 / 7 days).
 - **Notifications:** email-only delivery (opt-in per category), plus an always-on in-app `/notifications` view with a dot indicator for unread
 - **Likes (removed):** the original plan had no like feature; it was then added as a strictly-private signal (notify the author, author-only liker list, no counts), built, and ultimately **removed wholesale**. The feature is gone in its entirety — no `likes` table, no like/unlike endpoints, no liker list, no `like_on_post` notification, no like control in the UI. The product has no reaction or "favorite" affordance of any kind, and one should not be reintroduced.
 - **Beta plan:** deploy to prod and share invite links with friends — no feature flag system

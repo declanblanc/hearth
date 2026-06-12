@@ -41,12 +41,16 @@ func TestRender_NotificationsDeepLinkAndText(t *testing.T) {
 	html := rec.Body.String()
 
 	// Comment and reply notifications must deep-link to the post, anchored to
-	// the specific post.
+	// the specific post. The connection_accepted notification must name the
+	// accepter, link to their profile (so the inviter can disconnect), and use
+	// the "accepted your invitation" wording.
 	for _, want := range []string{
 		`href="/u/alice#post-7"`, // commented-on post (author = recipient)
 		`href="/u/frank#post-9"`, // replied-to: link targets the POST author, not the recipient
 		"commented on",
 		"replied to",
+		`href="/u/erin"`, // connection_accepted: actor profile link
+		"accepted your invitation",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered notifications missing %q\n---\n%s", want, html)

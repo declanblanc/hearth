@@ -5,21 +5,6 @@
   {{if .SenderPhotoURL}}<img class="invite-photo" src="{{.SenderPhotoURL}}" alt="{{.SenderName}}">{{else}}{{template "avatarfallback" "invite-photo"}}{{end}}
   <h1>{{.SenderName}} invited you to connect</h1>
   <p class="muted">@{{.SenderUsername}}</p>
-  <p>Connections on Hearth are <em>mutual and intentional</em></p>
-  <p>This philosophy breaks connection down into a three-step process:</p>
-
-  {{/*
-    Hearth's connection flow is a deliberate three-way handshake (CLAUDE.md §5,
-    Technical Plan §4.1). Alice received Bob's invitation, so the copy frames her
-    action as *accepting* it rather than cold-requesting a stranger, and spells
-    out why Bob still has to confirm. This template is wording-only; the endpoint
-    (POST /i/{token}/accept) and handshake logic are unchanged.
-  */}}
-  <ol class="invite-steps">
-    <li>{{.SenderName}} sent you this invitation.</li>
-    <li>You accept it by clicking the button below <i>(or simply ignore it if you don't want to connect with them).</i></li>
-    <li>Finally, if you accept, {{.SenderName}} is notified and <strong>confirms the connection</strong> (this final step ensures no one else got a hold of their invite link that wasn't supposed to).</li>
-  </ol>
 
   <form method="post" action="/i/{{.Token}}/accept">
     <button type="submit">Accept invitation from {{.SenderName}}</button>

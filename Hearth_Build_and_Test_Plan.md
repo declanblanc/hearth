@@ -376,39 +376,38 @@ Implements Technical Plan §4.2 step 3 exactly. The handler is a state machine o
 - Repeat with an existing-user flow (login instead of signup).
 - Try on mobile, where the email link opens in the system browser (which may or may not have the cookie).
 
-## 1.3 Pending connections (confirm/decline)
+## 1.3 Accept-to-connect
 
-There is **no dedicated requests page**. The word "request" is avoided in the UI because it doesn't fit Hearth's mutual connection model. Incoming pending connections — people who accepted an invite link the user shared — are pinned to the **top of the connections page** (`/connections`), where the user confirms or declines each one. The `connection_requests` table name is kept internally as the data-model concept, but the user never sees the word.
+Accepting an invite link **connects the two users immediately** — there is no confirm step. The inviter is simply notified that their invitation was accepted. This replaced the original three-step handshake (accept → inviter confirms), which confused new users who expected to be connected the moment they accepted. The word "request" is still avoided in the UI; the `connection_requests` table name is kept internally as an audit trail only.
 
 ### Implementation
 
-- `POST /i/{token}/accept` (authenticated, must have passed the invite handler's gate): inserts `connection_requests` row, marks invite consumed.
-- `GET /connections`: lists established connections, with pending incoming connections shown in a "Pending connections" section at the top.
-- `POST /connections/{id}/confirm`: insert `connections` row (with `min(user_a, user_b), max(...)`), update the pending row's status to `accepted`. Check the accepted-this-week limit before insert. Redirects back to `/connections`.
-- `POST /connections/{id}/decline`: update the pending row's status to `denied`. Original requester is **not** notified. Redirects back to `/connections`.
-- Rate limit: max 10 accepted connections in trailing 7 days. At-limit attempts return 429 with the lift time.
-- On confirm, insert a `connections_accepted` notification for the original requester.
+- `POST /i/{token}/accept` (authenticated, verified, must have passed the invite handler's gate): in one `BEGIN IMMEDIATE` transaction — claim one of the link's uses, insert the canonical `connections` row (`min(user_a, user_b), max(...)`), insert an audit `connection_requests` row (`status='accepted'`), and insert a `connection_accepted` notification for the **sender** (the inviter) with the accepter as `actor_id`. The accepter sees a "you're now connected with {name}" page.
+- No rate limit on accepting: a user can connect via as many invite links as they receive. Only invite *creation* is rate-limited (§1.1).
+- `GET /connections`: lists established connections plus the always-present invite-generation control. No pending section, no confirm/decline, no "waiting to connect" list, no Connections-tab pending dot.
+- The inviter's notification names the accepter and links to their profile (`/u/{username}`); if the link was used by someone unintended, the inviter follows it and disconnects.
 
 ### Acceptance criteria
 
 - Connections always stored with canonical (lower_id, higher_id) ordering.
-- Confirm at limit fails cleanly.
-- Decline is silent to the requester.
+- Accepting connects immediately; the inviter is notified, the accepter is not.
+- Accepting is not rate-limited.
+- A repeat accept by the same person is an idempotent no-op (no duplicate connection, notification, or slot claim).
 
 ### Testing plan
 
 **Automated**
 
-- Integration test: accept invite → confirm produces canonically-ordered connections row.
-- Test: confirm at rate limit returns 429.
-- Test: decline does not insert into connections and does not create a notification.
-- Test: confirming the same pending connection twice fails (status already final).
-- Test: notification row created on confirm with correct `actor_id` and type.
+- Integration test: accept invite → produces a canonically-ordered connections row and a `connection_accepted` notification for the sender with the accepter as `actor_id`.
+- Test: accepting is not rate-limited — a user already holding many recent connections can still accept and connect.
+- Test: a single link can be accepted up to its multi-use cap; the next accept is rejected as exhausted.
+- Test: a second accept by the same person reports already-connected and changes nothing.
+- Test: accepting your own invite is rejected.
 
 **Manual**
 
-- Two-user test: A invites B, B accepts the link; A sees a notification and the pending connection at the top of `/connections`, confirms it, both see each other on profile.
-- Two-user test: A invites B, B accepts the link, A declines; A is the only one who acted, B is not notified, and the pending entry leaves A's connections page.
+- Two-user test: A invites B, B accepts the link; B immediately sees a "you're now connected" page, A sees a "{B} accepted your invitation" notification, and both see each other on their profiles.
+- From that notification, A clicks B's name → B's profile → Disconnect, and the connection is removed for both.
 
 ## 1.4 Disconnect
 
@@ -506,15 +505,14 @@ Implements Technical Plan §4.1 exactly.
 
 - `notifications` table per Technical Plan §3.
 - Helper: `CreateNotification(user_id, type, actor_id?, post_id?, comment_id?)` — used by the rest of the codebase.
-- Types in Phase 1 scope: `connection_request`, `connection_accepted`.
+- Types in Phase 1 scope: `connection_accepted` (sent to the inviter when their invite is accepted). The `connection_request` type is retained in the schema's CHECK constraint as a legacy value but is no longer produced.
 - `GET /notifications`: list newest first.
 - On `GET /notifications`: `UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL`.
 - Header indicator: a small dot if any unread notifications, nothing otherwise. **No numeric count anywhere.**
 
 ### Acceptance criteria
 
-- Connection request inserts notification for the recipient.
-- Connection accept inserts notification for the original requester.
+- Invite accept inserts a `connection_accepted` notification for the inviter (the sender), with the accepter as `actor_id`.
 - Dot present iff any unread exist.
 - Visiting `/notifications` clears the unread state for all of the user's notifications.
 
@@ -522,14 +520,13 @@ Implements Technical Plan §4.1 exactly.
 
 **Automated**
 
-- Integration test: connection request creates the right notification with the right metadata.
-- Test: connection accept creates a notification for the original requester.
+- Integration test: invite accept creates the right notification for the inviter with the right metadata.
 - Test: visiting `/notifications` clears `read_at`.
 - Test: header indicator helper returns the right state for various unread counts.
 
 **Manual**
 
-- Two-user flow: A invites, B sees the dot, opens `/notifications`, sees the request, dot clears.
+- Two-user flow: A invites, B accepts; A sees the dot, opens `/notifications`, sees "{B} accepted your invitation", dot clears.
 - Visit `/notifications` with none present; verify the empty state copy.
 
 ---
@@ -730,7 +727,7 @@ Make Hearth feel like a finished product. PWA installable. Email notifications w
 ### Implementation
 
 - Resend client wrapper. One function: `SendEmail(to, template, vars)`.
-- Email templates (plain HTML, dark-mode friendly, no images): verification, password reset, connection request, connection accepted, comment on your post, reply to your comment.
+- Email templates (plain HTML, dark-mode friendly, no images): verification, password reset, invitation accepted, comment on your post, reply to your comment.
 - Notification flow: at `CreateNotification` time, **also** check the recipient's `notification_preferences` for the type. If enabled, enqueue email.
 - Email retries: 1 retry on Resend failure for notification emails. Verification and password-reset emails get 3 retries (they're more important).
 - One-click unsubscribe: every notification email has a link like `/u/{signed_token}` that toggles the relevant preference flag off. Token contains user_id + category + HMAC. Does not require login.
@@ -838,7 +835,7 @@ hearth/
 │       └── main.go
 ├── internal/
 │   ├── auth/                  # signup, login, sessions, password reset
-│   ├── connections/           # connections, invites, confirm/decline, disconnect
+│   ├── connections/           # connections, invites, accept-to-connect, disconnect
 │   ├── feed/                  # feed query + pagination
 │   ├── media/                 # R2 upload, signed URLs, image processing helpers
 │   ├── notifications/         # in-app + email dispatch
@@ -871,7 +868,7 @@ Pragmatic, not absolute:
 - **Integration tests:** every HTTP handler has at least one happy-path and one failure-path test.
 - **E2E tests:** the critical user flows are fully covered:
   - Sign up → email verify → log in → edit profile → log out.
-  - Invite → unauthenticated open → sign up → email verify → return to invite → request to connect → other user accepts → both see each other.
+  - Invite → unauthenticated open → sign up → email verify → return to invite → accept → both immediately connected, inviter notified.
   - Post → comment → both users see the comment → post author gets notification.
   - Disconnect → posts and profile no longer visible to either party.
   - Account deletion → soft delete → 30 days pass → hard delete cleans up.

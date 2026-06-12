@@ -39,26 +39,7 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 	mux.Handle("POST /invites", authed(h.createInvite))
 	mux.Handle("POST /i/{token}/accept", authed(h.acceptInvite))
 	mux.Handle("GET /connections", authed(h.listConnections))
-	mux.Handle("POST /connections/{id}/confirm", authed(h.confirmConnection))
-	mux.Handle("POST /connections/{id}/decline", authed(h.declineConnection))
 	mux.Handle("POST /connections/{user_id}/disconnect", authed(h.disconnect))
-}
-
-// LoadPendingDot is middleware that flags the Connections tab dot for
-// authenticated users who have a pending connection awaiting their confirm or
-// decline (issue #13). It mirrors notifications.LoadUnread: it mutates the
-// context User so every page's base template can show the dot without each
-// handler threading it through. Errors are swallowed — a missing dot is not
-// worth a 500.
-func (h *Handlers) LoadPendingDot(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if u := middleware.UserFrom(r.Context()); u != nil {
-			if pending, err := h.Svc.HasPendingRequests(r.Context(), u.ID); err == nil {
-				u.ConnectionsDot = pending
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // ---- invite opening (the §4.2 state machine) ----
@@ -135,7 +116,7 @@ func (h *Handlers) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	err := h.Svc.CreateRequest(r.Context(), token, u.ID)
+	res, err := h.Svc.AcceptInvite(r.Context(), token, u.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInviteInvalid):
@@ -143,16 +124,22 @@ func (h *Handlers) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrSelfConnect):
 			h.Renderer.Status(w, http.StatusUnprocessableEntity, "invite_self.html", render.Page(u, nil))
 		case errors.Is(err, ErrAlreadyConnected):
-			h.Renderer.HTML(w, "invite_connected.html", render.Page(u, render.M{}))
+			h.Renderer.HTML(w, "invite_connected.html", render.Page(u, render.M{
+				"SenderName": res.SenderName, "SenderUsername": res.SenderUsername,
+			}))
 		default:
-			slog.Error("connections: create request", "user_id", u.ID, "err", err)
+			slog.Error("connections: accept invite", "user_id", u.ID, "err", err)
 			h.Renderer.Error(w, http.StatusInternalServerError)
 		}
 		return
 	}
 	// Clear the pending-invite cookie — its job is done.
 	ClearPendingInviteCookie(w, h.Secure)
-	h.Renderer.HTML(w, "invite_accepted.html", render.Page(u, nil))
+	// The connection is live; greet the accepter and point them at the new
+	// connection's profile.
+	h.Renderer.HTML(w, "invite_accepted.html", render.Page(u, render.M{
+		"SenderName": res.SenderName, "SenderUsername": res.SenderUsername,
+	}))
 }
 
 // ---- invites management ----
@@ -192,80 +179,11 @@ func (h *Handlers) renderInviteLink(w http.ResponseWriter, r *http.Request, u *m
 	h.Renderer.Status(w, status, "invite_created.html", render.Page(u, render.M{"URL": url, "Error": errMsg}))
 }
 
-// ---- pending connections (incoming requests) ----
-
-type requestView struct {
-	ID        int64
-	Name      string
-	Username  string
-	PhotoURL  string
-	CreatedAt time.Time
-}
-
-// confirmConnection completes a connection for someone who accepted the
-// viewer's invite. On success — or when the pending connection has already been
-// resolved — it returns to the connections page where pending confirmations now
-// live (the dedicated requests page was removed).
-func (h *Handlers) confirmConnection(w http.ResponseWriter, r *http.Request) {
-	u := middleware.UserFrom(r.Context())
-	if !u.Verified {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-	id, ok := pathID(r, "id")
-	if !ok {
-		h.Renderer.Error(w, http.StatusBadRequest)
-		return
-	}
-	err := h.Svc.AcceptRequest(r.Context(), id, u.ID)
-	if err != nil {
-		var rl *RateLimitError
-		switch {
-		case errors.As(err, &rl):
-			h.renderConnectionsError(w, r, u, http.StatusTooManyRequests, rateLimitMessage(rl))
-		case errors.Is(err, ErrRequestNotFound), errors.Is(err, ErrNotRecipient):
-			h.Renderer.Error(w, http.StatusNotFound)
-		case errors.Is(err, ErrRequestResolved):
-			http.Redirect(w, r, "/connections", http.StatusSeeOther)
-		default:
-			slog.Error("connections: confirm", "user_id", u.ID, "err", err)
-			h.Renderer.Error(w, http.StatusInternalServerError)
-		}
-		return
-	}
-	http.Redirect(w, r, "/connections", http.StatusSeeOther)
-}
-
-// declineConnection turns away a pending connection without notifying the
-// requester (deny is silent), then returns to the connections page.
-func (h *Handlers) declineConnection(w http.ResponseWriter, r *http.Request) {
-	u := middleware.UserFrom(r.Context())
-	id, ok := pathID(r, "id")
-	if !ok {
-		h.Renderer.Error(w, http.StatusBadRequest)
-		return
-	}
-	err := h.Svc.DenyRequest(r.Context(), id, u.ID)
-	if err != nil {
-		switch {
-		case errors.Is(err, ErrRequestNotFound), errors.Is(err, ErrNotRecipient):
-			h.Renderer.Error(w, http.StatusNotFound)
-		case errors.Is(err, ErrRequestResolved):
-			http.Redirect(w, r, "/connections", http.StatusSeeOther)
-		default:
-			slog.Error("connections: decline", "user_id", u.ID, "err", err)
-			h.Renderer.Error(w, http.StatusInternalServerError)
-		}
-		return
-	}
-	http.Redirect(w, r, "/connections", http.StatusSeeOther)
-}
-
 // ---- connections list / disconnect ----
 
 func (h *Handlers) listConnections(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
-	data, err := h.connectionsPageData(r.Context(), u, "")
+	data, err := h.connectionsPageData(r.Context(), u)
 	if err != nil {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
@@ -273,47 +191,11 @@ func (h *Handlers) listConnections(w http.ResponseWriter, r *http.Request) {
 	h.Renderer.HTML(w, "connections.html", render.Page(u, data))
 }
 
-// renderConnectionsError re-renders the connections page with a banner message,
-// used for the rate-limit path when confirming a connection.
-func (h *Handlers) renderConnectionsError(w http.ResponseWriter, r *http.Request, u *middleware.User, status int, msg string) {
-	data, err := h.connectionsPageData(r.Context(), u, msg)
-	if err != nil {
-		h.Renderer.Error(w, http.StatusInternalServerError)
-		return
-	}
-	h.Renderer.Status(w, status, "connections.html", render.Page(u, data))
-}
-
-// connectionsPageData assembles everything the connections page shows: the
-// pending incoming requests pinned to the top (people who accepted the viewer's
-// invite and await confirmation) and the established connections below.
-func (h *Handlers) connectionsPageData(ctx context.Context, u *middleware.User, errMsg string) (render.M, error) {
-	reqs, err := h.Svc.ListPendingRequests(ctx, u.ID)
-	if err != nil {
-		return nil, err
-	}
-	requestViews := make([]requestView, 0, len(reqs))
-	for _, req := range reqs {
-		requestViews = append(requestViews, requestView{
-			ID: req.ID, Name: req.RequesterName, Username: req.RequesterUsername,
-			PhotoURL: h.photoURL(req.RequesterPhotoKey), CreatedAt: req.CreatedAt,
-		})
-	}
-
-	// Outgoing pending: people the viewer accepted an invite from and is now
-	// waiting on to confirm (issue #15). Read-only — the viewer can't act on
-	// these; the entry clears when the recipient resolves the request.
-	outgoing, err := h.Svc.ListOutgoingPending(ctx, u.ID)
-	if err != nil {
-		return nil, err
-	}
-	outgoingViews := make([]personView, 0, len(outgoing))
-	for _, p := range outgoing {
-		outgoingViews = append(outgoingViews, personView{
-			ID: p.ID, Name: p.Name, Username: p.Username, PhotoURL: h.photoURL(p.PhotoKey),
-		})
-	}
-
+// connectionsPageData assembles the connections page: the viewer's established
+// connections. There is no pending state — accepting an invite connects the two
+// users immediately (the inviter is simply notified) — so the page is now just
+// the connection list plus the always-present invite-generation control.
+func (h *Handlers) connectionsPageData(ctx context.Context, u *middleware.User) (render.M, error) {
 	people, err := h.Svc.ListConnections(ctx, u.ID)
 	if err != nil {
 		return nil, err
@@ -325,12 +207,7 @@ func (h *Handlers) connectionsPageData(ctx context.Context, u *middleware.User, 
 		})
 	}
 
-	return render.M{
-		"Requests": requestViews,
-		"Outgoing": outgoingViews,
-		"People":   peopleViews,
-		"Error":    errMsg,
-	}, nil
+	return render.M{"People": peopleViews}, nil
 }
 
 type personView struct {
@@ -373,10 +250,6 @@ func pathID(r *http.Request, name string) (int64, bool) {
 }
 
 func rateLimitMessage(rl *RateLimitError) string {
-	noun := "invites"
-	if rl.Kind == "connection" {
-		noun = "new connections"
-	}
-	return "You've reached your weekly limit for " + noun + ". Try again on " +
+	return "You've reached your weekly limit for invites. Try again on " +
 		rl.LiftAt.Format("Jan 2, 2006 at 3:04 PM") + " UTC."
 }

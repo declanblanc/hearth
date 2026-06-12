@@ -33,23 +33,18 @@ const (
 	// deliberately lower than InviteMaxUses (see above). It is static copy, not a
 	// live used/remaining counter — the product shows no counts (CLAUDE.md §2).
 	InviteShownUses = 5
-
-	ConnectWindow = 7 * 24 * time.Hour
-	ConnectLimit  = 10
 )
 
 var (
 	ErrInviteInvalid    = errors.New("connections: invite not found, expired, or exhausted")
 	ErrSelfConnect      = errors.New("connections: cannot connect to yourself")
 	ErrAlreadyConnected = errors.New("connections: already connected")
-	ErrRequestNotFound  = errors.New("connections: request not found")
-	ErrRequestResolved  = errors.New("connections: request already resolved")
-	ErrNotRecipient     = errors.New("connections: not the request recipient")
 )
 
 // RateLimitError reports that a per-window limit was hit and when it lifts.
+// Only invite creation is rate-limited (20 / 7d); accepting an invite is not.
 type RateLimitError struct {
-	Kind   string // "invite" or "connection"
+	Kind   string // "invite"
 	LiftAt time.Time
 }
 
@@ -313,45 +308,49 @@ func (s *Service) Resolve(ctx context.Context, token string, viewerID int64) (Re
 	return res, nil
 }
 
-// ---- connection requests ----
+// ---- accepting an invite ----
 
-// CreateRequest claims one use of the invite and records a pending connection
-// request from requesterID to the invite's sender. A use is claimed here (not at
-// link-open time, CLAUDE.md §5). An invite link can be accepted up to
-// InviteMaxUses times before it is exhausted (issue #28). Returns
-// ErrInviteInvalid if the invite is exhausted, expired, or otherwise unusable,
-// and ErrSelfConnect / ErrAlreadyConnected for those states.
+// AcceptInvite connects the accepter to the invite's sender immediately and
+// notifies the sender that their invitation was accepted. This single action is
+// the whole handshake — there is no separate confirm step. If the sender didn't
+// mean to connect, the notification links to the new connection's profile, where
+// they can disconnect.
 //
-// No notification row is created for the sender: a pending connection already
-// surfaces at the top of the sender's connections page and as a dot on the
-// Connections tab (HasPendingRequests), so a notifications-page entry would be
-// duplicate information (issue #13).
-func (s *Service) CreateRequest(ctx context.Context, token string, requesterID int64) error {
-	res, err := s.Resolve(ctx, token, requesterID)
+// One of the invite link's uses is claimed here, not at link-open time
+// (CLAUDE.md §5); a link can be accepted up to InviteMaxUses times before it is
+// exhausted (issue #28). Accepting an invite is not rate-limited — only invite
+// creation is (CLAUDE.md §7).
+//
+// It returns the resolved invite (sender identity) so the caller can render a
+// "you're now connected with X" confirmation, even on the ErrAlreadyConnected /
+// ErrSelfConnect paths. ErrInviteInvalid, ErrSelfConnect, and ErrAlreadyConnected
+// map to the corresponding invite states.
+func (s *Service) AcceptInvite(ctx context.Context, token string, accepterID int64) (Resolution, error) {
+	res, err := s.Resolve(ctx, token, accepterID)
 	if err != nil {
-		return err
+		return Resolution{}, err
 	}
 	switch res.State {
 	case StateInvalid:
-		return ErrInviteInvalid
+		return res, ErrInviteInvalid
 	case StateSelf:
-		return ErrSelfConnect
+		return res, ErrSelfConnect
 	case StateAlreadyConnected:
-		return ErrAlreadyConnected
+		return res, ErrAlreadyConnected
 	}
 
-	return db.WithImmediate(ctx, s.DB, func(conn *sql.Conn) error {
-		// Guard against the same person accepting the same link twice (e.g. a
-		// double-submit). That would otherwise burn two of the link's slots and
-		// create two pending rows for one requester. Idempotent: a repeat accept
-		// succeeds silently without consuming another slot.
-		var existing int
+	err = db.WithImmediate(ctx, s.DB, func(conn *sql.Conn) error {
+		a, b := order(accepterID, res.SenderID)
+
+		// Re-check inside the immediate transaction so two concurrent accepts of
+		// the same link can't both create the connection and both burn a slot.
+		// If the pair is already connected this accept is an idempotent no-op:
+		// no extra slot claimed, no duplicate notification.
+		var one int
 		err := conn.QueryRowContext(ctx,
-			`SELECT 1 FROM connection_requests
-			  WHERE invite_id = ? AND requester_id = ? AND status = 'pending' LIMIT 1`,
-			res.InviteID, requesterID).Scan(&existing)
+			`SELECT 1 FROM connections WHERE user_a_id = ? AND user_b_id = ?`, a, b).Scan(&one)
 		if err == nil {
-			return nil // already accepted by this requester; nothing to do
+			return nil
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -363,8 +362,7 @@ func (s *Service) CreateRequest(ctx context.Context, token string, requesterID i
 		// affected means the link is exhausted (or someone just took the last
 		// slot).
 		r, err := conn.ExecContext(ctx,
-			`UPDATE invites SET accept_count = accept_count + 1
-			  WHERE id = ? AND accept_count < max_uses`,
+			`UPDATE invites SET accept_count = accept_count + 1 WHERE id = ? AND accept_count < max_uses`,
 			res.InviteID)
 		if err != nil {
 			return err
@@ -372,217 +370,35 @@ func (s *Service) CreateRequest(ctx context.Context, token string, requesterID i
 		if n, _ := r.RowsAffected(); n == 0 {
 			return ErrInviteInvalid
 		}
-		_, err = conn.ExecContext(ctx, `
-			INSERT INTO connection_requests (invite_id, requester_id, recipient_id, status, created_at)
-			VALUES (?, ?, ?, 'pending', ?)`,
-			res.InviteID, requesterID, res.SenderID, s.Now())
-		return err
-	})
-}
 
-// Request is a pending incoming request shown to the recipient.
-type Request struct {
-	ID                int64
-	RequesterUsername string
-	RequesterName     string
-	RequesterPhotoKey string
-	CreatedAt         time.Time
-}
-
-// ListPendingRequests returns the recipient's pending incoming requests.
-func (s *Service) ListPendingRequests(ctx context.Context, recipientID int64) ([]Request, error) {
-	rows, err := s.DB.QueryContext(ctx, `
-		SELECT cr.id, u.username, u.first_name, u.last_name, COALESCE(u.photo_key, ''), cr.created_at
-		  FROM connection_requests cr
-		  JOIN users u ON u.id = cr.requester_id AND u.deleted_at IS NULL
-		 WHERE cr.recipient_id = ? AND cr.status = 'pending'
-		 ORDER BY cr.created_at DESC`, recipientID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var reqs []Request
-	for rows.Next() {
-		var (
-			req         Request
-			first, last string
-		)
-		if err := rows.Scan(&req.ID, &req.RequesterUsername, &first, &last, &req.RequesterPhotoKey, &req.CreatedAt); err != nil {
-			return nil, err
-		}
-		req.RequesterName = fullName(first, last)
-		reqs = append(reqs, req)
-	}
-	return reqs, rows.Err()
-}
-
-// HasPendingRequests reports whether the user has any pending incoming
-// connection requests awaiting their confirm/decline. It drives the Connections
-// tab dot (issue #13) — deliberately a boolean, never a count (CLAUDE.md §2).
-func (s *Service) HasPendingRequests(ctx context.Context, recipientID int64) (bool, error) {
-	var one int
-	err := s.DB.QueryRowContext(ctx, `
-		SELECT 1
-		  FROM connection_requests cr
-		  JOIN users u ON u.id = cr.requester_id AND u.deleted_at IS NULL
-		 WHERE cr.recipient_id = ? AND cr.status = 'pending'
-		 LIMIT 1`, recipientID).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// ListOutgoingPending returns the people the requester is waiting on: those they
-// asked to connect with (by accepting an invite link) who have not yet confirmed
-// or declined. The accepter sees these on their own connections page so the
-// in-flight connection isn't invisible to them (issue #15). The entry clears on
-// its own once the recipient resolves the request, since this only matches
-// status='pending'.
-func (s *Service) ListOutgoingPending(ctx context.Context, requesterID int64) ([]Person, error) {
-	rows, err := s.DB.QueryContext(ctx, `
-		SELECT u.id, u.username, u.first_name, u.last_name, COALESCE(u.photo_key, '')
-		  FROM connection_requests cr
-		  JOIN users u ON u.id = cr.recipient_id AND u.deleted_at IS NULL
-		 WHERE cr.requester_id = ? AND cr.status = 'pending'
-		 ORDER BY cr.created_at DESC`, requesterID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var people []Person
-	for rows.Next() {
-		var (
-			p           Person
-			first, last string
-		)
-		if err := rows.Scan(&p.ID, &p.Username, &first, &last, &p.PhotoKey); err != nil {
-			return nil, err
-		}
-		p.Name = fullName(first, last)
-		people = append(people, p)
-	}
-	return people, rows.Err()
-}
-
-// PendingRequestFrom looks up the id of a pending incoming connection request
-// where requesterID asked to connect with recipientID. It returns ok=false when
-// no such pending request exists.
-//
-// This powers the profile preview (issue #3): a viewer may peek at a profile
-// only when that profile's owner has an outstanding request to them, and the
-// preview needs the request id to wire its Confirm/Decline forms to the
-// /connections/{id}/confirm and /connections/{id}/decline endpoints. The lookup is
-// deliberately narrow — only status='pending', and only when the requester is
-// not soft-deleted — so it can never widen into a general profile-view bypass
-// (CLAUDE.md §1). It mirrors the filters used by ListPendingRequests.
-func (s *Service) PendingRequestFrom(ctx context.Context, recipientID, requesterID int64) (requestID int64, ok bool, err error) {
-	err = s.DB.QueryRowContext(ctx, `
-		SELECT cr.id
-		  FROM connection_requests cr
-		  JOIN users u ON u.id = cr.requester_id AND u.deleted_at IS NULL
-		 WHERE cr.recipient_id = ? AND cr.requester_id = ? AND cr.status = 'pending'
-		 LIMIT 1`, recipientID, requesterID,
-	).Scan(&requestID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, nil
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	return requestID, true, nil
-}
-
-// AcceptRequest accepts a pending request, creating the canonical connection
-// row and notifying the original requester. Enforces the 10-accepts-per-7-days
-// limit inside the immediate transaction.
-func (s *Service) AcceptRequest(ctx context.Context, requestID, accepterID int64) error {
-	windowStart := s.Now().Add(-ConnectWindow)
-	return db.WithImmediate(ctx, s.DB, func(conn *sql.Conn) error {
-		var (
-			requesterID, recipientID int64
-			status                   string
-		)
-		err := conn.QueryRowContext(ctx,
-			`SELECT requester_id, recipient_id, status FROM connection_requests WHERE id = ?`, requestID,
-		).Scan(&requesterID, &recipientID, &status)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrRequestNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if recipientID != accepterID {
-			return ErrNotRecipient
-		}
-		if status != "pending" {
-			return ErrRequestResolved
-		}
-
-		var count int
-		if err := conn.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM connections WHERE (user_a_id = ? OR user_b_id = ?) AND created_at > ?`,
-			accepterID, accepterID, windowStart).Scan(&count); err != nil {
-			return err
-		}
-		if count >= ConnectLimit {
-			var oldest time.Time
-			if err := conn.QueryRowContext(ctx,
-				`SELECT created_at FROM connections WHERE (user_a_id = ? OR user_b_id = ?) AND created_at > ? ORDER BY created_at ASC LIMIT 1`,
-				accepterID, accepterID, windowStart).Scan(&oldest); err != nil {
-				return err
-			}
-			return &RateLimitError{Kind: "connection", LiftAt: oldest.Add(ConnectWindow)}
-		}
-
-		a, b := order(requesterID, recipientID)
+		now := s.Now()
 		if _, err := conn.ExecContext(ctx,
-			`INSERT OR IGNORE INTO connections (user_a_id, user_b_id, created_at) VALUES (?, ?, ?)`,
-			a, b, s.Now()); err != nil {
+			`INSERT INTO connections (user_a_id, user_b_id, created_at) VALUES (?, ?, ?)`,
+			a, b, now); err != nil {
 			return err
 		}
-		if _, err := conn.ExecContext(ctx,
-			`UPDATE connection_requests SET status = 'accepted', resolved_at = ? WHERE id = ?`,
-			s.Now(), requestID); err != nil {
+		// Audit row recording which invite produced this connection, born
+		// already 'accepted' (the flow has no pending state). It is kept for
+		// abuse review; no part of the app reads it back.
+		if _, err := conn.ExecContext(ctx, `
+			INSERT INTO connection_requests (invite_id, requester_id, recipient_id, status, created_at, resolved_at)
+			VALUES (?, ?, ?, 'accepted', ?, ?)`,
+			res.InviteID, accepterID, res.SenderID, now, now); err != nil {
 			return err
 		}
+		// Notify the sender that their invitation was accepted (CLAUDE.md §8).
+		// The actor link in the notification is how the sender reaches the new
+		// connection's profile to disconnect if they didn't mean to connect.
 		return s.Notifs.Create(ctx, conn, notifications.Params{
-			UserID:  requesterID,
+			UserID:  res.SenderID,
 			Type:    notifications.TypeConnectionAccepted,
 			ActorID: accepterID,
 		})
 	})
-}
-
-// DenyRequest marks a pending request denied. The original requester is not
-// notified (CLAUDE.md / §1.3: deny is silent).
-func (s *Service) DenyRequest(ctx context.Context, requestID, denierID int64) error {
-	var (
-		recipientID int64
-		status      string
-	)
-	err := s.DB.QueryRowContext(ctx,
-		`SELECT recipient_id, status FROM connection_requests WHERE id = ?`, requestID,
-	).Scan(&recipientID, &status)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrRequestNotFound
-	}
 	if err != nil {
-		return err
+		return res, err
 	}
-	if recipientID != denierID {
-		return ErrNotRecipient
-	}
-	if status != "pending" {
-		return ErrRequestResolved
-	}
-	_, err = s.DB.ExecContext(ctx,
-		`UPDATE connection_requests SET status = 'denied', resolved_at = ? WHERE id = ? AND status = 'pending'`,
-		s.Now(), requestID)
-	return err
+	return res, nil
 }
 
 // Disconnect removes the connection between two users. No notification is sent

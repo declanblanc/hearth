@@ -142,36 +142,30 @@ func TestCreateInvite_NoFragmentRendersStandalonePage(t *testing.T) {
 	}
 }
 
-// Pending connections live at the top of the connections page (the dedicated
-// requests page was removed). The requester's name there must link to their
-// profile preview, so a recipient can look before they confirm (issue #7). The
-// link uses the /u/ profile prefix (issue #6).
-func TestConnectionsPage_PendingRequesterNameLinksToProfile(t *testing.T) {
+// Accepting an invite now connects the two users immediately and notifies the
+// inviter — there is no pending state and no confirm/decline controls on the
+// connections page. This guards against the old pending UI creeping back in.
+func TestConnectionsPage_HasNoPendingControls(t *testing.T) {
 	h, svc := newConnectionsHandlers(t)
 	ctx := context.Background()
-	recipient := seedUser(t, h.Svc.DB, "recipient")
-	requesterID := seedUser(t, h.Svc.DB, "requester")
+	sender := seedUser(t, h.Svc.DB, "sender")
+	accepterID := seedUser(t, h.Svc.DB, "accepter")
 
-	// recipient invites; requester accepts, creating a pending incoming request.
-	token, err := svc.CreateInvite(ctx, recipient)
+	token, err := svc.CreateInvite(ctx, sender)
 	if err != nil {
 		t.Fatalf("CreateInvite: %v", err)
 	}
-	if err := svc.CreateRequest(ctx, token, requesterID); err != nil {
-		t.Fatalf("CreateRequest: %v", err)
+	if _, err := svc.AcceptInvite(ctx, token, accepterID); err != nil {
+		t.Fatalf("AcceptInvite: %v", err)
 	}
 
-	body := renderConnectionsPage(t, h, recipient, "recipient")
-	if !strings.Contains(body, `href="/u/requester"`) {
-		t.Errorf("requester name should link to /u/requester;\nbody:\n%s", body)
+	// The sender's page shows the new connection, with no confirm/decline forms.
+	body := renderConnectionsPage(t, h, sender, "sender")
+	if !strings.Contains(body, "@accepter") {
+		t.Errorf("expected the new connection to render;\nbody:\n%s", body)
 	}
-	// The pending confirmation controls must be present and target the
-	// /connections confirm/decline endpoints.
-	if !strings.Contains(body, "/confirm") {
-		t.Errorf("pending connection should expose a confirm control;\nbody:\n%s", body)
-	}
-	if !strings.Contains(body, "/decline") {
-		t.Errorf("pending connection should expose a decline control;\nbody:\n%s", body)
+	if strings.Contains(body, "/confirm") || strings.Contains(body, "/decline") {
+		t.Errorf("connections page must not expose confirm/decline controls;\nbody:\n%s", body)
 	}
 }
 
