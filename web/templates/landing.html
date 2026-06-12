@@ -1,9 +1,5 @@
 {{define "landing.html"}}{{template "base" .}}{{end}}
 {{define "title"}}Hearth — real connections, with people you really know{{end}}
-{{/* Link-preview (Open Graph / Twitter Card) tags. The invite link resolves to
-     this page, so when someone shares it the scraper (iMessage, etc.) reads
-     these. og:image is an absolute URL — scrapers won't resolve a relative path
-     — built from .BaseURL, which the handlers that render this page supply. */}}
 {{define "head"}}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Hearth">
@@ -15,33 +11,225 @@
 <meta name="twitter:title" content="You've been invited to Hearth">
 <meta name="twitter:description" content="Real connections with people you really know.">
 <meta name="twitter:image" content="{{.BaseURL}}/static/hearth.png">
+<style>
+  /* ============================================================
+     Variation 2 · "By Firelight"
+     An immersive, warm-dark room. The page glows from a hearth at
+     the bottom edge; embers drift upward; the headline sits lit in
+     cream. Re-skins the tokens to a fixed firelit palette so it
+     reads the same in either theme.
+     ============================================================ */
+  body:has(.lp--firelight) {
+    --ink: #f3e7d3;
+    --ink-soft: #b69c7f;
+    --paper: #150d07;
+    --paper-deep: #1d130b;
+    --raised: #241810;
+    --ember: #e07a45;
+    --ember-deep: #c25a30;
+    --glow: #f3b56e;
+    --line: #3a2a1c;
+    --line-soft: #2a1d12;
+    --header-bg: rgba(21, 13, 7, 0.55);
+    color: var(--ink);
+    background:
+      radial-gradient(75% 55% at 50% 116%, rgba(224, 122, 69, 0.50), transparent 60%),
+      radial-gradient(55% 38% at 50% 110%, rgba(243, 181, 110, 0.42), transparent 55%),
+      radial-gradient(130% 90% at 50% -15%, rgba(8, 5, 3, 0.65), transparent 60%),
+      var(--paper);
+    background-attachment: fixed;
+  }
+  body:has(.lp--firelight) .site-header { background: transparent; border-bottom: none; }
+  body:has(.lp--firelight) .site-header .brand,
+  body:has(.lp--firelight) .site-header nav a { color: var(--ink); }
+  body:has(.lp--firelight) .theme-toggle { display: none; }
+  body:has(.lp--firelight) .container { max-width: 44rem; position: relative; z-index: 1; }
+  body:has(.lp--firelight) .site-footer { position: relative; z-index: 1; color: var(--ink-soft); }
+
+  /* drifting embers behind everything */
+  .fl-embers { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .fl-embers span {
+    position: absolute;
+    bottom: -12px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--glow);
+    box-shadow: 0 0 8px 1px rgba(243, 181, 110, 0.85);
+    opacity: 0;
+    animation: emberRise linear infinite;
+  }
+  @keyframes emberRise {
+    0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+    12%  { opacity: 1; }
+    85%  { opacity: 0.7; }
+    100% { transform: translateY(-106vh) translateX(18px) scale(0.3); opacity: 0; }
+  }
+
+  .lp--firelight { text-align: center; padding: 2.5rem 0 1.5rem; }
+  .lp--firelight > * { animation: flRise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .lp--firelight > *:nth-child(1) { animation-delay: 0.05s; }
+  .lp--firelight > *:nth-child(2) { animation-delay: 0.12s; }
+  .lp--firelight > *:nth-child(3) { animation-delay: 0.19s; }
+  .lp--firelight > *:nth-child(4) { animation-delay: 0.26s; }
+  .lp--firelight > *:nth-child(n+5) { animation-delay: 0.33s; }
+  @keyframes flRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  .fl-flame {
+    width: 52px;
+    height: 52px;
+    color: var(--ember);
+    margin: 0 auto 1.6rem;
+    filter: drop-shadow(0 0 16px rgba(224, 122, 69, 0.65));
+    animation: flFlicker 3.6s ease-in-out infinite;
+  }
+  @keyframes flFlicker {
+    0%, 100% { opacity: 0.9; transform: scale(1) translateY(0); }
+    45%      { opacity: 1; transform: scale(1.06) translateY(-1px); }
+    70%      { opacity: 0.95; transform: scale(0.99); }
+  }
+
+  .fl-headline {
+    font-family: var(--display);
+    font-optical-sizing: auto;
+    font-weight: 520;
+    font-size: clamp(2.05rem, 1.3rem + 3.3vw, 3.3rem);
+    line-height: 1.08;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    margin: 0 auto 0.65rem;
+    max-width: 16ch;
+  }
+  .fl-rotate, .fl-tail {
+    font-family: var(--display);
+    font-size: clamp(1.25rem, 0.95rem + 1.6vw, 1.9rem);
+    line-height: 1.3;
+    margin: 0 auto 0.4rem;
+  }
+  .fl-rotate { font-style: italic; color: var(--ink-soft); min-height: 1.3em; }
+  .fl-tail { color: var(--ink); margin-bottom: 0; max-width: 24ch; }
+  .fl-tail em { color: var(--ember); font-style: italic; }
+  .mission-rotate-word {
+    display: inline-block;
+    color: var(--glow);
+    font-style: italic;
+    transition: opacity 0.5s ease;
+    text-shadow: 0 0 20px rgba(243, 181, 110, 0.55);
+  }
+  .mission-rotate-word.is-fading { opacity: 0; }
+
+  .fl-divider {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--glow);
+    box-shadow: 0 0 12px 2px rgba(243, 181, 110, 0.7);
+    margin: 2.3rem auto 1.9rem;
+  }
+  .fl-steps {
+    font-family: var(--sans);
+    font-size: 1.08rem;
+    line-height: 1.85;
+    color: var(--ink);
+    margin: 0;
+  }
+  .fl-steps p { margin: 0; }
+  .fl-coda {
+    font-family: var(--display);
+    font-style: italic;
+    font-size: 1.3rem;
+    color: var(--glow);
+    margin-top: 0.55rem !important;
+    text-shadow: 0 0 16px rgba(243, 181, 110, 0.45);
+  }
+
+  .fl-actions { display: flex; gap: 0.85rem; justify-content: center; flex-wrap: wrap; margin: 2.4rem 0 0; }
+  .fl-btn {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 0.98rem;
+    padding: 0.72rem 1.5rem;
+    border-radius: 999px;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.15s ease;
+  }
+  .fl-btn--primary {
+    background: linear-gradient(180deg, var(--ember), var(--ember-deep));
+    color: #fff;
+    box-shadow: 0 10px 34px -10px rgba(224, 122, 69, 0.8), 0 0 0 1px rgba(243, 181, 110, 0.25) inset;
+  }
+  .fl-btn--primary:hover { filter: brightness(1.07); transform: translateY(-1px); color: #fff; }
+  .fl-btn--ghost { color: var(--ink); border: 1px solid var(--line); background: rgba(255, 247, 238, 0.04); }
+  .fl-btn--ghost:hover { border-color: var(--ember); color: var(--glow); transform: translateY(-1px); }
+
+  .fl-more { margin: 1.7rem 0 0; }
+  .fl-more a { color: var(--glow); font-weight: 500; }
+
+  .fl-invite {
+    margin: 0 auto 2.2rem;
+    padding: 1.2rem 1.5rem;
+    background: linear-gradient(135deg, rgba(224, 122, 69, 0.16), rgba(243, 181, 110, 0.07));
+    border: 1px solid rgba(243, 181, 110, 0.35);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 40px -14px rgba(224, 122, 69, 0.5);
+  }
+  .fl-invite p { margin: 0; }
+  .fl-invite-lead { font-size: 1.12rem; color: var(--ink); }
+  .fl-invite-cta { margin-top: 0.25rem !important; color: var(--ink-soft); }
+  .fl-invite-cta a { color: var(--glow); font-weight: 600; }
+  .fl-note { margin: 1.7rem 0 0; font-family: var(--sans); font-size: 0.9rem; color: var(--ink-soft); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fl-embers { display: none; }
+    .fl-flame { animation: none; }
+    .lp--firelight > * { animation: none; }
+  }
+</style>
 {{end}}
 {{define "content"}}
-<section class="landing">
-  {{/* Shown when a logged-out visitor arrives via an invite link (the /welcome
-       redirect carries the token). InviteSender is the inviter's display name
-       when the token resolved; otherwise we greet them generically. */}}
+<div class="fl-embers" aria-hidden="true">
+  <span style="left:8%;  animation-duration:11s; animation-delay:0s;"></span>
+  <span style="left:18%; animation-duration:9s;  animation-delay:2.5s;"></span>
+  <span style="left:27%; animation-duration:13s; animation-delay:1s;"></span>
+  <span style="left:39%; animation-duration:10s; animation-delay:4s;"></span>
+  <span style="left:50%; animation-duration:12s; animation-delay:0.6s;"></span>
+  <span style="left:61%; animation-duration:9.5s;animation-delay:3.2s;"></span>
+  <span style="left:72%; animation-duration:11.5s;animation-delay:1.8s;"></span>
+  <span style="left:82%; animation-duration:10.5s;animation-delay:5s;"></span>
+  <span style="left:91%; animation-duration:13s; animation-delay:2.2s;"></span>
+</div>
+<div class="lp lp--firelight">
   {{if .InviteToken}}
-  {{/* next=/i/{token} sends them back to the invite opener after signing in; the
-       pending-invite cookie also carries the token across the round-trip. The
-       call to action is inline in the sentence rather than separate buttons. */}}
-  <div class="banner landing-invite">
-    <p class="landing-invite-lead">{{if .InviteSender}}<strong>{{.InviteSender}}</strong> invited you to Hearth.{{else}}You've been invited to Hearth.{{end}}</p>
-    <p class="landing-invite-cta"><a href="/login?next=/i/{{.InviteToken}}">Log in</a> or <a href="/signup">create an account</a> to connect.</p>
-  </div>
+  <aside class="fl-invite">
+    <p class="fl-invite-lead">{{if .InviteSender}}<strong>{{.InviteSender}}</strong> invited you to Hearth.{{else}}You've been invited to Hearth.{{end}}</p>
+    <p class="fl-invite-cta"><a href="/login?next=/i/{{.InviteToken}}">Log in</a> or <a href="/signup">create an account</a> to connect.</p>
+  </aside>
   {{end}}
 
-  {{template "mission" .}}
+  <svg class="fl-flame" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 2c.4 3-1.7 4.6-3.2 6.3C7.2 10 6 11.7 6 14a6 6 0 0 0 12 0c0-1.8-.8-3.2-1.7-4.4-.3 1-1 1.7-2 1.9.8-2.3.2-4.7-2.3-9.5Zm0 18a3 3 0 0 1-3-3c0-1.2.7-2.1 1.5-2.9.2 1 .8 1.7 1.8 1.9-.5-1.4 0-2.7 1.1-3.8.6.8 1.6 1.9 1.6 3.6a3 3 0 0 1-3 3.2Z"/>
+  </svg>
+
+  <h1 class="fl-headline">Hearth is about real connections.</h1>
+  <p class="fl-rotate" data-rotate data-words="algorithms|advertisements|explore page|discoverability|likes|follow counts|annoying notifications">No algorithms, no advertisements, no explore page, no discoverability, no likes, no follow counts, no annoying notifications.</p>
+  <p class="fl-tail">Just keeping up with people you <em>really know</em>.</p>
+
+  <div class="fl-divider" aria-hidden="true"></div>
+
+  <div class="fl-steps">
+    <p>Invite the people who matter.</p>
+    <p>See what they're up to.</p>
+    <p>They see what you're up to.</p>
+    <p class="fl-coda">That's it.</p>
+  </div>
 
   {{if not .InviteToken}}
-  <div class="landing-actions">
-    <a class="button-link" href="/signup">Create an account</a>
-    <a class="button-link button-secondary" href="/login">Log in</a>
+  <div class="fl-actions">
+    <a class="fl-btn fl-btn--primary" href="/signup">Create an account</a>
+    <a class="fl-btn fl-btn--ghost" href="/login">Log in</a>
   </div>
   {{end}}
 
-  <p class="landing-more"><a href="/about">Why Hearth is different →</a></p>
-  {{if .InviteToken}}<p class="muted landing-invite-note">Your invitation is saved for the next 30 minutes, so you'll come right back here after signing in.</p>{{end}}
-</section>
+  <p class="fl-more"><a href="/about">Why Hearth is different →</a></p>
+  {{if .InviteToken}}<p class="fl-note">Your invitation is saved for the next 30 minutes, so you'll come right back here after signing in.</p>{{end}}
+</div>
 {{end}}
 {{define "scripts"}}<script src="/static/landing.js" defer></script>{{end}}
