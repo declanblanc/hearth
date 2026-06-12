@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f4eee2">
+{{/* Home-screen / PWA icons — the glowing brand flame. apple-touch-icon is what
+     iOS uses when "Add to Home Screen" is tapped; the web manifest carries the
+     Android/desktop install icons. Source SVGs live in web/static/icons/. */}}
+<link rel="icon" href="/static/icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/static/icons/favicon-16.png" sizes="16x16" type="image/png">
+<link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Hearth">
+<link rel="manifest" href="/static/site.webmanifest">
 <title>{{block "title" .}}Hearth{{end}}</title>
 {{/* Per-page <head> extras — link-preview (Open Graph / Twitter) tags live here.
      Most pages add nothing; the landing page (which invite links resolve to)
