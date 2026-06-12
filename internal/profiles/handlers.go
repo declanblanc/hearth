@@ -236,27 +236,11 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !owner && !connected {
-		// A viewer who isn't connected may still legitimately need to see a
-		// limited preview: when this profile's owner has sent *them* a pending
-		// connection request, they should be able to weigh it before
-		// accepting (issue #3). This is scoped strictly to that relationship —
-		// PendingRequestFrom only matches status='pending' requests from this
-		// exact owner to this exact viewer — so it never becomes a general
-		// profile-view bypass. Anyone without that pending request falls through
-		// to the identical privacy page below (CLAUDE.md §1).
-		if u != nil {
-			requestID, hasPending, err := h.Conns.PendingRequestFrom(r.Context(), u.ID, p.ID)
-			if err != nil {
-				h.Renderer.Error(w, http.StatusInternalServerError)
-				return
-			}
-			if hasPending {
-				h.renderProfilePreview(w, r, u, p, requestID)
-				return
-			}
-		}
 		// Privacy by 404 for anyone not connected to this user. Identical
-		// output to the "no such account" branch above keeps existence hidden.
+		// output to the "no such account" branch above keeps existence hidden
+		// (CLAUDE.md §1). There is no longer a pending-request preview: accepting
+		// an invite connects the two users immediately, so a viewer is either
+		// connected (and sees the full profile) or not (and sees this page).
 		h.renderProfileUnavailable(w, r)
 		return
 	}
@@ -285,26 +269,6 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		"Posts":     authorPosts,
 		"PhotoURL":  h.photoURL(p.PhotoKey),
 		"PostError": postError(r.URL.Query().Get("post_error")),
-	}))
-}
-
-// renderProfilePreview shows the limited, request-decision view of a profile to
-// a viewer who has a pending incoming connection request from its owner (issue
-// #3). It exposes only the public-facing profile fields (name, bio, pronouns,
-// avatar) plus Confirm/Decline controls — never the owner's posts.
-//
-// Crucially, this path mints no signed post-media URLs and never lists posts:
-// the preview must not leak any connected-only content, and per CLAUDE.md §6 we
-// only do media work after access to that content is actually granted (which,
-// for posts, happens only once the connection is confirmed). The Confirm/Decline
-// forms post to the same /connections/{id}/confirm and /connections/{id}/decline
-// endpoints used by the connections page, so the actions stay authoritative in
-// one place.
-func (h *Handlers) renderProfilePreview(w http.ResponseWriter, r *http.Request, viewer *middleware.User, p *Profile, requestID int64) {
-	h.Renderer.HTML(w, "profile_preview.html", render.Page(viewer, render.M{
-		"Profile":   p,
-		"PhotoURL":  h.photoURL(p.PhotoKey),
-		"RequestID": requestID,
 	}))
 }
 

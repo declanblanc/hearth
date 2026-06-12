@@ -1,7 +1,9 @@
 {{define "invite_accepted.html"}}{{template "base" .}}{{end}}
-{{define "title"}}Invitation accepted — Hearth{{end}}
+{{define "title"}}Connected — Hearth{{end}}
 {{define "content"}}
-<h1>Invitation accepted</h1>
-<p>You've accepted the invitation, nice! <br> You'll be connected as soon as they confirm it, and we'll notify you as soon as they do.</p>
-<p><a href="/">Back to your feed</a></p>
+<h1>You're connected{{if .SenderName}} with {{.SenderName}}{{end}}!</h1>
+<p>You'll each be able to see the other's posts from now on. We've let {{if .SenderName}}{{.SenderName}}{{else}}them{{end}} know you accepted.</p>
+<p>
+  {{if .SenderUsername}}<a href="/u/{{.SenderUsername}}">View their profile</a> · {{end}}<a href="/">Back to your feed</a>
+</p>
 {{end}}

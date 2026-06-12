@@ -3,66 +3,6 @@
 {{define "content"}}
 <h1>Connections</h1>
 
-{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
-
-{{/*
-  Pending connections live at the top of this page (there is no separate
-  requests page). These are people who accepted an invite link the viewer
-  shared; the connection only completes once the viewer confirms it here. The
-  Confirm/Decline forms post to /connections/{id}/confirm and
-  /connections/{id}/decline.
-*/}}
-{{if .Requests}}
-  <section class="pending-connections">
-    <h2>Pending connections</h2>
-    <p class="muted">These people accepted your invite link. Confirm to connect — you'll each be able to see the other's posts.</p>
-    <ul class="request-list">
-      {{range .Requests}}
-        <li class="request-item">
-          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{else}}{{template "avatarfallback" "request-photo"}}{{end}}
-          <div class="request-body">
-            <a href="/u/{{.Username}}" class="request-name">{{.Name}}</a>
-            <span class="muted">@{{.Username}}</span>
-          </div>
-          <div class="request-actions">
-            <form method="post" action="/connections/{{.ID}}/confirm" style="display:inline">
-              <button type="submit">Confirm connection</button>
-            </form>
-            <form method="post" action="/connections/{{.ID}}/decline" style="display:inline">
-              <button type="submit" class="button-secondary">Decline</button>
-            </form>
-          </div>
-        </li>
-      {{end}}
-    </ul>
-  </section>
-{{end}}
-
-{{/*
-  Outgoing pending connections (issue #15): people whose invite link the viewer
-  accepted, now waiting on that person to confirm. Read-only — only the
-  recipient can confirm or decline — so there are no action buttons here. Each
-  entry disappears once the other person resolves it.
-*/}}
-{{if .Outgoing}}
-  <section class="pending-connections pending-outgoing">
-    <h2>Waiting to connect</h2>
-    <p class="muted">You accepted these invite links. You'll connect once they confirm.</p>
-    <ul class="request-list">
-      {{range .Outgoing}}
-        <li class="request-item">
-          {{if .PhotoURL}}<img class="request-photo" src="{{.PhotoURL}}" alt="{{.Name}}">{{else}}{{template "avatarfallback" "request-photo"}}{{end}}
-          <div class="request-body">
-            <a href="/u/{{.Username}}" class="request-name">{{.Name}}</a>
-            <span class="muted">@{{.Username}}</span>
-          </div>
-          <span class="request-status muted">Pending</span>
-        </li>
-      {{end}}
-    </ul>
-  </section>
-{{end}}
-
 {{/*
   The invite-generation affordance lives outside the connections list so it is
   always reachable. Gating it on the empty state (the old behaviour) left users
@@ -93,7 +33,7 @@
     {{end}}
   </ul>
 {{else}}
-  <p class="muted empty">You're not connected with anyone yet. Generate an invite link above and share it with someone you'd like to connect with — when they accept, you'll confirm their request to connect.</p>
+  <p class="muted empty">You're not connected with anyone yet. Generate an invite link above and share it with someone you'd like to connect with — as soon as they accept, you'll be connected.</p>
 {{end}}
 
 {{/* invite-modal.js fills this dialog with the freshly generated link. */}}
