@@ -37,6 +37,7 @@
 <script src="/static/nav-toggle.js" defer></script>
 <script src="/static/theme-toggle.js" defer></script>
 <script src="/static/post-lightbox.js" defer></script>
+<script src="/static/post-image-skeleton.js" defer></script>
 <script src="/static/localtime.js" defer></script>
 <script src="/static/pull-to-refresh.js" defer></script>
 </head>
@@ -159,10 +160,17 @@
 
 {{/* postmedia renders a post's attached images. Expects a posts.Post; each
      image carries a short-lived signed URL minted at render time. URLs that
-     failed to sign (no store configured) are skipped. */}}
+     failed to sign (no store configured) are skipped.
+
+     width/height come from the stored pixel dimensions: emitting them lets the
+     browser reserve the image's exact box before it loads, so the feed doesn't
+     jump as photos stream in. Until the photo paints, .post-image shows a
+     skeleton shimmer (post-image-skeleton.js swaps it for .is-loaded on load).
+     Media stored before the dimensions migration reports zero size; we then omit
+     the attributes and it renders as it did before (no reserved box). */}}
 {{define "postmedia"}}{{if .Media}}
 <div class="post-media">
-  {{range .Media}}{{if .URL}}<img src="{{.URL}}" alt="" class="post-image" loading="lazy">{{end}}{{end}}
+  {{range .Media}}{{if .URL}}<img src="{{.URL}}" alt="" class="post-image" loading="lazy" decoding="async"{{if and .Width .Height}} width="{{.Width}}" height="{{.Height}}"{{end}}>{{end}}{{end}}
 </div>
 {{end}}{{end}}
 

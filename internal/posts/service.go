@@ -73,6 +73,11 @@ type PostMedia struct {
 	ContentType string
 	Position    int
 	URL         string
+	// Width and Height are the image's pixel dimensions, used to reserve its box
+	// in the layout before it loads. They are zero for media uploaded before the
+	// dimensions migration; the template then omits the reserving attributes.
+	Width  int
+	Height int
 }
 
 // NewImage is a validated image ready to be stored with a post. The handler
@@ -81,6 +86,8 @@ type NewImage struct {
 	Data        []byte
 	ContentType string
 	Ext         string
+	Width       int
+	Height      int
 }
 
 // Validate trims and checks content length, returning the trimmed value.
@@ -146,9 +153,9 @@ func (s *Service) Create(ctx context.Context, authorID int64, content string, im
 		}
 		for i, img := range images {
 			if _, err := conn.ExecContext(ctx,
-				`INSERT INTO post_media (post_id, object_key, content_type, position, created_at)
-				 VALUES (?, ?, ?, ?, ?)`,
-				postID, uploadedKeys[i], img.ContentType, i, now); err != nil {
+				`INSERT INTO post_media (post_id, object_key, content_type, position, width, height, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				postID, uploadedKeys[i], img.ContentType, i, img.Width, img.Height, now); err != nil {
 				return err
 			}
 		}
@@ -217,7 +224,7 @@ func LoadMedia(ctx context.Context, sqldb *sql.DB, ps []Post) error {
 	}
 
 	rows, err := sqldb.QueryContext(ctx, `
-		SELECT post_id, object_key, content_type, position
+		SELECT post_id, object_key, content_type, position, width, height
 		  FROM post_media
 		 WHERE post_id IN (`+strings.Join(placeholders, ",")+`)
 		 ORDER BY post_id, position`, args...)
@@ -227,12 +234,15 @@ func LoadMedia(ctx context.Context, sqldb *sql.DB, ps []Post) error {
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			postID int64
-			m      PostMedia
+			postID        int64
+			m             PostMedia
+			width, height sql.NullInt64 // NULL for media stored before the dimensions migration.
 		)
-		if err := rows.Scan(&postID, &m.Key, &m.ContentType, &m.Position); err != nil {
+		if err := rows.Scan(&postID, &m.Key, &m.ContentType, &m.Position, &width, &height); err != nil {
 			return err
 		}
+		m.Width = int(width.Int64)
+		m.Height = int(height.Int64)
 		if p := byID[postID]; p != nil {
 			p.Media = append(p.Media, m)
 		}

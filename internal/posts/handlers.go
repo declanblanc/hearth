@@ -115,7 +115,11 @@ func (h *Handlers) collectImages(r *http.Request) ([]NewImage, string) {
 		if err != nil {
 			return nil, "image_type"
 		}
-		images = append(images, NewImage{Data: data, ContentType: ct, Ext: ext})
+		width, height, err := media.ImageDimensions(data)
+		if err != nil {
+			return nil, "image_unreadable"
+		}
+		images = append(images, NewImage{Data: data, ContentType: ct, Ext: ext, Width: width, Height: height})
 	}
 	return images, ""
 }

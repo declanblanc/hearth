@@ -17,6 +17,18 @@ import (
 // truncated upload or a file whose declared type doesn't match its bytes.
 var ErrUnreadableImage = errors.New("media: unreadable image")
 
+// ImageDimensions reports an encoded image's pixel width and height by reading
+// only its header — image.DecodeConfig does not decode the pixel data, so this
+// stays cheap even for large uploads. It accepts the same formats as the rest of
+// the pipeline (JPEG, PNG, WebP); an undecodable header yields ErrUnreadableImage.
+func ImageDimensions(data []byte) (width, height int, err error) {
+	cfg, _, decodeErr := image.DecodeConfig(bytes.NewReader(data))
+	if decodeErr != nil {
+		return 0, 0, ErrUnreadableImage
+	}
+	return cfg.Width, cfg.Height, nil
+}
+
 // ProcessProfilePhoto validates and normalizes the raw bytes of an uploaded
 // profile photo, returning the re-encoded square JPEG ready for storage along
 // with its content type and extension. It is the single chokepoint shared by the

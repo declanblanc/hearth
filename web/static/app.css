@@ -864,8 +864,39 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   object-fit: cover;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: var(--paper);
   cursor: zoom-in; /* post-lightbox.js opens a larger view on click (issue #8) */
+
+  /* Loading skeleton. The image's box is already reserved by its width/height
+     attributes (see the postmedia template), so this shimmer fills the exact
+     space the photo will occupy — the feed never jumps as photos stream in.
+     The opaque photo paints over it; post-image-skeleton.js then adds .is-loaded
+     to switch the shimmer off and fade the photo in. Images stored before the
+     dimensions migration carry no width/height, so their box still grows on
+     load, but they get the same shimmer in the meantime. */
+  background-color: var(--paper-deep);
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    var(--line-soft) 48%,
+    var(--line-soft) 52%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: post-image-shimmer 1.5s ease-in-out infinite;
+}
+/* Once the photo has painted, stop the shimmer and ease it in. */
+.post-image.is-loaded {
+  background-image: none;
+  animation: post-image-reveal 0.35s ease-out;
+}
+@keyframes post-image-shimmer {
+  from { background-position: 130% 0; }
+  to   { background-position: -30% 0; }
+}
+@keyframes post-image-reveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ---- Photo lightbox (post-lightbox.js, issue #8) ------------------------- *
