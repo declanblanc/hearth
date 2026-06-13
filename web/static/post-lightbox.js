@@ -80,6 +80,50 @@
         close();
       }
     });
+
+    // On touch devices, swiping left/right moves through the gallery, mirroring
+    // the ‹ / › arrows. The arrows stay for tap access; this just adds the
+    // gesture most people reach for on a phone.
+    enableSwipe(overlay);
+  }
+
+  // A horizontal drag only counts as a swipe once it clears SWIPE_MIN_PX and is
+  // clearly more horizontal than vertical — otherwise a vertical scroll or a
+  // stray tap would flip the photo. A swipe left (finger moves right→left, so a
+  // negative delta) advances to the next photo, like dragging the current one
+  // off-screen.
+  var SWIPE_MIN_PX = 40;
+
+  function enableSwipe(element) {
+    var startX = 0;
+    var startY = 0;
+
+    element.addEventListener(
+      "touchstart",
+      function (event) {
+        var touch = event.changedTouches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+      },
+      { passive: true },
+    );
+
+    element.addEventListener(
+      "touchend",
+      function (event) {
+        var touch = event.changedTouches[0];
+        var deltaX = touch.clientX - startX;
+        var deltaY = touch.clientY - startY;
+        if (
+          Math.abs(deltaX) < SWIPE_MIN_PX ||
+          Math.abs(deltaX) <= Math.abs(deltaY)
+        ) {
+          return;
+        }
+        step(deltaX < 0 ? 1 : -1);
+      },
+      { passive: true },
+    );
   }
 
   function show() {
