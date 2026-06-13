@@ -1478,6 +1478,48 @@ span.invite-url { box-shadow: none; }
   .site-header nav .theme-toggle { margin-left: 0; }
 }
 
+/* ---- Pull to refresh ----------------------------------------------------- */
+/* The floating indicator shown while a touch user swipes down from the top to
+   reload (pull-to-refresh.js). It lives above the header, off-screen, and is
+   dragged into view by the gesture; JS sets its transform/opacity directly. */
+.pull-refresh {
+  position: fixed;
+  top: -2.6rem;
+  left: 50%;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--ember);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  /* Default: no transition, so the indicator tracks the finger frame-for-frame.
+     The spring-back and refresh states opt into a transition below. */
+  transform: translate(-50%, 0);
+}
+.pull-refresh.settling,
+.pull-refresh.refreshing {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.pull-refresh .flame {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+/* Past the trigger distance the flame brightens to promise a refresh on release. */
+.pull-refresh.ready { color: var(--ember-deep); }
+/* While reloading, spin the flame so the gesture feels acknowledged. */
+.pull-refresh.refreshing .flame {
+  animation: pull-refresh-spin 0.7s linear infinite;
+}
+@keyframes pull-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ---- Reduced motion ------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
