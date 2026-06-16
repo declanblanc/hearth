@@ -849,23 +849,19 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 /* The feed's "Create post" entry point sits above the feed groups. */
 .feed-compose { margin: 0 0 1.75rem; }
 
-/* Attached images. Every photo keeps its full aspect ratio and shrinks to fit —
-   never cropped. Photos stack vertically and center at their natural width, so
-   nothing is clipped and there's no empty grid space; tapping a photo opens the
-   lightbox for a swipeable full-screen gallery (post-lightbox.js). */
+/* Attached images. Every photo fills the post width and keeps its full aspect
+   ratio — its height grows to match, so nothing is ever cropped or letterboxed.
+   Photos stack vertically, one per row; tapping a photo opens the lightbox for a
+   swipeable full-screen gallery (post-lightbox.js). */
 .post-media {
   margin-top: 0.9rem;
   display: grid;                  /* one full-width column: each photo on its own row */
   grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
-  justify-items: center;         /* center each photo within its row */
 }
 .post-image {
-  width: auto;           /* shrink to the photo's own size, not the column width */
-  max-width: 100%;
-  height: auto;          /* keep the photo's aspect ratio — no cropping */
-  max-height: 32rem;
-  object-fit: contain;   /* only engages if max-height clamps a very tall image */
+  width: 100%;           /* fill the post width */
+  height: auto;          /* height follows the aspect ratio — no cropping */
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   cursor: zoom-in; /* post-lightbox.js opens a larger view on click (issue #8) */
