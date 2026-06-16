@@ -62,9 +62,9 @@ func newTestRenderer(t *testing.T) *render.Renderer {
 			`{{define "account.html"}}{{template "base" .}}{{end}}` +
 				`{{define "content"}}account{{end}}`,
 		)},
-		"privacy_settings.html": {Data: []byte(
-			`{{define "privacy_settings.html"}}{{template "base" .}}{{end}}` +
-				`{{define "content"}}privacy saved={{.Saved}} share={{.Visibility.ShareWithNonConnections}} show={{.Visibility.ShowNonConnectionComments}}{{end}}`,
+		"settings.html": {Data: []byte(
+			`{{define "settings.html"}}{{template "base" .}}{{end}}` +
+				`{{define "content"}}settings saved={{.Saved}} share={{.Visibility.ShareWithNonConnections}} show={{.Visibility.ShowNonConnectionComments}}{{end}}`,
 		)},
 		"account_deleted.html": {Data: []byte(
 			`{{define "account_deleted.html"}}{{template "base" .}}{{end}}` +
@@ -336,7 +336,7 @@ func TestEditProfile_TextPersistsAcrossRequests(t *testing.T) {
 	}
 }
 
-func TestPrivacySettings_TogglePersists(t *testing.T) {
+func TestSettings_CommentVisibilityTogglePersists(t *testing.T) {
 	d := newTestDB(t)
 	h, authSvc, _ := newHandlers(t, d, nil)
 	uid := createUser(t, authSvc, "pat")
@@ -346,13 +346,13 @@ func TestPrivacySettings_TogglePersists(t *testing.T) {
 		"share_comments_with_non_connections": {"on"},
 		"show_non_connection_comments":        {"on"},
 	}
-	req := authedRequest(http.MethodPost, "/settings/privacy",
+	req := authedRequest(http.MethodPost, "/settings",
 		strings.NewReader(body.Encode()), uid, "pat")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr := httptest.NewRecorder()
-	h.privacySubmit(rr, req)
+	h.settingsSubmit(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("privacySubmit: want 200, got %d", rr.Code)
+		t.Fatalf("settingsSubmit: want 200, got %d", rr.Code)
 	}
 
 	v, err := h.Svc.GetCommentVisibility(context.Background(), uid)
@@ -364,21 +364,21 @@ func TestPrivacySettings_TogglePersists(t *testing.T) {
 	}
 
 	// The form should reflect the saved state on the next load.
-	req = authedRequest(http.MethodGet, "/settings/privacy", nil, uid, "pat")
+	req = authedRequest(http.MethodGet, "/settings", nil, uid, "pat")
 	rr = httptest.NewRecorder()
-	h.privacyForm(rr, req)
+	h.settingsForm(rr, req)
 	if !strings.Contains(rr.Body.String(), "share=true") || !strings.Contains(rr.Body.String(), "show=true") {
 		t.Errorf("form should show saved state, got %q", rr.Body.String())
 	}
 
 	// Unchecking both (absent fields) turns them back off.
-	req = authedRequest(http.MethodPost, "/settings/privacy",
+	req = authedRequest(http.MethodPost, "/settings",
 		strings.NewReader(url.Values{}.Encode()), uid, "pat")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr = httptest.NewRecorder()
-	h.privacySubmit(rr, req)
+	h.settingsSubmit(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("privacySubmit (clear): want 200, got %d", rr.Code)
+		t.Fatalf("settingsSubmit (clear): want 200, got %d", rr.Code)
 	}
 	v, err = h.Svc.GetCommentVisibility(context.Background(), uid)
 	if err != nil {

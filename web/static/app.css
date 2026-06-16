@@ -1551,13 +1551,13 @@ span.invite-url { box-shadow: none; }
   to { transform: rotate(360deg); }
 }
 
-/* ---- Settings: privacy toggles ------------------------------------------- *
-   The privacy page lists each control as a row inside a raised card: the
-   setting's name and description on the left, an ember toggle switch on the
-   right. The switch is a hidden native checkbox driving a painted track and a
-   sliding thumb, so it carries the brand palette while staying keyboard- and
-   screen-reader-accessible. Because the whole row is a <label>, tapping anywhere
-   on it flips the switch. */
+/* ---- Settings hub -------------------------------------------------------- *
+   The settings page stacks raised cards: the comment-visibility toggles, a menu
+   of links to the other settings pages, and the log-out action. Each toggle is
+   a row with its name and description on the left and an ember switch on the
+   right — a hidden native checkbox driving a painted track and a sliding thumb,
+   so it carries the brand palette while staying keyboard- and screen-reader-
+   accessible. Because the whole row is a <label>, tapping anywhere flips it. */
 .settings-intro {
   max-width: var(--measure);
   margin: -0.25rem 0 1.75rem;
@@ -1570,6 +1570,15 @@ span.invite-url { box-shadow: none; }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   overflow: hidden;
+}
+
+/* A short bit of context shown under a card's header, above its controls. */
+.settings-card-note {
+  margin: 0;
+  padding: 0.95rem 1.4rem 0.2rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
 
 .settings-card-head {
@@ -1693,9 +1702,53 @@ span.invite-url { box-shadow: none; }
   gap: 1.4rem;
   margin-top: 1.6rem;
 }
-.settings-back {
-  font-size: 0.92rem;
+
+/* The links-out card (Account section) and the log-out form are stacked under
+   the toggles, each with breathing room. */
+.settings-menu { margin-top: 2rem; }
+
+/* A row in the menu card: a label on the left and a chevron on the right. */
+.settings-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.4rem;
   font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+.settings-link + .settings-link { border-top: 1px solid var(--line-soft); }
+.settings-link:hover {
+  background-color: rgba(189, 75, 39, 0.04);
+  color: var(--ember);
+}
+.settings-link-chevron {
+  width: 1rem;
+  height: 1rem;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+.settings-link:hover .settings-link-chevron {
+  color: var(--ember);
+  transform: translateX(2px);
+}
+
+.settings-logout { margin-top: 1.5rem; }
+.settings-logout-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.settings-logout-button svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.settings-logout-button:hover {
+  border-color: var(--error);
+  color: var(--error);
 }
 
 /* ---- Reduced motion ------------------------------------------------------ */

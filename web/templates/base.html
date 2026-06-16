@@ -69,9 +69,7 @@
       <a href="/notifications" class="nav-notifications">Notifications{{if .User.UnreadDot}}<span class="dot" aria-label="unread notifications"></span>{{end}}</a>
       <a href="/connections" class="nav-connections">Connections</a>
       <a href="/u/{{.User.Username}}">Profile</a>
-      <form method="post" action="/logout" style="display:inline">
-        <button type="submit" class="linklike">Log out</button>
-      </form>
+      <a href="/settings">Settings</a>
     {{else}}
       <a href="/login">Log in</a>
       <a href="/signup">Sign up</a>

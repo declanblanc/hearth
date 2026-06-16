@@ -36,10 +36,10 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 	authed := func(fn http.HandlerFunc) http.Handler {
 		return middleware.RequireAuth(http.HandlerFunc(fn))
 	}
+	mux.Handle("GET /settings", authed(h.settingsForm))
+	mux.Handle("POST /settings", authed(h.settingsSubmit))
 	mux.Handle("GET /settings/profile", authed(h.editForm))
 	mux.Handle("POST /settings/profile", authed(h.editSubmit))
-	mux.Handle("GET /settings/privacy", authed(h.privacyForm))
-	mux.Handle("POST /settings/privacy", authed(h.privacySubmit))
 	mux.Handle("GET /settings/account", authed(h.accountForm))
 	mux.Handle("POST /settings/account/delete", authed(h.deleteAccount))
 	// /u/{username} stays public — the handler enforces 404-unless-connected.
@@ -172,17 +172,21 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
-func (h *Handlers) privacyForm(w http.ResponseWriter, r *http.Request) {
+// settingsForm renders the main settings hub: the comment-visibility (privacy)
+// toggles, links to the other settings pages, and the log-out action.
+func (h *Handlers) settingsForm(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	v, err := h.Svc.GetCommentVisibility(r.Context(), u.ID)
 	if err != nil {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.Renderer.HTML(w, "privacy_settings.html", render.Page(u, render.M{"Visibility": v}))
+	h.Renderer.HTML(w, "settings.html", render.Page(u, render.M{"Visibility": v}))
 }
 
-func (h *Handlers) privacySubmit(w http.ResponseWriter, r *http.Request) {
+// settingsSubmit saves the comment-visibility toggles from the settings hub and
+// re-renders it with a confirmation banner.
+func (h *Handlers) settingsSubmit(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	if err := r.ParseForm(); err != nil {
 		h.Renderer.Error(w, http.StatusBadRequest)
@@ -198,7 +202,7 @@ func (h *Handlers) privacySubmit(w http.ResponseWriter, r *http.Request) {
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	h.Renderer.HTML(w, "privacy_settings.html", render.Page(u, render.M{"Visibility": v, "Saved": true}))
+	h.Renderer.HTML(w, "settings.html", render.Page(u, render.M{"Visibility": v, "Saved": true}))
 }
 
 func (h *Handlers) accountForm(w http.ResponseWriter, r *http.Request) {
