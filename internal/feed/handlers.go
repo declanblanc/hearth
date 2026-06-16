@@ -42,40 +42,27 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 	}
 	// The feed only contains posts by the viewer's connections, so the
 	// connection check is implicit; sign image URLs for rendering.
-	if err := posts.SignMediaURLs(r.Context(), h.Media, res.New); err != nil {
-		slog.Error("feed: sign media", "user_id", u.ID, "err", err)
-		h.Renderer.Error(w, http.StatusInternalServerError)
-		return
-	}
-	if err := posts.SignMediaURLs(r.Context(), h.Media, res.Old); err != nil {
+	if err := posts.SignMediaURLs(r.Context(), h.Media, res.Posts); err != nil {
 		slog.Error("feed: sign media", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
 	// Sign each author's avatar for rendering next to their name (issue #40).
 	// Same connection-gating rationale as the post images above.
-	if err := posts.SignAvatarURLs(r.Context(), h.Media, res.New); err != nil {
+	if err := posts.SignAvatarURLs(r.Context(), h.Media, res.Posts); err != nil {
 		slog.Error("feed: sign avatars", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
 	}
-	if err := posts.SignAvatarURLs(r.Context(), h.Media, res.Old); err != nil {
-		slog.Error("feed: sign avatars", "user_id", u.ID, "err", err)
+	// Comment threads are visible to the viewer because every feed author is a
+	// connection (CLAUDE.md §1).
+	if err := h.Comments.AttachToPosts(r.Context(), u.ID, res.Posts); err != nil {
+		slog.Error("feed: attach comments", "user_id", u.ID, "err", err)
 		h.Renderer.Error(w, http.StatusInternalServerError)
 		return
-	}
-	for _, group := range [][]posts.Post{res.New, res.Old} {
-		// Comment threads are visible to the viewer because every feed author is a
-		// connection (CLAUDE.md §1).
-		if err := h.Comments.AttachToPosts(r.Context(), u.ID, group); err != nil {
-			slog.Error("feed: attach comments", "user_id", u.ID, "err", err)
-			h.Renderer.Error(w, http.StatusInternalServerError)
-			return
-		}
 	}
 	h.Renderer.HTML(w, "home.html", render.Page(u, render.M{
-		"New":        res.New,
-		"Old":        res.Old,
+		"Posts":      res.Posts,
 		"HasMore":    res.HasMore,
 		"NextBefore": res.NextBefore,
 	}))

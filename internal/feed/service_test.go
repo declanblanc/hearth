@@ -66,13 +66,6 @@ func newFeed(d *sql.DB) *Service {
 	return New(d, conns)
 }
 
-func setLastLoaded(t *testing.T, d *sql.DB, userID int64, at time.Time) {
-	t.Helper()
-	if _, err := d.Exec(`UPDATE users SET last_feed_loaded_at = ? WHERE id = ?`, at, userID); err != nil {
-		t.Fatalf("set last_feed_loaded_at: %v", err)
-	}
-}
-
 func setPhotoKey(t *testing.T, d *sql.DB, userID int64, key string) {
 	t.Helper()
 	if _, err := d.Exec(`UPDATE users SET photo_key = ? WHERE id = ?`, key, userID); err != nil {
@@ -102,7 +95,7 @@ func TestFeed_ExposesAuthorPhotoKey(t *testing.T) {
 		t.Fatalf("FirstPage: %v", err)
 	}
 	byContent := map[string]string{}
-	for _, p := range append(res.New, res.Old...) {
+	for _, p := range res.Posts {
 		byContent[p.Content] = p.AuthorPhotoKey
 	}
 	if got := byContent["has avatar"]; got != "profile/abc.jpg" {
@@ -131,7 +124,7 @@ func TestFeed_OnlyConnectedActivePosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FirstPage: %v", err)
 	}
-	all := append(res.New, res.Old...)
+	all := res.Posts
 	if len(all) != 1 {
 		t.Fatalf("want exactly 1 visible post, got %d", len(all))
 	}
@@ -140,7 +133,7 @@ func TestFeed_OnlyConnectedActivePosts(t *testing.T) {
 	}
 }
 
-func TestFeed_NewOldSplit(t *testing.T) {
+func TestFeed_ReverseChronological(t *testing.T) {
 	d := newTestDB(t)
 	ctx := context.Background()
 	viewer := seedUser(t, d, "viewer")
@@ -148,58 +141,18 @@ func TestFeed_NewOldSplit(t *testing.T) {
 	connect(t, d, viewer, friend)
 
 	mid := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
-	insertPost(t, d, friend, "old post", mid.Add(-time.Hour), "active")
-	insertPost(t, d, friend, "new post", mid.Add(time.Hour), "active")
-	setLastLoaded(t, d, viewer, mid)
+	insertPost(t, d, friend, "older post", mid.Add(-time.Hour), "active")
+	insertPost(t, d, friend, "newer post", mid.Add(time.Hour), "active")
 
 	res, err := newFeed(d).FirstPage(ctx, viewer)
 	if err != nil {
 		t.Fatalf("FirstPage: %v", err)
 	}
-	if len(res.New) != 1 || res.New[0].Content != "new post" {
-		t.Errorf("New: %+v", res.New)
+	if len(res.Posts) != 2 {
+		t.Fatalf("want 2 posts, got %d", len(res.Posts))
 	}
-	if len(res.Old) != 1 || res.Old[0].Content != "old post" {
-		t.Errorf("Old: %+v", res.Old)
-	}
-}
-
-// TestFeed_UpdateHappensAfterQuery verifies the load doesn't reclassify its own
-// results: a post created just before the load still shows as New, because
-// last_feed_loaded_at is advanced only after the rows are classified (§4.1).
-func TestFeed_UpdateHappensAfterQuery(t *testing.T) {
-	d := newTestDB(t)
-	ctx := context.Background()
-	viewer := seedUser(t, d, "viewer")
-	friend := seedUser(t, d, "friend")
-	connect(t, d, viewer, friend)
-
-	// Brand-new viewer: last_feed_loaded_at is NULL, so everything is new.
-	insertPost(t, d, friend, "first ever", time.Now().Add(-time.Minute), "active")
-
-	svc := newFeed(d)
-	res, err := svc.FirstPage(ctx, viewer)
-	if err != nil {
-		t.Fatalf("FirstPage: %v", err)
-	}
-	if len(res.New) != 1 {
-		t.Fatalf("first load should classify the post as New, got %d new", len(res.New))
-	}
-
-	// last_feed_loaded_at must now be set.
-	var loaded sql.NullTime
-	_ = d.QueryRow(`SELECT last_feed_loaded_at FROM users WHERE id = ?`, viewer).Scan(&loaded)
-	if !loaded.Valid {
-		t.Fatal("last_feed_loaded_at should be set after the first load")
-	}
-
-	// A second load with no new posts should now classify the same post as Old.
-	res2, err := svc.FirstPage(ctx, viewer)
-	if err != nil {
-		t.Fatalf("FirstPage 2: %v", err)
-	}
-	if len(res2.New) != 0 || len(res2.Old) != 1 {
-		t.Errorf("second load: want 0 new / 1 old, got %d new / %d old", len(res2.New), len(res2.Old))
+	if res.Posts[0].Content != "newer post" || res.Posts[1].Content != "older post" {
+		t.Errorf("posts should be newest-first, got %+v", res.Posts)
 	}
 }
 
@@ -221,7 +174,7 @@ func TestFeed_Pagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FirstPage: %v", err)
 	}
-	first := append(res.New, res.Old...)
+	first := res.Posts
 	if len(first) != PageSize {
 		t.Fatalf("first page: want %d, got %d", PageSize, len(first))
 	}
@@ -258,7 +211,7 @@ func TestFeed_EmptyWhenNoConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FirstPage: %v", err)
 	}
-	if len(res.New)+len(res.Old) != 0 {
+	if len(res.Posts) != 0 {
 		t.Error("a user with no connections and no own posts should have an empty feed")
 	}
 }
@@ -279,7 +232,7 @@ func TestFeed_IncludesOwnPosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FirstPage: %v", err)
 	}
-	all := append(res.New, res.Old...)
+	all := res.Posts
 	if len(all) != 1 {
 		t.Fatalf("want exactly 1 visible post, got %d", len(all))
 	}
@@ -289,7 +242,7 @@ func TestFeed_IncludesOwnPosts(t *testing.T) {
 }
 
 // TestFeed_OwnPostsAlongsideConnections verifies the viewer's own posts are
-// interleaved with connections' posts and subject to the same new/old split.
+// interleaved with connections' posts in reverse-chronological order.
 func TestFeed_OwnPostsAlongsideConnections(t *testing.T) {
 	d := newTestDB(t)
 	ctx := context.Background()
@@ -299,23 +252,25 @@ func TestFeed_OwnPostsAlongsideConnections(t *testing.T) {
 
 	mid := time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
 	insertPost(t, d, viewer, "my old post", mid.Add(-time.Hour), "active")
-	insertPost(t, d, friend, "friend new post", mid.Add(time.Hour), "active")
+	insertPost(t, d, friend, "friend post", mid.Add(time.Hour), "active")
 	insertPost(t, d, viewer, "my new post", mid.Add(2*time.Hour), "active")
-	setLastLoaded(t, d, viewer, mid)
 
 	res, err := newFeed(d).FirstPage(ctx, viewer)
 	if err != nil {
 		t.Fatalf("FirstPage: %v", err)
 	}
 
-	newContents := map[string]bool{}
-	for _, p := range res.New {
-		newContents[p.Content] = true
+	var got []string
+	for _, p := range res.Posts {
+		got = append(got, p.Content)
 	}
-	if !newContents["my new post"] || !newContents["friend new post"] {
-		t.Errorf("New should contain the viewer's and friend's recent posts, got %+v", res.New)
+	want := []string{"my new post", "friend post", "my old post"}
+	if len(got) != len(want) {
+		t.Fatalf("want %d posts, got %v", len(want), got)
 	}
-	if len(res.Old) != 1 || res.Old[0].Content != "my old post" {
-		t.Errorf("Old should contain the viewer's older post, got %+v", res.Old)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d: want %q, got %q (full: %v)", i, want[i], got[i], got)
+		}
 	}
 }

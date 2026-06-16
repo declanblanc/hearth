@@ -18,25 +18,13 @@
   <div class="feed-compose">{{template "composetrigger" .}}</div>
 {{end}}
 
-{{if and (not .New) (not .Old)}}
+{{if not .Posts}}
   <p class="muted empty">Generate an invite link to connect with someone by checking out the <a href="/connections">Connections</a> page, then their posts will appear here.</p>
 {{end}}
 
-{{if .New}}
+{{if .Posts}}
   <section class="feed-group">
-    <h2 class="group-label">New</h2>
-    {{range .New}}{{template "postcard" .}}{{end}}
-  </section>
-{{end}}
-
-{{if .Old}}
-  <section class="feed-group">
-    {{/* Collapsed by default so the feed opens on new posts only, rather than
-         inviting a mindless scroll back through already-seen ones (#14). */}}
-    <details>
-      <summary class="group-label">Older posts</summary>
-      {{range .Old}}{{template "postcard" .}}{{end}}
-    </details>
+    {{range .Posts}}{{template "postcard" .}}{{end}}
   </section>
 {{end}}
 
