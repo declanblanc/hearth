@@ -1,0 +1,21 @@
+{{define "privacy_settings.html"}}{{template "base" .}}{{end}}
+{{define "title"}}Privacy — Hearth{{end}}
+{{define "content"}}
+<h1>Privacy</h1>
+{{if .Saved}}<div class="banner">Saved.</div>{{end}}
+<p class="muted">By default, you only see comments from people you're connected with. These settings let you opt in to a wider circle — comments still only ever appear on posts you can already see.</p>
+<form method="post" action="/settings/privacy">
+  <label class="toggle-field">
+    <input type="checkbox" name="share_comments_with_non_connections" {{if .Visibility.ShareWithNonConnections}}checked{{end}}>
+    Allow users I'm not connected with to see my comments
+    <small class="muted">If you comment on a friend's post, their connections can see your comment, even if you're not connected with them.</small>
+  </label>
+  <label class="toggle-field">
+    <input type="checkbox" name="show_non_connection_comments" {{if .Visibility.ShowNonConnectionComments}}checked{{end}}>
+    Display comments from users I'm not connected with
+    <small class="muted">If someone you're not connected with comments on your friend's post, you can see their comment — as long as they've enabled "Allow users I'm not connected with to see my comments".</small>
+  </label>
+  <button type="submit">Save</button>
+</form>
+<p><a href="/settings/profile">Back to profile</a></p>
+{{end}}

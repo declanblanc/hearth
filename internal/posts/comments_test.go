@@ -323,6 +323,110 @@ func TestListThread_RequiresVisibility(t *testing.T) {
 	}
 }
 
+// setCommentVisibility flips a user's two cross-network comment flags directly.
+func setCommentVisibility(t *testing.T, d *sql.DB, userID int64, share, show bool) {
+	t.Helper()
+	if _, err := d.Exec(
+		`UPDATE users SET share_comments_with_non_connections = ?, show_non_connection_comments = ? WHERE id = ?`,
+		share, show, userID,
+	); err != nil {
+		t.Fatalf("setCommentVisibility: %v", err)
+	}
+}
+
+// TestListThread_CrossNetworkVisibility walks the full opt-in truth table. Carol
+// owns the post; Alice (author of the comment) and Eve (the viewer) are each
+// connected to Carol but NOT to each other. Eve sees Alice's comment only when
+// Alice has opted in to sharing AND Eve has opted in to seeing — both required.
+func TestListThread_CrossNetworkVisibility(t *testing.T) {
+	cases := []struct {
+		name        string
+		aliceShares bool
+		eveShows    bool
+		wantVisible bool
+	}{
+		{"both off (default)", false, false, false},
+		{"only author shares", true, false, false},
+		{"only viewer shows", false, true, false},
+		{"both on", true, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newTestDB(t)
+			svc := newCommentSvc(d)
+			ctx := context.Background()
+			carol := seedUser(t, d, "carol")
+			alice := seedUser(t, d, "alice")
+			eve := seedUser(t, d, "eve")
+			connect(t, d, carol, alice)
+			connect(t, d, carol, eve) // Alice and Eve are NOT connected
+			post := seedActivePost(t, d, carol)
+
+			aliceComment, _ := svc.Create(ctx, post, alice, "alice's note")
+			setCommentVisibility(t, d, alice, tc.aliceShares, false)
+			setCommentVisibility(t, d, eve, false, tc.eveShows)
+
+			roots, err := svc.ListThread(ctx, post, eve)
+			if err != nil {
+				t.Fatalf("ListThread: %v", err)
+			}
+			var sawAlice bool
+			for _, r := range roots {
+				if r.ID == aliceComment.ID {
+					sawAlice = true
+				}
+			}
+			if sawAlice != tc.wantVisible {
+				t.Errorf("Eve sees Alice's comment = %v, want %v", sawAlice, tc.wantVisible)
+			}
+		})
+	}
+}
+
+// TestListThread_CrossNetworkReply confirms the opt-in path applies per comment:
+// a reply by a non-connection rides the same both-flags-on rule, and the viewer
+// always sees their own and the post author's comments regardless of the flags.
+func TestListThread_CrossNetworkReply(t *testing.T) {
+	d := newTestDB(t)
+	svc := newCommentSvc(d)
+	ctx := context.Background()
+	carol := seedUser(t, d, "carol")
+	alice := seedUser(t, d, "alice")
+	eve := seedUser(t, d, "eve")
+	connect(t, d, carol, alice)
+	connect(t, d, carol, eve) // Alice and Eve are NOT connected
+	post := seedActivePost(t, d, carol)
+
+	// Carol's own comment, Eve's own comment, and Alice's top-level comment with
+	// a reply from Alice under it.
+	carolComment, _ := svc.Create(ctx, post, carol, "carol's note")
+	eveComment, _ := svc.Create(ctx, post, eve, "eve's note")
+	aliceTop, _ := svc.Create(ctx, post, alice, "alice top")
+	aliceReply, _ := svc.Reply(ctx, aliceTop.ID, alice, "alice reply")
+
+	// Both opt in: Eve should now see Alice's whole sub-thread plus her own and
+	// the post author's comments.
+	setCommentVisibility(t, d, alice, true, false)
+	setCommentVisibility(t, d, eve, false, true)
+
+	roots, err := svc.ListThread(ctx, post, eve)
+	if err != nil {
+		t.Fatalf("ListThread: %v", err)
+	}
+	seen := map[int64]*Comment{}
+	for _, r := range roots {
+		seen[r.ID] = r
+	}
+	for _, id := range []int64{carolComment.ID, eveComment.ID, aliceTop.ID} {
+		if seen[id] == nil {
+			t.Errorf("expected comment %d to be visible to Eve", id)
+		}
+	}
+	if top := seen[aliceTop.ID]; top == nil || len(top.Children) != 1 || top.Children[0].ID != aliceReply.ID {
+		t.Errorf("Alice's reply should be nested and visible once both opt in, got %+v", seen[aliceTop.ID])
+	}
+}
+
 func TestAttachToPosts_NestsRepliesAndSetsCanDelete(t *testing.T) {
 	d := newTestDB(t)
 	svc := newCommentSvc(d)

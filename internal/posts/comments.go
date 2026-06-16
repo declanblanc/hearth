@@ -73,6 +73,11 @@ type Comment struct {
 	// CanDelete is true when the current viewer may delete this comment (its
 	// author, or the post's author). Set per-request when a thread is built.
 	CanDelete bool
+	// AuthorSharesExternally mirrors the author's
+	// share_comments_with_non_connections flag. It lets visibleToViewer decide
+	// whether this comment may cross to a viewer who isn't connected to the author
+	// (issue: cross-network comment visibility). Joined in from users.
+	AuthorSharesExternally bool
 }
 
 // validateComment trims and length-checks comment content.
@@ -285,11 +290,15 @@ func (s *CommentService) ListThread(ctx context.Context, postID, viewerID int64)
 	if err != nil {
 		return nil, err
 	}
+	showNonConnections, err := s.viewerShowsNonConnections(ctx, viewerID)
+	if err != nil {
+		return nil, err
+	}
 	flat, err := s.queryForPosts(ctx, []int64{postID})
 	if err != nil {
 		return nil, err
 	}
-	roots := buildThreads(flat[postID], viewerID, postAuthorID, connected)
+	roots := buildThreads(flat[postID], viewerID, postAuthorID, connected, showNonConnections)
 	return roots, nil
 }
 
@@ -310,12 +319,16 @@ func (s *CommentService) AttachToPosts(ctx context.Context, viewerID int64, ps [
 	if err != nil {
 		return err
 	}
+	showNonConnections, err := s.viewerShowsNonConnections(ctx, viewerID)
+	if err != nil {
+		return err
+	}
 	flat, err := s.queryForPosts(ctx, ids)
 	if err != nil {
 		return err
 	}
 	for i := range ps {
-		ps[i].Comments = buildThreads(flat[ps[i].ID], viewerID, ps[i].AuthorID, connected)
+		ps[i].Comments = buildThreads(flat[ps[i].ID], viewerID, ps[i].AuthorID, connected, showNonConnections)
 	}
 	return nil
 }
@@ -335,6 +348,27 @@ func (s *CommentService) connectedSet(ctx context.Context, viewerID int64) (map[
 	return set, nil
 }
 
+// viewerShowsNonConnections reports whether the viewer has opted in to seeing
+// comments from people they aren't connected with (the show_non_connection_comments
+// flag). Loaded once per request; combined per-comment with the author's own
+// share flag in visibleToViewer. A zero viewerID (anonymous) never opts in.
+func (s *CommentService) viewerShowsNonConnections(ctx context.Context, viewerID int64) (bool, error) {
+	if viewerID == 0 {
+		return false, nil
+	}
+	var show bool
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT show_non_connection_comments FROM users WHERE id = ?`, viewerID,
+	).Scan(&show)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return show, nil
+}
+
 // loadOne reads a single comment with its author display fields. Newly created
 // comments are always active and viewer-deletable by their author, so CanDelete
 // is set true here for the immediate re-render.
@@ -347,12 +381,13 @@ func (s *CommentService) loadOne(ctx context.Context, commentID int64) (*Comment
 	)
 	err := s.DB.QueryRowContext(ctx, `
 		SELECT c.id, c.post_id, c.parent_comment_id, c.author_id,
-		       u.username, u.first_name, u.last_name, c.content, c.status, c.created_at
+		       u.username, u.first_name, u.last_name, c.content, c.status, c.created_at,
+		       u.share_comments_with_non_connections
 		  FROM comments c
 		  JOIN users u ON u.id = c.author_id
 		 WHERE c.id = ?`, commentID,
 	).Scan(&c.ID, &c.PostID, &parent, &c.AuthorID, &c.AuthorUsername,
-		&first, &last, &c.Content, &status, &c.CreatedAt)
+		&first, &last, &c.Content, &status, &c.CreatedAt, &c.AuthorSharesExternally)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +412,8 @@ func (s *CommentService) queryForPosts(ctx context.Context, postIDs []int64) (ma
 	}
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT c.id, c.post_id, c.parent_comment_id, c.author_id,
-		       u.username, u.first_name, u.last_name, c.content, c.status, c.created_at
+		       u.username, u.first_name, u.last_name, c.content, c.status, c.created_at,
+		       u.share_comments_with_non_connections
 		  FROM comments c
 		  JOIN users u ON u.id = c.author_id
 		 WHERE c.post_id IN (`+strings.Join(placeholders, ",")+`)
@@ -396,7 +432,7 @@ func (s *CommentService) queryForPosts(ctx context.Context, postIDs []int64) (ma
 			first, last string
 		)
 		if err := rows.Scan(&c.ID, &c.PostID, &parent, &c.AuthorID, &c.AuthorUsername,
-			&first, &last, &c.Content, &status, &c.CreatedAt); err != nil {
+			&first, &last, &c.Content, &status, &c.CreatedAt, &c.AuthorSharesExternally); err != nil {
 			return nil, err
 		}
 		if parent.Valid {
@@ -419,11 +455,11 @@ func (s *CommentService) queryForPosts(ctx context.Context, postIDs []int64) (ma
 // defensively, so a hidden comment takes its sub-thread with it. viewerID/
 // postAuthorID drive the per-comment CanDelete flag (the comment's author or the
 // post author).
-func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[int64]bool) []*Comment {
+func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[int64]bool, viewerShowsNonConnections bool) []*Comment {
 	byID := make(map[int64]*Comment, len(flat))
 	visible := make([]*Comment, 0, len(flat))
 	for _, c := range flat {
-		if !visibleToViewer(c, viewerID, postAuthorID, connected) {
+		if !visibleToViewer(c, viewerID, postAuthorID, connected, viewerShowsNonConnections) {
 			continue
 		}
 		c.Children = nil
@@ -448,14 +484,22 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 
 // visibleToViewer reports whether a comment may be shown to the viewer. A viewer
 // always sees their own comments and the post author's; anyone else's are visible
-// only if the viewer is connected to that author (issue #23). A deleted comment
-// is a tombstone carrying no author or content, so it stays visible to anchor any
+// if the viewer is connected to that author (issue #23). A deleted comment is a
+// tombstone carrying no author or content, so it stays visible to anchor any
 // replies the viewer *can* see — pruneEmptyTombstones drops it later if none do.
-func visibleToViewer(c *Comment, viewerID, postAuthorID int64, connected map[int64]bool) bool {
+//
+// Beyond direct connections, a non-connection's comment crosses to the viewer only
+// when both sides have opted in: the viewer enabled "display comments from
+// non-connections" (viewerShowsNonConnections) AND the author enabled "share my
+// comments with non-connections" (AuthorSharesExternally). Symmetric consent.
+func visibleToViewer(c *Comment, viewerID, postAuthorID int64, connected map[int64]bool, viewerShowsNonConnections bool) bool {
 	if c.Deleted {
 		return true
 	}
-	return c.AuthorID == viewerID || c.AuthorID == postAuthorID || connected[c.AuthorID]
+	if c.AuthorID == viewerID || c.AuthorID == postAuthorID || connected[c.AuthorID] {
+		return true
+	}
+	return viewerShowsNonConnections && c.AuthorSharesExternally
 }
 
 // pruneEmptyTombstones removes deleted placeholder comments that have no visible

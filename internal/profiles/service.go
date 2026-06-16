@@ -98,6 +98,45 @@ func (s *Service) Update(ctx context.Context, userID int64, in UpdateInput) erro
 	return err
 }
 
+// CommentVisibility holds a user's two opt-in cross-network comment settings.
+// Both default to false (today's strictly-by-connection behaviour).
+type CommentVisibility struct {
+	// ShareWithNonConnections lets the user's own comments be seen by the post
+	// author's other connections, even people the user isn't connected with.
+	ShareWithNonConnections bool
+	// ShowNonConnectionComments lets the user see comments from people they
+	// aren't connected with (only those whose authors opted in to sharing).
+	ShowNonConnectionComments bool
+}
+
+// GetCommentVisibility loads the user's two cross-network comment settings.
+func (s *Service) GetCommentVisibility(ctx context.Context, userID int64) (CommentVisibility, error) {
+	var v CommentVisibility
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT share_comments_with_non_connections, show_non_connection_comments
+		   FROM users WHERE id = ? AND deleted_at IS NULL`, userID,
+	).Scan(&v.ShareWithNonConnections, &v.ShowNonConnectionComments)
+	if errors.Is(err, sql.ErrNoRows) {
+		return CommentVisibility{}, ErrNotFound
+	}
+	if err != nil {
+		return CommentVisibility{}, err
+	}
+	return v, nil
+}
+
+// UpdateCommentVisibility saves the user's two cross-network comment settings.
+func (s *Service) UpdateCommentVisibility(ctx context.Context, userID int64, v CommentVisibility) error {
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE users
+		    SET share_comments_with_non_connections = ?,
+		        show_non_connection_comments = ?
+		  WHERE id = ? AND deleted_at IS NULL`,
+		v.ShareWithNonConnections, v.ShowNonConnectionComments, userID,
+	)
+	return err
+}
+
 // UpdatePhoto swaps the stored photo_key for userID and returns the previous
 // key (empty string if none). The caller is responsible for deleting the old
 // key from R2 after this returns successfully.

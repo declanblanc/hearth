@@ -62,6 +62,10 @@ func newTestRenderer(t *testing.T) *render.Renderer {
 			`{{define "account.html"}}{{template "base" .}}{{end}}` +
 				`{{define "content"}}account{{end}}`,
 		)},
+		"privacy_settings.html": {Data: []byte(
+			`{{define "privacy_settings.html"}}{{template "base" .}}{{end}}` +
+				`{{define "content"}}privacy saved={{.Saved}} share={{.Visibility.ShareWithNonConnections}} show={{.Visibility.ShowNonConnectionComments}}{{end}}`,
+		)},
 		"account_deleted.html": {Data: []byte(
 			`{{define "account_deleted.html"}}{{template "base" .}}{{end}}` +
 				`{{define "content"}}deleted{{end}}`,
@@ -329,6 +333,59 @@ func TestEditProfile_TextPersistsAcrossRequests(t *testing.T) {
 	}
 	if p.Pronouns != "she/her" {
 		t.Errorf("Pronouns: got %q, want %q", p.Pronouns, "she/her")
+	}
+}
+
+func TestPrivacySettings_TogglePersists(t *testing.T) {
+	d := newTestDB(t)
+	h, authSvc, _ := newHandlers(t, d, nil)
+	uid := createUser(t, authSvc, "pat")
+
+	// Enable both toggles.
+	body := url.Values{
+		"share_comments_with_non_connections": {"on"},
+		"show_non_connection_comments":        {"on"},
+	}
+	req := authedRequest(http.MethodPost, "/settings/privacy",
+		strings.NewReader(body.Encode()), uid, "pat")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	h.privacySubmit(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("privacySubmit: want 200, got %d", rr.Code)
+	}
+
+	v, err := h.Svc.GetCommentVisibility(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("GetCommentVisibility: %v", err)
+	}
+	if !v.ShareWithNonConnections || !v.ShowNonConnectionComments {
+		t.Fatalf("both flags should be on, got %+v", v)
+	}
+
+	// The form should reflect the saved state on the next load.
+	req = authedRequest(http.MethodGet, "/settings/privacy", nil, uid, "pat")
+	rr = httptest.NewRecorder()
+	h.privacyForm(rr, req)
+	if !strings.Contains(rr.Body.String(), "share=true") || !strings.Contains(rr.Body.String(), "show=true") {
+		t.Errorf("form should show saved state, got %q", rr.Body.String())
+	}
+
+	// Unchecking both (absent fields) turns them back off.
+	req = authedRequest(http.MethodPost, "/settings/privacy",
+		strings.NewReader(url.Values{}.Encode()), uid, "pat")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr = httptest.NewRecorder()
+	h.privacySubmit(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("privacySubmit (clear): want 200, got %d", rr.Code)
+	}
+	v, err = h.Svc.GetCommentVisibility(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("GetCommentVisibility: %v", err)
+	}
+	if v.ShareWithNonConnections || v.ShowNonConnectionComments {
+		t.Fatalf("both flags should be off after clearing, got %+v", v)
 	}
 }
 

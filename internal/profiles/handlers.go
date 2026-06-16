@@ -38,6 +38,8 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 	}
 	mux.Handle("GET /settings/profile", authed(h.editForm))
 	mux.Handle("POST /settings/profile", authed(h.editSubmit))
+	mux.Handle("GET /settings/privacy", authed(h.privacyForm))
+	mux.Handle("POST /settings/privacy", authed(h.privacySubmit))
 	mux.Handle("GET /settings/account", authed(h.accountForm))
 	mux.Handle("POST /settings/account/delete", authed(h.deleteAccount))
 	// /u/{username} stays public — the handler enforces 404-unless-connected.
@@ -168,6 +170,35 @@ func (h *Handlers) editSubmit(w http.ResponseWriter, r *http.Request) {
 	h.Renderer.HTML(w, "profile_edit.html", render.Page(u, render.M{
 		"Profile": p, "Errors": auth.FieldErrors{}, "Saved": true, "PhotoURL": h.photoURL(p.PhotoKey),
 	}))
+}
+
+func (h *Handlers) privacyForm(w http.ResponseWriter, r *http.Request) {
+	u := middleware.UserFrom(r.Context())
+	v, err := h.Svc.GetCommentVisibility(r.Context(), u.ID)
+	if err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	h.Renderer.HTML(w, "privacy_settings.html", render.Page(u, render.M{"Visibility": v}))
+}
+
+func (h *Handlers) privacySubmit(w http.ResponseWriter, r *http.Request) {
+	u := middleware.UserFrom(r.Context())
+	if err := r.ParseForm(); err != nil {
+		h.Renderer.Error(w, http.StatusBadRequest)
+		return
+	}
+	// Unchecked checkboxes are simply absent from the form, so "on" means enabled
+	// and anything else (including missing) means disabled.
+	v := CommentVisibility{
+		ShareWithNonConnections:   r.FormValue("share_comments_with_non_connections") == "on",
+		ShowNonConnectionComments: r.FormValue("show_non_connection_comments") == "on",
+	}
+	if err := h.Svc.UpdateCommentVisibility(r.Context(), u.ID, v); err != nil {
+		h.Renderer.Error(w, http.StatusInternalServerError)
+		return
+	}
+	h.Renderer.HTML(w, "privacy_settings.html", render.Page(u, render.M{"Visibility": v, "Saved": true}))
 }
 
 func (h *Handlers) accountForm(w http.ResponseWriter, r *http.Request) {
