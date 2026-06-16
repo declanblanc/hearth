@@ -1551,6 +1551,153 @@ span.invite-url { box-shadow: none; }
   to { transform: rotate(360deg); }
 }
 
+/* ---- Settings: privacy toggles ------------------------------------------- *
+   The privacy page lists each control as a row inside a raised card: the
+   setting's name and description on the left, an ember toggle switch on the
+   right. The switch is a hidden native checkbox driving a painted track and a
+   sliding thumb, so it carries the brand palette while staying keyboard- and
+   screen-reader-accessible. Because the whole row is a <label>, tapping anywhere
+   on it flips the switch. */
+.settings-intro {
+  max-width: var(--measure);
+  margin: -0.25rem 0 1.75rem;
+  color: var(--ink-soft);
+}
+
+.settings-card {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.settings-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.9rem 1.4rem;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, rgba(227, 162, 90, 0.12), transparent);
+}
+.settings-card-head svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--ember);
+  flex-shrink: 0;
+}
+.settings-card-head h2 {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Each setting is itself the <label>; override the generic block-label styling
+   from the forms section (margin/weight) so it lays out as a flex row. */
+.setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 1.2rem 1.4rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+.setting + .setting { border-top: 1px solid var(--line-soft); }
+.setting:hover { background-color: rgba(189, 75, 39, 0.04); }
+
+.setting-text { flex: 1; min-width: 0; }
+.setting-title {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.12rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.setting-desc {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* The switch — a hidden checkbox over a painted track + sliding thumb. */
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 3.1rem;
+  height: 1.75rem;
+  margin-top: 0.15rem;
+}
+.switch input {
+  /* Cover the switch, invisible but focusable. Resets the generic full-width
+     input styling (padding, border, inset shadow) from the forms block. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+.switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 3px rgba(64, 38, 18, 0.14);
+  transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+.switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.22rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--raised);
+  box-shadow: 0 1px 2px rgba(64, 38, 18, 0.28);
+  transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.2, 1), background 0.22s ease;
+}
+/* On: the track lights up like an ember and the thumb slides across. */
+.switch input:checked + .switch-track {
+  background: linear-gradient(180deg, var(--ember) 0%, var(--ember-deep) 100%);
+  border-color: var(--ember-deep);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16), 0 0 14px -3px rgba(189, 75, 39, 0.6);
+}
+.switch input:checked + .switch-track .switch-thumb {
+  transform: translate(1.35rem, -50%);
+  background: #fff6ec;
+}
+.switch input:focus-visible + .switch-track {
+  outline: 2.5px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  margin-top: 1.6rem;
+}
+.settings-back {
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
 /* ---- Reduced motion ------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
