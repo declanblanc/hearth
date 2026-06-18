@@ -13,6 +13,7 @@ type Env string
 const (
 	EnvDevelopment Env = "development"
 	EnvTest        Env = "test"
+	EnvStaging     Env = "staging"
 	EnvProduction  Env = "production"
 )
 
@@ -34,6 +35,14 @@ type Config struct {
 }
 
 func (c Config) IsProd() bool { return c.Env == EnvProduction }
+
+// IsDeployed reports whether this is a publicly reachable environment
+// (production or staging), as opposed to local development or tests.
+func (c Config) IsDeployed() bool { return c.Env == EnvProduction || c.Env == EnvStaging }
+
+// ShouldSeed reports whether mock data should be seeded at startup.
+// Never true in production.
+func (c Config) ShouldSeed() bool { return c.Env == EnvDevelopment || c.Env == EnvStaging }
 
 // R2Configured reports whether enough R2 credentials are present to enable media uploads.
 func (c Config) R2Configured() bool {
@@ -62,8 +71,8 @@ func Load() (Config, error) {
 
 	secret := os.Getenv("HEARTH_COOKIE_SECRET")
 	if secret == "" {
-		if cfg.Env == EnvProduction {
-			return cfg, errors.New("HEARTH_COOKIE_SECRET is required in production")
+		if cfg.IsDeployed() {
+			return cfg, errors.New("HEARTH_COOKIE_SECRET is required in production and staging")
 		}
 		// Development default — stable across restarts so dev cookies survive.
 		secret = "dev-cookie-secret-not-for-production-use-32b"
@@ -74,7 +83,7 @@ func Load() (Config, error) {
 	cfg.CookieSecret = []byte(secret)
 
 	switch cfg.Env {
-	case EnvDevelopment, EnvTest, EnvProduction:
+	case EnvDevelopment, EnvTest, EnvStaging, EnvProduction:
 	default:
 		return cfg, fmt.Errorf("invalid HEARTH_ENV: %q", cfg.Env)
 	}

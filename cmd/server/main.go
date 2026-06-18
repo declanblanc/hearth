@@ -40,7 +40,7 @@ func main() {
 	}
 
 	var handler slog.Handler
-	if cfg.IsProd() {
+	if cfg.IsDeployed() {
 		handler = slog.NewJSONHandler(os.Stdout, nil)
 	} else {
 		handler = tint.NewHandler(os.Stdout, &tint.Options{TimeFormat: "15:04:05"})
@@ -61,9 +61,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// In development, ensure a pre-verified user exists so the app is usable
-	// without the signup/email-verify round-trip. Never runs in prod.
-	if cfg.Env == config.EnvDevelopment {
+	// In development and staging, ensure a pre-verified user exists so the app
+	// is usable without the signup/email-verify round-trip. Never runs in prod.
+	if cfg.ShouldSeed() {
 		seedDevUser(database, logger)
 	}
 
