@@ -325,6 +325,31 @@
       if (pickedVideo) addVideo(pickedVideo);
     });
 
+    // Let users paste an image straight from the clipboard — e.g. a screenshot
+    // or a photo copied from another app — anywhere in the composer; it attaches
+    // exactly like a picked photo (compressed, previewed, synced to the input).
+    // Videos aren't pasteable, so we only look for image items.
+    form.addEventListener("paste", function (event) {
+      var data = event.clipboardData;
+      if (!data || !data.items) return;
+      var pasted = [];
+      Array.prototype.forEach.call(data.items, function (item) {
+        if (item.kind === "file" && item.type.indexOf("image/") === 0) {
+          var file = item.getAsFile();
+          if (file) pasted.push(namedPaste(file));
+        }
+      });
+      if (pasted.length) addImages(pasted);
+    });
+
+    // Clipboard images often arrive without a usable filename; give them one so
+    // previews and the eventual upload read sensibly.
+    function namedPaste(file) {
+      if (file.name) return file;
+      var ext = (file.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      return new File([file], "pasted-" + Date.now() + "." + ext, { type: file.type });
+    }
+
     // ---- upload progress on submit ------------------------------------------
 
     // If the browser can't do an XHR upload with progress events, leave the
