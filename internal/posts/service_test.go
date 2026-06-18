@@ -11,10 +11,10 @@ import (
 	"github.com/dblanc/hearth/internal/shared/db"
 )
 
-// twoImages returns two already-validated images. The service trusts NewImage
+// twoImages returns two already-validated images. The service trusts NewMedia
 // (the handler does the size/MIME-sniff checks), so the bytes can be arbitrary.
-func twoImages() []NewImage {
-	return []NewImage{
+func twoImages() []NewMedia {
+	return []NewMedia{
 		{Data: []byte("first"), ContentType: "image/png", Ext: ".png"},
 		{Data: []byte("second"), ContentType: "image/jpeg", Ext: ".jpg"},
 	}
@@ -227,12 +227,145 @@ func TestCreate_TooManyImages(t *testing.T) {
 	ctx := context.Background()
 	author := seedUser(t, d, "author")
 
-	many := make([]NewImage, media.MaxImagesPerPost+1)
+	many := make([]NewMedia, media.MaxImagesPerPost+1)
 	for i := range many {
-		many[i] = NewImage{Data: []byte("x"), ContentType: "image/png", Ext: ".png"}
+		many[i] = NewMedia{Data: []byte("x"), ContentType: "image/png", Ext: ".png"}
 	}
 	if _, err := svc.Create(ctx, author, "", many); !errors.Is(err, ErrTooManyImages) {
 		t.Errorf("want ErrTooManyImages, got %v", err)
+	}
+}
+
+// oneVideo returns a validated video attachment with a poster, as the handler
+// would hand to the service after sniffing and extracting it.
+func oneVideo() []NewMedia {
+	return []NewMedia{{
+		Data:        []byte("fake-mp4"),
+		ContentType: "video/mp4",
+		Ext:         ".mp4",
+		Width:       1280,
+		Height:      720,
+		PosterData:  []byte("fake-jpeg-poster"),
+		PosterExt:   ".jpg",
+	}}
+}
+
+func TestCreate_WithVideoPersistsPoster(t *testing.T) {
+	d := newTestDB(t)
+	store := media.NewStub()
+	svc := New(d)
+	svc.Media = store
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+
+	if _, err := svc.Create(ctx, author, "a clip", oneVideo()); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := svc.ListByAuthor(ctx, author)
+	if err != nil {
+		t.Fatalf("ListByAuthor: %v", err)
+	}
+	if len(got) != 1 || len(got[0].Media) != 1 {
+		t.Fatalf("want 1 post with 1 attachment, got %d posts", len(got))
+	}
+	m := got[0].Media[0]
+	if !m.IsVideo() {
+		t.Errorf("attachment should be a video, got %q", m.ContentType)
+	}
+	if m.PosterKey == "" {
+		t.Fatal("video should have a poster_key persisted")
+	}
+	// Both the video object and the poster object landed in storage.
+	if !store.Has(m.Key) {
+		t.Errorf("video object missing from store: %s", m.Key)
+	}
+	if !store.Has(m.PosterKey) {
+		t.Errorf("poster object missing from store: %s", m.PosterKey)
+	}
+
+	// Signing fills both URLs without mutating the keys.
+	if err := SignMediaURLs(ctx, store, got); err != nil {
+		t.Fatalf("SignMediaURLs: %v", err)
+	}
+	if got[0].Media[0].URL == "" || got[0].Media[0].PosterURL == "" {
+		t.Errorf("expected both video and poster URLs signed, got %+v", got[0].Media[0])
+	}
+}
+
+func TestDelete_RemovesVideoAndPoster(t *testing.T) {
+	d := newTestDB(t)
+	store := media.NewStub()
+	svc := New(d)
+	svc.Media = store
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+
+	id, err := svc.Create(ctx, author, "a clip", oneVideo())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	keys, _ := mediaKeys(ctx, d, id)
+	if len(keys) != 2 { // the video and its poster
+		t.Fatalf("want 2 keys (video + poster), got %d", len(keys))
+	}
+
+	if err := svc.Delete(ctx, id, author); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	for _, k := range keys {
+		if store.Has(k) {
+			t.Errorf("object not removed from storage: %s", k)
+		}
+	}
+}
+
+func TestCreate_PhotosAndVideoTogether(t *testing.T) {
+	d := newTestDB(t)
+	store := media.NewStub()
+	svc := New(d)
+	svc.Media = store
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+
+	mixed := append(twoImages(), oneVideo()...)
+	if _, err := svc.Create(ctx, author, "", mixed); err != nil {
+		t.Fatalf("a post may mix photos and a video, got %v", err)
+	}
+
+	got, err := svc.ListByAuthor(ctx, author)
+	if err != nil {
+		t.Fatalf("ListByAuthor: %v", err)
+	}
+	if len(got) != 1 || len(got[0].Media) != 3 {
+		t.Fatalf("want 1 post with 3 attachments, got %d posts", len(got))
+	}
+	var images, videos int
+	for _, m := range got[0].Media {
+		if m.IsVideo() {
+			videos++
+			if m.PosterKey == "" {
+				t.Errorf("video should keep its poster_key")
+			}
+		} else {
+			images++
+		}
+	}
+	if images != 2 || videos != 1 {
+		t.Errorf("want 2 images + 1 video, got %d images + %d videos", images, videos)
+	}
+}
+
+func TestCreate_TooManyVideosRejected(t *testing.T) {
+	d := newTestDB(t)
+	svc := New(d)
+	svc.Media = media.NewStub()
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+
+	two := append(oneVideo(), oneVideo()...)
+	if _, err := svc.Create(ctx, author, "", two); !errors.Is(err, ErrTooManyVideos) {
+		t.Errorf("want ErrTooManyVideos, got %v", err)
 	}
 }
 

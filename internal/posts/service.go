@@ -26,6 +26,7 @@ var (
 	ErrEmpty         = errors.New("posts: content is empty")
 	ErrTooLong       = errors.New("posts: content exceeds 1000 characters")
 	ErrTooManyImages = errors.New("posts: too many images")
+	ErrTooManyVideos = errors.New("posts: too many videos")
 	ErrNotFound      = errors.New("posts: not found")
 	ErrNotAuthor     = errors.New("posts: not the author")
 )
@@ -65,29 +66,52 @@ type Post struct {
 	Comments []*Comment
 }
 
-// PostMedia is one image attached to a post. Key/ContentType come from the
-// database; URL is left empty until SignMediaURLs mints a signed link at render
-// time, so unrendered posts never hold a usable URL.
+// PostMedia is one attachment on a post — an image, or a video with a poster.
+// Key/ContentType come from the database; URL is left empty until SignMediaURLs
+// mints a signed link at render time, so unrendered posts never hold a usable
+// URL.
 type PostMedia struct {
 	Key         string
 	ContentType string
 	Position    int
 	URL         string
-	// Width and Height are the image's pixel dimensions, used to reserve its box
-	// in the layout before it loads. They are zero for media uploaded before the
-	// dimensions migration; the template then omits the reserving attributes.
+	// Width and Height are the attachment's pixel dimensions, used to reserve its
+	// box in the layout before it loads. For images they are the image's own
+	// dimensions; for videos they are the poster's. They are zero for media
+	// uploaded before the dimensions migration; the template then omits the
+	// reserving attributes.
 	Width  int
 	Height int
+	// PosterKey is the object key of a video's still-frame poster (empty for
+	// images). PosterURL is its signed link, minted alongside URL at render time.
+	PosterKey string
+	PosterURL string
 }
 
-// NewImage is a validated image ready to be stored with a post. The handler
-// performs size and MIME-sniff checks before constructing one.
-type NewImage struct {
+// IsVideo reports whether the attachment is a video rather than an image.
+func (m PostMedia) IsVideo() bool {
+	return strings.HasPrefix(m.ContentType, "video/")
+}
+
+// NewMedia is a validated attachment ready to be stored with a post — an image,
+// or a video plus its client-extracted poster frame. The handler performs the
+// size and MIME-sniff checks before constructing one.
+type NewMedia struct {
 	Data        []byte
 	ContentType string
 	Ext         string
 	Width       int
 	Height      int
+	// PosterData/PosterExt carry a video's poster frame (a JPEG). They are unset
+	// for images, and may be unset for a video uploaded without JavaScript — in
+	// which case the video stores no poster and renders without one.
+	PosterData []byte
+	PosterExt  string
+}
+
+// IsVideo reports whether this attachment is a video rather than an image.
+func (m NewMedia) IsVideo() bool {
+	return strings.HasPrefix(m.ContentType, "video/")
 }
 
 // Validate trims and checks content length, returning the trimmed value.
@@ -104,38 +128,69 @@ func Validate(content string) (string, error) {
 	return trimmed, nil
 }
 
-// Create stores a new active post for the author and returns its ID. A post
-// must have either text or at least one image. Images are uploaded to object
+// Create stores a new active post for the author and returns its ID. A post must
+// have either text or at least one attachment. Attachments are uploaded to object
 // storage first; the post row and its post_media rows are then written together
-// in a single BEGIN IMMEDIATE transaction. If the transaction fails, any
-// objects already uploaded are removed so storage doesn't leak.
-func (s *Service) Create(ctx context.Context, authorID int64, content string, images []NewImage) (int64, error) {
+// in a single BEGIN IMMEDIATE transaction. If the transaction fails, any objects
+// already uploaded are removed so storage doesn't leak.
+//
+// A post may carry up to MaxImagesPerPost images and up to MaxVideosPerPost
+// videos, in any combination.
+func (s *Service) Create(ctx context.Context, authorID int64, content string, items []NewMedia) (int64, error) {
 	trimmed := strings.TrimSpace(content)
 	if len([]rune(trimmed)) > MaxContentLen {
 		return 0, ErrTooLong
 	}
-	if trimmed == "" && len(images) == 0 {
+	if trimmed == "" && len(items) == 0 {
 		return 0, ErrEmpty
 	}
-	if len(images) > media.MaxImagesPerPost {
+
+	var images, videos int
+	for _, m := range items {
+		if m.IsVideo() {
+			videos++
+		} else {
+			images++
+		}
+	}
+	if images > media.MaxImagesPerPost {
 		return 0, ErrTooManyImages
 	}
-	if len(images) > 0 && s.Media == nil {
+	if videos > media.MaxVideosPerPost {
+		return 0, ErrTooManyVideos
+	}
+	if len(items) > 0 && s.Media == nil {
 		return 0, errors.New("posts: media store not configured")
 	}
 
 	now := s.Now()
 
 	// Upload objects before opening the write transaction — R2 is not part of
-	// the SQL transaction, so we keep its slow network calls out of the lock.
-	uploadedKeys := make([]string, 0, len(images))
-	for _, img := range images {
-		key := media.NewPostKey(now, img.Ext)
-		if err := s.Media.Upload(ctx, key, bytes.NewReader(img.Data), img.ContentType); err != nil {
+	// the SQL transaction, so we keep its slow network calls out of the lock. A
+	// video uploads two objects: the file itself and its poster frame. We track
+	// each row's keys in posterKeys (parallel to items) for the insert, and every
+	// uploaded key in uploadedKeys for cleanup on failure.
+	uploadedKeys := make([]string, 0, len(items))
+	objectKeys := make([]string, len(items))
+	posterKeys := make([]string, len(items))
+	for i, m := range items {
+		key := media.NewPostKey(now, m.Ext)
+		if err := s.Media.Upload(ctx, key, bytes.NewReader(m.Data), m.ContentType); err != nil {
 			s.cleanupKeys(ctx, uploadedKeys)
-			return 0, fmt.Errorf("posts: upload image: %w", err)
+			return 0, fmt.Errorf("posts: upload media: %w", err)
 		}
 		uploadedKeys = append(uploadedKeys, key)
+		objectKeys[i] = key
+
+		if m.IsVideo() && len(m.PosterData) > 0 {
+			posterKey := media.NewPostKey(now, m.PosterExt)
+			if err := s.Media.Upload(ctx, posterKey, bytes.NewReader(m.PosterData), "image/jpeg"); err != nil {
+				s.cleanupKeys(ctx, uploadedKeys)
+				return 0, fmt.Errorf("posts: upload poster: %w", err)
+			}
+			uploadedKeys = append(uploadedKeys, posterKey)
+			posterKeys[i] = posterKey
+		}
 	}
 
 	var postID int64
@@ -151,11 +206,17 @@ func (s *Service) Create(ctx context.Context, authorID int64, content string, im
 		if err != nil {
 			return err
 		}
-		for i, img := range images {
+		for i, m := range items {
+			// poster_key is NULL for images; a stored NULL keeps the column's
+			// "video only" meaning rather than an empty string standing in.
+			var poster any
+			if posterKeys[i] != "" {
+				poster = posterKeys[i]
+			}
 			if _, err := conn.ExecContext(ctx,
-				`INSERT INTO post_media (post_id, object_key, content_type, position, width, height, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				postID, uploadedKeys[i], img.ContentType, i, img.Width, img.Height, now); err != nil {
+				`INSERT INTO post_media (post_id, object_key, content_type, position, width, height, poster_key, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				postID, objectKeys[i], m.ContentType, i, m.Width, m.Height, poster, now); err != nil {
 				return err
 			}
 		}
@@ -224,7 +285,7 @@ func LoadMedia(ctx context.Context, sqldb *sql.DB, ps []Post) error {
 	}
 
 	rows, err := sqldb.QueryContext(ctx, `
-		SELECT post_id, object_key, content_type, position, width, height
+		SELECT post_id, object_key, content_type, position, width, height, poster_key
 		  FROM post_media
 		 WHERE post_id IN (`+strings.Join(placeholders, ",")+`)
 		 ORDER BY post_id, position`, args...)
@@ -236,13 +297,15 @@ func LoadMedia(ctx context.Context, sqldb *sql.DB, ps []Post) error {
 		var (
 			postID        int64
 			m             PostMedia
-			width, height sql.NullInt64 // NULL for media stored before the dimensions migration.
+			width, height sql.NullInt64  // NULL for media stored before the dimensions migration.
+			posterKey     sql.NullString // NULL for images; set only for videos.
 		)
-		if err := rows.Scan(&postID, &m.Key, &m.ContentType, &m.Position, &width, &height); err != nil {
+		if err := rows.Scan(&postID, &m.Key, &m.ContentType, &m.Position, &width, &height, &posterKey); err != nil {
 			return err
 		}
 		m.Width = int(width.Int64)
 		m.Height = int(height.Int64)
+		m.PosterKey = posterKey.String
 		if p := byID[postID]; p != nil {
 			p.Media = append(p.Media, m)
 		}
@@ -266,6 +329,15 @@ func SignMediaURLs(ctx context.Context, store media.Store, ps []Post) error {
 				return err
 			}
 			ps[i].Media[j].URL = url
+			// A video also needs its poster signed so the player can show the
+			// still frame before playback.
+			if ps[i].Media[j].PosterKey != "" {
+				posterURL, err := store.PresignGet(ctx, ps[i].Media[j].PosterKey, MediaURLTTL)
+				if err != nil {
+					return err
+				}
+				ps[i].Media[j].PosterURL = posterURL
+			}
 		}
 	}
 	return nil
@@ -325,21 +397,29 @@ func (s *Service) Delete(ctx context.Context, postID, requesterID int64) error {
 	return nil
 }
 
-// mediaKeys returns the object keys for a post's images.
+// mediaKeys returns every object key for a post's attachments — each row's
+// object_key plus any video poster_key — so a delete removes both the media and
+// its poster from storage.
 func mediaKeys(ctx context.Context, sqldb *sql.DB, postID int64) ([]string, error) {
 	rows, err := sqldb.QueryContext(ctx,
-		`SELECT object_key FROM post_media WHERE post_id = ?`, postID)
+		`SELECT object_key, poster_key FROM post_media WHERE post_id = ?`, postID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var keys []string
 	for rows.Next() {
-		var k string
-		if err := rows.Scan(&k); err != nil {
+		var (
+			key       string
+			posterKey sql.NullString
+		)
+		if err := rows.Scan(&key, &posterKey); err != nil {
 			return nil, err
 		}
-		keys = append(keys, k)
+		keys = append(keys, key)
+		if posterKey.Valid && posterKey.String != "" {
+			keys = append(keys, posterKey.String)
+		}
 	}
 	return keys, rows.Err()
 }

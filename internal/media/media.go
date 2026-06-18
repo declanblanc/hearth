@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,20 +23,38 @@ var (
 // photo.
 const MaxProfilePhotoSize int64 = 200 * 1024 * 1024
 
-// MaxPostImagesTotalSize is the server-enforced limit on the *combined* size of
-// all images attached to a single post. Individual files are not capped
-// separately: one 200 MB image, two 100 MB images, or four 50 MB images are all
-// fine, so long as the total stays within budget.
-const MaxPostImagesTotalSize int64 = 200 * 1024 * 1024
+// MaxPostImageFileSize caps a single post image *after* the client-side
+// compression that every upload passes through (Technical Plan §4.5: max 1600px
+// long edge, 80% JPEG, typically 100–400 KB). It is a generous guardrail, not the
+// compressor — a file this large means the client compression was skipped or
+// failed, and we'd rather reject it than re-serve a multi-megabyte original.
+const MaxPostImageFileSize int64 = 5 * 1024 * 1024
+
+// MaxVideoFileSize caps a single post video. We don't transcode server-side
+// (cost constraint), so this is the authoritative size limit; the client also
+// enforces a duration cap, but size is the one we can verify.
+const MaxVideoFileSize int64 = 50 * 1024 * 1024
 
 // MaxImagesPerPost caps how many images a single post may carry.
 const MaxImagesPerPost = 5
+
+// MaxVideosPerPost caps how many videos a single post may carry. Independent of
+// MaxImagesPerPost: a post may hold up to MaxImagesPerPost photos and up to
+// MaxVideosPerPost videos, in any combination.
+const MaxVideosPerPost = 1
 
 // allowedImageTypes maps accepted MIME types to canonical file extensions.
 var allowedImageTypes = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/png":  ".png",
 	"image/webp": ".webp",
+}
+
+// allowedVideoTypes maps accepted video MIME types to canonical file extensions.
+// MP4 only: we can't transcode within the hosting budget, so anything else (e.g.
+// an iPhone .mov/HEVC) is rejected rather than stored as an unplayable file.
+var allowedVideoTypes = map[string]string{
+	"video/mp4": ".mp4",
 }
 
 // Store is the object storage abstraction. R2Store is the production
@@ -65,14 +84,36 @@ func NewPostKey(now time.Time, ext string) string {
 }
 
 // DetectType sniffs the content type from the leading bytes of data (up to 512)
-// and returns the normalised MIME type and file extension.
-// Returns ErrUnsupportedType for anything not in the allow-list.
+// and returns the normalised MIME type and file extension. It accepts images
+// only — the chokepoint for profile photos and video posters, where a video is
+// never valid.
+// Returns ErrUnsupportedType for anything not in the image allow-list.
 func DetectType(data []byte) (ct string, ext string, err error) {
 	raw := http.DetectContentType(data)
 	for mime, e := range allowedImageTypes {
-		if len(raw) >= len(mime) && raw[:len(mime)] == mime {
+		if strings.HasPrefix(raw, mime) {
 			return mime, e, nil
 		}
 	}
 	return "", "", ErrUnsupportedType
+}
+
+// DetectMediaType sniffs the content type from the leading bytes of data (up to
+// 512) and classifies it as an image or a video, returning the normalised MIME
+// type, canonical extension, and whether it's a video. Used by the post-upload
+// path, which accepts both. Returns ErrUnsupportedType for anything outside both
+// allow-lists.
+func DetectMediaType(data []byte) (ct string, ext string, isVideo bool, err error) {
+	raw := http.DetectContentType(data)
+	for mime, e := range allowedImageTypes {
+		if strings.HasPrefix(raw, mime) {
+			return mime, e, false, nil
+		}
+	}
+	for mime, e := range allowedVideoTypes {
+		if strings.HasPrefix(raw, mime) {
+			return mime, e, true, nil
+		}
+	}
+	return "", "", false, ErrUnsupportedType
 }

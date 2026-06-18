@@ -269,7 +269,7 @@ func TestHardDeleteSweep_RemovesPostMediaFromR2(t *testing.T) {
 
 	// Author posts an image, then deletes their account; the post (and its
 	// image) survive soft-delete and must be cleaned up at hard-delete.
-	if _, err := postSvc.Create(ctx, uid, "bye", []posts.NewImage{
+	if _, err := postSvc.Create(ctx, uid, "bye", []posts.NewMedia{
 		{Data: []byte("img"), ContentType: "image/png", Ext: ".png"},
 	}); err != nil {
 		t.Fatalf("Create post: %v", err)

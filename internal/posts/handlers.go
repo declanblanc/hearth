@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 
@@ -48,13 +49,13 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, errCode := h.collectImages(r)
+	items, errCode := h.collectMedia(r)
 	if errCode != "" {
 		http.Redirect(w, r, profileURL+"?post_error="+errCode, http.StatusSeeOther)
 		return
 	}
 
-	_, err := h.Svc.Create(r.Context(), u.ID, r.FormValue("content"), images)
+	_, err := h.Svc.Create(r.Context(), u.ID, r.FormValue("content"), items)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEmpty):
@@ -63,6 +64,8 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, profileURL+"?post_error=toolong", http.StatusSeeOther)
 		case errors.Is(err, ErrTooManyImages):
 			http.Redirect(w, r, profileURL+"?post_error=too_many_images", http.StatusSeeOther)
+		case errors.Is(err, ErrTooManyVideos):
+			http.Redirect(w, r, profileURL+"?post_error=too_many_videos", http.StatusSeeOther)
 		default:
 			slog.Error("posts: create", "user_id", u.ID, "err", err)
 			h.Renderer.Error(w, http.StatusInternalServerError)
@@ -72,12 +75,16 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, profileURL, http.StatusSeeOther)
 }
 
-// collectImages reads, size-limits, and MIME-sniffs each uploaded "images"
-// file. It returns the validated images or a post_error code suitable for the
-// redirect-and-display pattern the profile page uses. The content type is
-// derived by sniffing the bytes, never trusted from the client (Build Plan
-// §2.1: "don't trust client-provided content-type").
-func (h *Handlers) collectImages(r *http.Request) ([]NewImage, string) {
+// collectMedia reads, size-limits, and MIME-sniffs each uploaded "images" file
+// (the field carries both photos and a video). It returns the validated
+// attachments or a post_error code suitable for the redirect-and-display pattern
+// the profile page uses. Content types are derived by sniffing the bytes, never
+// trusted from the client (Build Plan §2.1: "don't trust client-provided
+// content-type").
+//
+// A post may carry up to MaxImagesPerPost images and up to MaxVideosPerPost
+// videos, in any combination.
+func (h *Handlers) collectMedia(r *http.Request) ([]NewMedia, string) {
 	if r.MultipartForm == nil {
 		return nil, ""
 	}
@@ -85,43 +92,122 @@ func (h *Handlers) collectImages(r *http.Request) ([]NewImage, string) {
 	if len(files) == 0 {
 		return nil, ""
 	}
-	if len(files) > media.MaxImagesPerPost {
-		return nil, "too_many_images"
-	}
 
-	// The 200 MB budget is shared across every image in the post. We track the
-	// remaining allowance and read each file with a limit of remaining+1 bytes,
-	// so a post can never buffer more than the total budget into memory even if
-	// a client sends oversized files.
-	remaining := media.MaxPostImagesTotalSize
-	images := make([]NewImage, 0, len(files))
+	items := make([]NewMedia, 0, len(files))
+	var images, videos int
 	for _, fh := range files {
-		file, err := fh.Open()
-		if err != nil {
-			return nil, "image_unreadable"
+		data, ct, ext, isVideo, errCode := readMediaFile(fh)
+		if errCode != "" {
+			return nil, errCode
 		}
-		// Read one byte past the remaining budget so we can tell "exactly at the
-		// limit" from "over the limit".
-		data, err := io.ReadAll(io.LimitReader(file, remaining+1))
-		file.Close()
-		if err != nil {
-			return nil, "image_unreadable"
-		}
-		if int64(len(data)) > remaining {
-			return nil, "images_too_large"
-		}
-		remaining -= int64(len(data))
-		ct, ext, err := media.DetectType(data)
-		if err != nil {
-			return nil, "image_type"
+		if isVideo {
+			videos++
+			// Width/height for a video come from its poster (attached below), so
+			// the player's box is reserved without trusting client dimensions.
+			items = append(items, NewMedia{Data: data, ContentType: ct, Ext: ext})
+			continue
 		}
 		width, height, err := media.ImageDimensions(data)
 		if err != nil {
 			return nil, "image_unreadable"
 		}
-		images = append(images, NewImage{Data: data, ContentType: ct, Ext: ext, Width: width, Height: height})
+		images++
+		items = append(items, NewMedia{Data: data, ContentType: ct, Ext: ext, Width: width, Height: height})
 	}
-	return images, ""
+
+	if images > media.MaxImagesPerPost {
+		return nil, "too_many_images"
+	}
+	if videos > media.MaxVideosPerPost {
+		return nil, "too_many_videos"
+	}
+
+	// Attach the client-extracted poster frame to the video. Without JavaScript
+	// no poster is sent and the video is stored without one (it still plays).
+	if videos == 1 {
+		if errCode := attachPoster(r, items); errCode != "" {
+			return nil, errCode
+		}
+	}
+
+	return items, ""
+}
+
+// readMediaFile reads one uploaded file, sniffing its type from the leading bytes
+// so the right size cap applies — images and videos have very different limits —
+// without buffering an oversized file in full. It returns the bytes and the
+// sniffed type, or a post_error code.
+func readMediaFile(fh *multipart.FileHeader) (data []byte, ct, ext string, isVideo bool, errCode string) {
+	file, err := fh.Open()
+	if err != nil {
+		return nil, "", "", false, "image_unreadable"
+	}
+	defer file.Close()
+
+	// Sniff from a 512-byte prefix (all http.DetectContentType ever inspects) so
+	// we know which cap to enforce before reading the rest.
+	header := make([]byte, 512)
+	n, err := io.ReadFull(file, header)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return nil, "", "", false, "image_unreadable"
+	}
+	header = header[:n]
+
+	ct, ext, isVideo, derr := media.DetectMediaType(header)
+	if derr != nil {
+		return nil, "", "", false, "image_type"
+	}
+
+	limit := media.MaxPostImageFileSize
+	if isVideo {
+		limit = media.MaxVideoFileSize
+	}
+	// Read one byte past the cap (minus the header already consumed) so we can
+	// tell "exactly at the limit" from "over the limit".
+	rest, err := io.ReadAll(io.LimitReader(file, limit-int64(n)+1))
+	if err != nil {
+		return nil, "", "", false, "image_unreadable"
+	}
+	data = append(header, rest...)
+	if int64(len(data)) > limit {
+		if isVideo {
+			return nil, "", "", false, "video_too_large"
+		}
+		return nil, "", "", false, "image_too_large"
+	}
+	return data, ct, ext, isVideo, ""
+}
+
+// attachPoster reads the optional "video_poster" file — a JPEG still frame the
+// client extracted from the chosen video — and attaches it to the post's video,
+// using the poster's own pixel dimensions as the video's display box. Returns a
+// post_error code if a poster was sent but isn't a readable image.
+func attachPoster(r *http.Request, items []NewMedia) string {
+	posters := r.MultipartForm.File["video_poster"]
+	if len(posters) == 0 {
+		return ""
+	}
+	data, _, ext, isVideo, errCode := readMediaFile(posters[0])
+	if errCode != "" {
+		return errCode
+	}
+	if isVideo {
+		return "image_type" // a poster must be an image
+	}
+	width, height, err := media.ImageDimensions(data)
+	if err != nil {
+		return "image_unreadable"
+	}
+	for i := range items {
+		if items[i].IsVideo() {
+			items[i].PosterData = data
+			items[i].PosterExt = ext
+			items[i].Width = width
+			items[i].Height = height
+			break
+		}
+	}
+	return ""
 }
 
 func (h *Handlers) delete(w http.ResponseWriter, r *http.Request) {

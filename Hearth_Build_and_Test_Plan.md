@@ -549,6 +549,8 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 - `post_media` row per file with `order` (0–4).
 - Image rendering: server generates a signed R2 URL with 1-hour expiry per image, **after** confirming the viewer is connected to the post author.
 
+> **Status note:** the first post-image implementation shipped without the client-side compression above and with a 200MB-per-post server ceiling, which is why posts loaded slowly. Compression now runs in the browser (`web/static/post-images.js` + the vendored `browser-image-compression`) before upload, and the server cap is the intended per-file 5MB guardrail (`media.MaxPostImageFileSize`).
+
 ### Acceptance criteria
 
 - Mobile uploads work from camera and library.
@@ -573,6 +575,38 @@ Posts get richer: images, threaded comments, edit history, archive/delete. End o
 - Various aspect ratios including very tall (9:16) and very wide (panorama).
 - Verify compression doesn't block the UI on a low-end Android device.
 - Attempt malicious uploads (e.g., HTML renamed to `.jpg`) and confirm rejection.
+
+## 2.1b Video uploads
+
+Added after MVP (originally out of scope). Reuses the image pipeline's storage, signing, and delete paths; see Technical Plan §4.5 and the §9 decision log.
+
+### Implementation
+
+- A post carries up to 5 photos **and** up to one video, in any combination — independent caps enforced in `posts.collectMedia` and re-checked in `posts.Service.Create`.
+- Accept `video/mp4` only (mime-sniffed, not by extension). No server-side transcoding — `.mov`/HEVC and other containers are rejected with a message suggesting MP4.
+- Client (`post-images.js`): cap duration at 60s, cap size at 50MB, and extract a poster frame to JPEG via a `<video>` + canvas; the poster uploads as a separate `video_poster` field. Video bytes are **not** run through image compression.
+- Server: 50MB size cap is authoritative (`media.MaxVideoFileSize`); the video object and poster object each get a random `posts/{yyyy}/{mm}/{uuid}` key, and `post_media.poster_key` (migration 013) references the poster. The video's `width`/`height` are derived from the poster image server-side, never from the client.
+- Render: `<video controls preload="metadata" playsinline poster=…>`; videos are excluded from the photo lightbox and play inline.
+
+### Acceptance criteria
+
+- A short MP4 uploads, shows a poster in the composer, and plays inline in the feed and on the profile.
+- A `.mov`/HEVC or a >60s clip is rejected client-side with an inline message.
+- Deleting the post removes both the video and its poster from R2.
+- A no-JS upload of an MP4 still works (stored without a poster).
+
+### Testing plan
+
+**Automated**
+
+- Unit test: `DetectMediaType` accepts `video/mp4`, rejects HTML-as-mp4 and a `.mov` brand.
+- Integration test: photos and a video in one post are accepted together; a second video rejected; a >50MB video rejected.
+- Integration test: `Create` persists `poster_key`; `Delete` removes the video and poster objects.
+
+**Manual**
+
+- iPhone Safari and Android Chrome: record/pick a short clip, confirm poster + inline playback.
+- Confirm a long or non-MP4 file is refused before upload.
 
 ## 2.2 Threaded comments
 

@@ -1,44 +1,96 @@
 // post-images.js — compose-box enhancements for creating a post:
 //
-//   1. Thumbnail previews of the images chosen in the file picker, each with a
+//   1. Client-side image compression (Technical Plan §4.5): every chosen photo is
+//      shrunk to ≤1600px / ~80% JPEG via browser-image-compression before it ever
+//      enters the form, so posts upload and load fast. HEIC from iPhones is drawn
+//      through a canvas and comes out JPEG.
+//   2. Thumbnail previews of the chosen photos and a video's poster, each with a
 //      remove button that keeps the input's FileList in sync.
-//   2. An upload progress indicator shown after the user clicks "Post", so a
-//      large/slow upload doesn't make the page look frozen.
+//   3. Video support: pick one MP4 (≤60s) and we grab a poster frame on the
+//      client; the video and poster upload together. Photos and a video can share
+//      a post — up to 5 photos and one video.
+//   4. An upload progress indicator shown after the user clicks "Post".
 //
-// Both are pure progressive enhancement. Without this script the plain
-// <input type="file"> still selects images and the form still submits normally;
-// the only things lost are the preview thumbnails and the progress bar.
+// All of this is progressive enhancement. Without this script the plain
+// <input type="file"> still selects media and the form still submits normally —
+// the only things lost are compression, previews, the poster, and the progress
+// bar. (Without compression the server's per-file size cap may reject a large
+// original, which is the intended guardrail.)
 //
-// Wiring (see profile_view.html): the <form> carries data-image-preview and
-// contains a file <input>, an empty [data-preview-list] for thumbnails, and a
-// hidden [data-upload-progress] block (with [data-upload-bar] and
-// [data-upload-label]) for the progress UI.
+// Wiring (see composemodal in base.html): the <form> carries data-image-preview
+// and contains a file <input>, an empty [data-preview-list] for thumbnails, and a
+// [data-upload-progress] block (with [data-upload-bar] and [data-upload-label])
+// reused for both the "preparing" status and the upload progress bar.
 
 (function () {
   "use strict";
 
-  // ---- thumbnail previews -------------------------------------------------
-
-  // Keep in step with media.MaxImagesPerPost on the server.
+  // Keep these in step with the server: media.MaxImagesPerPost and
+  // media.MaxVideoFileSize, and the 60s client-side duration cap from the plan.
   var MAX_IMAGES = 5;
+  var MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+  var MAX_VIDEO_SECONDS = 60;
 
-  function setupPreview(form) {
+  // Compression targets straight from Technical Plan §4.5.
+  var COMPRESSION_OPTS = {
+    maxWidthOrHeight: 1600,
+    initialQuality: 0.8,
+    useWebWorker: true,
+    fileType: "image/jpeg",
+  };
+
+  function isImage(file) {
+    return file.type.indexOf("image/") === 0;
+  }
+  function isVideo(file) {
+    return file.type.indexOf("video/") === 0;
+  }
+
+  function setup(form) {
     var fileInput = form.querySelector('input[type="file"]');
     var list = form.querySelector("[data-preview-list]");
     if (!fileInput || !list) {
       return; // markup not as expected — leave the plain input in place.
     }
 
-    // The accumulated selection is our source of truth. A native file input
-    // *replaces* its FileList every time the picker is used, so without this we
-    // would lose earlier photos each time the user adds another. We keep the
-    // list here and push it back into the input (via DataTransfer) so the form
-    // submits exactly the photos shown as thumbnails.
-    var selected = [];
+    var progress = form.querySelector("[data-upload-progress]");
+    var label = form.querySelector("[data-upload-label]");
+    var bar = form.querySelector("[data-upload-bar]");
 
-    // Object URLs we've created, so we can revoke them and avoid leaking memory
-    // each time the selection changes.
-    var objectURLs = [];
+    // A post may hold up to MAX_IMAGES photos and one video, in any combination.
+    // We hold the source of truth here and mirror it onto the file input (via
+    // DataTransfer) so a normal form POST carries exactly what's shown.
+    var images = []; // compressed image Files
+    var video = null; // { file: File, poster: Blob|null, posterURL: string }
+    var objectURLs = []; // preview URLs to revoke when the selection changes
+
+    // Outstanding compression / poster-extraction tasks. Submission waits until
+    // this reaches zero so we never upload before media is ready.
+    var pending = 0;
+
+    // ---- status + thumbnails ------------------------------------------------
+
+    // The progress block doubles as a status line while we prepare media. Showing
+    // it with the bar still at 0 reads as a quiet "working…" cue.
+    function setStatus(text) {
+      if (label) label.textContent = text;
+      if (progress && text) progress.hidden = false;
+    }
+    function clearStatus() {
+      if (label) label.textContent = "";
+      if (progress) progress.hidden = true;
+    }
+    function beginWork(text) {
+      pending++;
+      setStatus(text);
+    }
+    function endWork() {
+      pending--;
+      if (pending <= 0) {
+        pending = 0;
+        clearStatus();
+      }
+    }
 
     function revokeURLs() {
       objectURLs.forEach(function (url) {
@@ -47,90 +99,234 @@
       objectURLs = [];
     }
 
-    // Mirror `selected` onto the file input so a normal form POST carries it.
     function syncInput() {
       var dt = new DataTransfer();
-      selected.forEach(function (file) {
+      images.forEach(function (file) {
         dt.items.add(file);
       });
+      if (video) {
+        dt.items.add(video.file);
+      }
       fileInput.files = dt.files;
     }
 
-    function isAlreadySelected(file) {
-      return selected.some(function (existing) {
-        return (
-          existing.name === file.name &&
-          existing.size === file.size &&
-          existing.lastModified === file.lastModified
-        );
-      });
-    }
-
-    // Merge a freshly picked FileList into the accumulated selection, skipping
-    // duplicates and respecting the per-post image cap.
-    function addFiles(picked) {
-      Array.prototype.forEach.call(picked, function (file) {
-        if (selected.length >= MAX_IMAGES) return;
-        if (isAlreadySelected(file)) return;
-        selected.push(file);
-      });
-      syncInput();
-      render();
-    }
-
-    function removeAt(removeIndex) {
-      selected.splice(removeIndex, 1);
-      syncInput();
-      render();
+    function clearVideo() {
+      if (video && video.posterURL) {
+        URL.revokeObjectURL(video.posterURL);
+      }
+      video = null;
     }
 
     function render() {
       revokeURLs();
       list.textContent = "";
 
-      if (selected.length === 0) {
+      // Each preview entry knows how to remove itself from the selection.
+      var entries = [];
+      images.forEach(function (file, i) {
+        var url = URL.createObjectURL(file);
+        objectURLs.push(url);
+        entries.push({
+          url: url,
+          alt: file.name,
+          video: false,
+          remove: function () {
+            images.splice(i, 1);
+          },
+        });
+      });
+      if (video) {
+        entries.push({
+          url: video.posterURL,
+          alt: video.file.name,
+          video: true,
+          remove: clearVideo,
+        });
+      }
+
+      if (entries.length === 0) {
         list.hidden = true;
         return;
       }
       list.hidden = false;
 
-      selected.forEach(function (file, index) {
-        if (file.type.indexOf("image/") !== 0) {
-          return; // skip anything that isn't an image we can render.
-        }
-        var url = URL.createObjectURL(file);
-        objectURLs.push(url);
-
+      entries.forEach(function (entry) {
         var item = document.createElement("div");
-        item.className = "preview-thumb";
+        item.className = "preview-thumb" + (entry.video ? " preview-thumb-video" : "");
 
-        var img = document.createElement("img");
-        img.src = url;
-        img.alt = file.name;
+        if (entry.url) {
+          var img = document.createElement("img");
+          img.src = entry.url;
+          img.alt = entry.alt;
+          item.appendChild(img);
+        }
 
         var remove = document.createElement("button");
         remove.type = "button"; // never submit the form.
         remove.className = "preview-remove";
-        remove.setAttribute("aria-label", "Remove " + file.name);
+        remove.setAttribute("aria-label", "Remove " + entry.alt);
         remove.textContent = "×";
         remove.addEventListener("click", function () {
-          removeAt(index);
+          entry.remove();
+          syncInput();
+          render();
         });
 
-        item.appendChild(img);
         item.appendChild(remove);
         list.appendChild(item);
       });
     }
 
+    // ---- adding images (with compression) -----------------------------------
+
+    function compress(file) {
+      if (typeof window.imageCompression !== "function") {
+        return Promise.resolve(file); // library missing — fall back to original.
+      }
+      return window
+        .imageCompression(file, COMPRESSION_OPTS)
+        .then(function (blob) {
+          var base = file.name.replace(/\.[^.]+$/, "");
+          return new File([blob], base + ".jpg", { type: "image/jpeg" });
+        })
+        .catch(function () {
+          return file; // on failure, keep the original; the server still guards size.
+        });
+    }
+
+    function addImages(picked) {
+      beginWork("Compressing…");
+
+      // Compress sequentially so the web worker isn't flooded; the chosen photos
+      // are few (≤5) so latency is fine, and it keeps memory bounded.
+      var chain = Promise.resolve();
+      picked.forEach(function (file) {
+        chain = chain.then(function () {
+          if (images.length >= MAX_IMAGES) return;
+          return compress(file).then(function (out) {
+            if (images.length < MAX_IMAGES) images.push(out);
+          });
+        });
+      });
+      chain.then(function () {
+        endWork();
+        syncInput();
+        render();
+      });
+    }
+
+    // ---- adding a video (with a client-extracted poster) --------------------
+
+    function addVideo(file) {
+      if (file.type !== "video/mp4") {
+        setStatus("Only MP4 video is supported.");
+        return;
+      }
+      if (file.size > MAX_VIDEO_BYTES) {
+        setStatus("That video is too large (50 MB max).");
+        return;
+      }
+
+      beginWork("Preparing video…");
+      extractPoster(file).then(function (result) {
+        endWork();
+        if (result.error) {
+          setStatus(result.error);
+          return;
+        }
+        clearVideo(); // a new pick replaces any existing video.
+        video = { file: file, poster: result.poster, posterURL: result.posterURL };
+        syncInput();
+        render();
+      });
+    }
+
+    // extractPoster loads the video to read its duration and grab a still frame.
+    // Resolves with { poster, posterURL } (poster may be null if the frame can't
+    // be captured — the video still uploads), or { error } for a rejection the
+    // user should see.
+    function extractPoster(file) {
+      return new Promise(function (resolve) {
+        var url = URL.createObjectURL(file);
+        var probe = document.createElement("video");
+        probe.preload = "metadata";
+        probe.muted = true;
+        probe.src = url;
+
+        var settled = false;
+        function fail(message) {
+          if (settled) return;
+          settled = true;
+          URL.revokeObjectURL(url);
+          resolve({ error: message });
+        }
+        function succeed(poster, posterURL) {
+          if (settled) return;
+          settled = true;
+          URL.revokeObjectURL(url);
+          resolve({ poster: poster, posterURL: posterURL });
+        }
+
+        probe.addEventListener("loadedmetadata", function () {
+          if (probe.duration > MAX_VIDEO_SECONDS + 0.5) {
+            fail("Videos must be " + MAX_VIDEO_SECONDS + " seconds or shorter.");
+            return;
+          }
+          // Seek slightly in so the poster isn't a black opening frame.
+          try {
+            probe.currentTime = Math.min(1, probe.duration / 2);
+          } catch (e) {
+            /* some browsers fire seeked from the metadata position instead */
+          }
+        });
+
+        probe.addEventListener("seeked", function () {
+          var canvas = document.createElement("canvas");
+          canvas.width = probe.videoWidth || 1280;
+          canvas.height = probe.videoHeight || 720;
+          try {
+            canvas.getContext("2d").drawImage(probe, 0, 0, canvas.width, canvas.height);
+          } catch (e) {
+            succeed(null, ""); // tainted/undrawable — upload without a poster.
+            return;
+          }
+          canvas.toBlob(
+            function (blob) {
+              if (!blob) {
+                succeed(null, "");
+                return;
+              }
+              succeed(blob, URL.createObjectURL(blob));
+            },
+            "image/jpeg",
+            0.8
+          );
+        });
+
+        probe.addEventListener("error", function () {
+          fail("That video couldn't be read.");
+        });
+      });
+    }
+
     fileInput.addEventListener("change", function () {
-      addFiles(fileInput.files);
+      var picked = Array.prototype.slice.call(fileInput.files);
+      if (picked.length === 0) return;
+
+      // Photos and a video can be chosen together; handle each kind. Only the
+      // first video in a multi-select pick is taken (a post holds one).
+      var pickedImages = picked.filter(isImage);
+      var pickedVideo = null;
+      picked.forEach(function (file) {
+        if (isVideo(file) && !pickedVideo) pickedVideo = file;
+      });
+
+      if (pickedImages.length) addImages(pickedImages);
+      if (pickedVideo) addVideo(pickedVideo);
     });
-  }
 
-  // ---- upload progress on submit ------------------------------------------
+    // ---- upload progress on submit ------------------------------------------
 
-  function setupSubmit(form) {
     // If the browser can't do an XHR upload with progress events, leave the
     // native submit alone — the post still works, just without a progress bar.
     if (!window.FormData || !window.XMLHttpRequest || !new XMLHttpRequest().upload) {
@@ -138,34 +334,15 @@
     }
 
     var button = form.querySelector('button[type="submit"]') || form.querySelector("button");
-    var progress = form.querySelector("[data-upload-progress]");
-    var bar = form.querySelector("[data-upload-bar]");
-    var label = form.querySelector("[data-upload-label]");
     var buttonLabel = button ? button.textContent : "";
     var submitting = false;
-
-    function setLabel(text) {
-      if (label) label.textContent = text;
-    }
 
     function setPercent(percent) {
       if (bar) bar.style.width = percent + "%";
       if (progress) progress.setAttribute("aria-valuenow", String(percent));
     }
 
-    function showProgress() {
-      if (progress) {
-        progress.hidden = false;
-        progress.setAttribute("role", "progressbar");
-        progress.setAttribute("aria-valuemin", "0");
-        progress.setAttribute("aria-valuemax", "100");
-      }
-      setPercent(0);
-      setLabel("Uploading…");
-    }
-
-    // Restore the form to its idle state so the user can retry after a failure.
-    function reset() {
+    function resetSubmit() {
       submitting = false;
       if (button) {
         button.disabled = false;
@@ -179,34 +356,51 @@
         event.preventDefault();
         return;
       }
+      // Don't submit while compression or poster extraction is still running.
+      if (pending > 0) {
+        event.preventDefault();
+        setStatus("Still preparing your media…");
+        return;
+      }
       event.preventDefault();
       submitting = true;
 
-      // Where to land once the server responds. The server replies with a 303
-      // redirect (to the profile, or back to it with ?post_error=…); XHR follows
-      // it transparently, and xhr.responseURL is the final landing page. If the
-      // browser doesn't expose responseURL, fall back to the current path — the
-      // compose box only ever appears on the author's own profile.
+      // Where to land once the server responds: it replies with a 303 redirect
+      // (to the profile, or back with ?post_error=…); XHR follows it and
+      // xhr.responseURL is the final landing page. If responseURL isn't exposed,
+      // fall back to the current path — compose only appears on the author's own
+      // pages.
       var fallbackURL = window.location.pathname;
 
       if (button) {
         button.disabled = true;
         button.textContent = "Posting…";
       }
-      showProgress();
+      if (progress) {
+        progress.hidden = false;
+        progress.setAttribute("role", "progressbar");
+        progress.setAttribute("aria-valuemin", "0");
+        progress.setAttribute("aria-valuemax", "100");
+      }
+      setPercent(0);
+      setStatus("Uploading…");
+
+      // FormData(form) already carries the file input (images and/or the video)
+      // and the text. A video's poster is a separate Blob, appended here.
+      var data = new FormData(form);
+      if (video && video.poster) {
+        data.append("video_poster", video.poster, "poster.jpg");
+      }
 
       var xhr = new XMLHttpRequest();
       xhr.open(form.method || "post", form.action, true);
 
       xhr.upload.addEventListener("progress", function (e) {
-        if (!e.lengthComputable) {
-          return; // size unknown — leave the bar at its indeterminate start.
-        }
+        if (!e.lengthComputable) return; // size unknown — leave the bar at its start.
         var percent = Math.round((e.loaded / e.total) * 100);
         setPercent(percent);
-        // Once the bytes are all sent, the server still has to store and process
-        // the images, so reflect that the work isn't quite done.
-        setLabel(percent >= 100 ? "Processing…" : "Uploading… " + percent + "%");
+        // Once the bytes are sent, the server still stores them, so reflect that.
+        setStatus(percent >= 100 ? "Processing…" : "Uploading… " + percent + "%");
       });
 
       xhr.addEventListener("load", function () {
@@ -214,18 +408,17 @@
       });
 
       xhr.addEventListener("error", function () {
-        setLabel("Upload failed — please try again.");
-        reset();
+        setStatus("Upload failed — please try again.");
+        resetSubmit();
       });
 
-      xhr.addEventListener("abort", reset);
+      xhr.addEventListener("abort", resetSubmit);
 
-      xhr.send(new FormData(form));
+      xhr.send(data);
     });
   }
 
   document.querySelectorAll("[data-image-preview]").forEach(function (form) {
-    setupPreview(form);
-    setupSubmit(form);
+    setup(form);
   });
 })();

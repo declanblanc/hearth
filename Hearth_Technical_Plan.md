@@ -292,6 +292,14 @@ There is no like feature. It was built and then removed wholesale (see §9 decis
 - **Storage**: random key like `posts/2026/05/{uuid}.jpg`. Never expose the user_id or post_id in the key.
 - **Access**: every image URL is a signed R2 URL with 1-hour expiry, generated server-side at render time. Server first verifies the requesting user is connected to the post author.
 
+**Video** (added after MVP — see decision log): a post may carry up to 5 photos **and** a single video, in any combination.
+
+- **Format**: `video/mp4` only (H.264/AAC). We do **no server-side transcoding** — it doesn't fit the hosting budget — so anything else (e.g. an iPhone `.mov`/HEVC) is rejected with a message suggesting MP4. Type is confirmed by mime-sniffing the bytes, never the client's content-type.
+- **Limits**: ≤60s duration (enforced client-side, best-effort) and ≤50MB (enforced server-side, authoritative).
+- **Poster**: the client extracts a still frame to a JPEG and uploads it alongside the video as a separate object. The video's display box (width/height) is taken from the poster server-side, so client-supplied dimensions are never trusted. A no-JS upload simply stores no poster.
+- **Storage/access**: same as images — random `posts/{yyyy}/{mm}/{uuid}.mp4` key (poster gets its own `.jpg` key, referenced by `post_media.poster_key`), signed 1-hour R2 URLs minted at render time after the connection check. R2's zero egress is what makes serving video economical; the avoided cost is transcoding.
+- **Render**: `<video controls preload="metadata" playsinline>` so the file isn't pulled until play; videos stay out of the photo lightbox and play inline.
+
 ### 4.6 Rate limit enforcement
 
 Invite *creation* is the only rate-limited action (20 / 7 days). Accepting an invite is not capped — a user can connect via as many invite links as they receive. The check is a simple count query on an indexed column:
@@ -406,7 +414,6 @@ Things I made a judgment call on while drafting. Each is worth a sanity check.
 
 ### Out of scope for v1
 
-- Video uploads
 - Donations + donor badge
 - Public FAQ page
 - Content moderation tooling
@@ -429,6 +436,8 @@ All major architectural decisions are now resolved for MVP:
 - **Connection handshake (simplified):** the original flow was three-step — invitee accepts, then the inviter confirms a pending request. This was confusing for new users ("I accepted, why aren't we connected?"). **Now accepting an invite connects the two users immediately** and notifies the inviter ("X accepted your invitation"); the notification links to the new connection's profile so the inviter can disconnect if the link was used by someone unintended. The pending/confirm/decline state, the requests UI, the outgoing-pending "waiting to connect" list, the Connections-tab pending dot, and the pending-request profile preview were all removed. The `connection_requests` table is kept as an append-only audit trail (every row `status='accepted'`), but no code reads it back. The previous 10-accepted-connections-per-7-days cap was also removed — accepting an invite is no longer rate-limited; only invite *creation* is (20 / 7 days).
 - **Notifications:** email-only delivery (opt-in per category), plus an always-on in-app `/notifications` view with a dot indicator for unread
 - **Likes (removed):** the original plan had no like feature; it was then added as a strictly-private signal (notify the author, author-only liker list, no counts), built, and ultimately **removed wholesale**. The feature is gone in its entirety — no `likes` table, no like/unlike endpoints, no liker list, no `like_on_post` notification, no like control in the UI. The product has no reaction or "favorite" affordance of any kind, and one should not be reintroduced.
+- **Image compression (now implemented):** §4.5 always specified client-side `browser-image-compression` (≤1600px, 80% JPEG), but the first post-image implementation skipped it and stored originals — posts loaded slowly and the server ceiling was an absurd 200MB/post. Compression now runs in the browser before upload (HEIC included, via canvas), and the server cap is a per-file 5MB guardrail.
+- **Video (added after MVP):** originally out of scope for v1. Added on request with the cheapest design that fits the hosting budget: **MP4 only, no server-side transcoding**, up to one video per post (freely combined with up to 5 photos), ≤60s/≤50MB, and a client-extracted poster frame. Server-side ffmpeg was rejected — it conflicts with the <$15/mo, low-CPU constraint — so unsupported codecs/containers (e.g. `.mov`/HEVC) are refused rather than converted. See §4.5 for the full spec.
 - **Beta plan:** deploy to prod and share invite links with friends — no feature flag system
 
 Next document: detailed schema migrations and a complete API endpoint list, after which we can start building.

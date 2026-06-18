@@ -156,19 +156,25 @@
 </button>
 {{end}}
 
-{{/* postmedia renders a post's attached images. Expects a posts.Post; each
-     image carries a short-lived signed URL minted at render time. URLs that
-     failed to sign (no store configured) are skipped.
+{{/* postmedia renders a post's attachments — images, or a video with its poster.
+     Expects a posts.Post; each attachment carries a short-lived signed URL minted
+     at render time. URLs that failed to sign (no store configured) are skipped.
 
-     width/height come from the stored pixel dimensions: emitting them lets the
-     browser reserve the image's exact box before it loads, so the feed doesn't
-     jump as photos stream in. Until the photo paints, .post-image shows a
-     skeleton shimmer (post-image-skeleton.js swaps it for .is-loaded on load).
-     Media stored before the dimensions migration reports zero size; we then omit
-     the attributes and it renders as it did before (no reserved box). */}}
+     width/height come from the stored pixel dimensions (for a video, its poster's):
+     emitting them lets the browser reserve the exact box before it loads, so the
+     feed doesn't jump as media streams in. Until an image paints, .post-image
+     shows a skeleton shimmer (post-image-skeleton.js swaps it for .is-loaded on
+     load). Media stored before the dimensions migration reports zero size; we
+     then omit the attributes and it renders as it did before (no reserved box).
+
+     Videos use preload="metadata" so the file isn't pulled until play, and stay
+     out of the photo lightbox (which keys on .post-image) — they play inline. */}}
 {{define "postmedia"}}{{if .Media}}
 <div class="post-media">
-  {{range .Media}}{{if .URL}}<img src="{{.URL}}" alt="" class="post-image" loading="lazy" decoding="async"{{if and .Width .Height}} width="{{.Width}}" height="{{.Height}}"{{end}}>{{end}}{{end}}
+  {{range .Media}}{{if .URL}}
+    {{if .IsVideo}}<video class="post-video" controls preload="metadata" playsinline{{if .PosterURL}} poster="{{.PosterURL}}"{{end}}{{if and .Width .Height}} width="{{.Width}}" height="{{.Height}}"{{end}}><source src="{{.URL}}" type="{{.ContentType}}"></video>
+    {{else}}<img src="{{.URL}}" alt="" class="post-image" loading="lazy" decoding="async"{{if and .Width .Height}} width="{{.Width}}" height="{{.Height}}"{{end}}>{{end}}
+  {{end}}{{end}}
 </div>
 {{end}}{{end}}
 
@@ -202,10 +208,10 @@
         <circle cx="8.5" cy="8.5" r="1.5"/>
         <path d="M21 15l-5-5L5 21"/>
       </svg>
-      <span>Add photos</span>
-      <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple class="visually-hidden">
+      <span>Add photos or video</span>
+      <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4" multiple class="visually-hidden">
     </label>
-    <small class="muted">Up to 5 images · JPEG, PNG, or WebP · 200 MB total</small>
+    <small class="muted">Up to 5 photos and one video (MP4, ≤60s)</small>
     {{/* Thumbnails of the chosen images, rendered by post-images.js. */}}
     <div class="preview-list" data-preview-list hidden></div>
     {{/* Upload progress, shown by post-images.js while a post is submitting. */}}

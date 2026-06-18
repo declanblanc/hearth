@@ -536,6 +536,19 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   border: 1px solid var(--line);
   background: var(--paper);
 }
+/* A play glyph over the poster marks a video preview apart from a photo. */
+.preview-thumb-video::after {
+  content: "▶";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: var(--paper);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
 .preview-remove {
   position: absolute;
   top: -0.4rem;
@@ -889,6 +902,17 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 .post-image.is-loaded {
   background-image: none;
   animation: post-image-reveal 0.35s ease-out;
+}
+/* A video attachment sits in the same full-width slot as a photo. Its box is
+   reserved by the poster's width/height (see the postmedia template), and
+   preload="metadata" keeps the file from loading until play. Unlike photos it
+   isn't part of the lightbox — it plays inline. */
+.post-video {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background-color: var(--paper-deep);
 }
 @keyframes post-image-shimmer {
   from { background-position: 130% 0; }

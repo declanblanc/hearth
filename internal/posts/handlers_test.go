@@ -29,18 +29,50 @@ func smallJPEG() []byte {
 	return buf.Bytes()
 }
 
+// smallMP4 returns the bytes of a minimal MP4 "ftyp" box so DetectMediaType
+// classifies it as video/mp4. It carries no actual video stream — collectMedia
+// only sniffs the type and size, never decodes.
+func smallMP4() []byte {
+	b := []byte{0x00, 0x00, 0x00, 0x18} // box size = 24
+	b = append(b, "ftyp"...)
+	b = append(b, "mp42"...)
+	b = append(b, 0x00, 0x00, 0x00, 0x00) // minor version
+	b = append(b, "mp41"...)
+	b = append(b, "isom"...)
+	return b
+}
+
+// filePart is one multipart file field for multipartRequest.
+type filePart struct {
+	field    string
+	filename string
+	content  []byte
+}
+
 // imagesRequest builds a parsed multipart request carrying each entry of
-// contents as a separate "images" file upload, ready for collectImages.
+// contents as a separate "images" file upload, ready for collectMedia.
 func imagesRequest(t *testing.T, contents [][]byte) *http.Request {
+	t.Helper()
+	parts := make([]filePart, len(contents))
+	for i, content := range contents {
+		parts[i] = filePart{field: "images", filename: "img" + string(rune('a'+i)) + ".jpg", content: content}
+	}
+	return multipartRequest(t, parts)
+}
+
+// multipartRequest builds a parsed multipart POST /posts from arbitrary file
+// fields, so tests can mix "images" and a "video_poster" the way the compose
+// form does.
+func multipartRequest(t *testing.T, parts []filePart) *http.Request {
 	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	for i, content := range contents {
-		fw, err := w.CreateFormFile("images", "img"+string(rune('a'+i))+".jpg")
+	for _, p := range parts {
+		fw, err := w.CreateFormFile(p.field, p.filename)
 		if err != nil {
 			t.Fatalf("CreateFormFile: %v", err)
 		}
-		if _, err := fw.Write(content); err != nil {
+		if _, err := fw.Write(p.content); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
 	}
@@ -56,11 +88,11 @@ func imagesRequest(t *testing.T, contents [][]byte) *http.Request {
 	return req
 }
 
-func TestCollectImages_MultipleSmallImagesAccepted(t *testing.T) {
+func TestCollectMedia_MultipleSmallImagesAccepted(t *testing.T) {
 	h := &Handlers{}
 	req := imagesRequest(t, [][]byte{smallJPEG(), smallJPEG(), smallJPEG()})
 
-	images, code := h.collectImages(req)
+	images, code := h.collectMedia(req)
 	if code != "" {
 		t.Fatalf("unexpected error code: %q", code)
 	}
@@ -69,29 +101,24 @@ func TestCollectImages_MultipleSmallImagesAccepted(t *testing.T) {
 	}
 }
 
-// TestCollectImages_TotalSizeBudget proves the 200 MB cap is a *total* across
-// all files, not a per-file limit: two files that are each well under the full
-// budget but together exceed it are rejected.
-func TestCollectImages_TotalSizeBudget(t *testing.T) {
-	// One slice reused for both files keeps the test's memory footprint to a
-	// single large allocation. Half the budget plus one byte each → just over
-	// the total when combined; each file alone stays under the full budget.
-	// The chunk opens with a real JPEG header so content-type sniffing passes
-	// and the size check (not the type check) is what rejects the second file.
-	halfPlusOne := media.MaxPostImagesTotalSize/2 + 1
-	chunk := make([]byte, halfPlusOne)
-	copy(chunk, smallJPEG())
+// TestCollectMedia_PerFileImageCap proves each image is capped individually
+// (post client-side compression). A single file just over the per-file limit is
+// rejected; its bytes open with a real JPEG header so the size check, not the
+// type check, is what rejects it.
+func TestCollectMedia_PerFileImageCap(t *testing.T) {
+	oversize := make([]byte, media.MaxPostImageFileSize+1)
+	copy(oversize, smallJPEG())
 
-	req := imagesRequest(t, [][]byte{chunk, chunk})
+	req := imagesRequest(t, [][]byte{oversize})
 	h := &Handlers{}
 
-	images, code := h.collectImages(req)
-	if code != "images_too_large" {
-		t.Fatalf("want code images_too_large, got %q (images=%d)", code, len(images))
+	images, code := h.collectMedia(req)
+	if code != "image_too_large" {
+		t.Fatalf("want code image_too_large, got %q (images=%d)", code, len(images))
 	}
 }
 
-func TestCollectImages_TooManyImages(t *testing.T) {
+func TestCollectMedia_TooManyImages(t *testing.T) {
 	contents := make([][]byte, media.MaxImagesPerPost+1)
 	for i := range contents {
 		contents[i] = smallJPEG()
@@ -99,8 +126,100 @@ func TestCollectImages_TooManyImages(t *testing.T) {
 	req := imagesRequest(t, contents)
 	h := &Handlers{}
 
-	if _, code := h.collectImages(req); code != "too_many_images" {
+	if _, code := h.collectMedia(req); code != "too_many_images" {
 		t.Fatalf("want code too_many_images, got %q", code)
+	}
+}
+
+// TestCollectMedia_VideoWithPoster proves a video and its poster come through as
+// a single video attachment whose display box is taken from the poster image's
+// dimensions (8×8 here), never from a client-supplied number.
+func TestCollectMedia_VideoWithPoster(t *testing.T) {
+	req := multipartRequest(t, []filePart{
+		{field: "images", filename: "clip.mp4", content: smallMP4()},
+		{field: "video_poster", filename: "poster.jpg", content: smallJPEG()},
+	})
+	h := &Handlers{}
+
+	items, code := h.collectMedia(req)
+	if code != "" {
+		t.Fatalf("unexpected error code: %q", code)
+	}
+	if len(items) != 1 {
+		t.Fatalf("want 1 attachment, got %d", len(items))
+	}
+	m := items[0]
+	if !m.IsVideo() || m.ContentType != "video/mp4" || m.Ext != ".mp4" {
+		t.Fatalf("attachment is not the mp4: %+v", m)
+	}
+	if len(m.PosterData) == 0 || m.PosterExt != ".jpg" {
+		t.Fatalf("poster not attached: %+v", m)
+	}
+	if m.Width != 8 || m.Height != 8 {
+		t.Fatalf("video box should come from the poster (8×8), got %dx%d", m.Width, m.Height)
+	}
+}
+
+// A video without a poster (the no-JS path) is still accepted; it just stores no
+// poster and renders without one.
+func TestCollectMedia_VideoWithoutPosterAccepted(t *testing.T) {
+	req := multipartRequest(t, []filePart{
+		{field: "images", filename: "clip.mp4", content: smallMP4()},
+	})
+	h := &Handlers{}
+
+	items, code := h.collectMedia(req)
+	if code != "" {
+		t.Fatalf("unexpected error code: %q", code)
+	}
+	if len(items) != 1 || !items[0].IsVideo() || len(items[0].PosterData) != 0 {
+		t.Fatalf("want one poster-less video, got %+v", items)
+	}
+}
+
+// Photos and a video may share a post. collectMedia returns both, with the
+// poster attached to the video.
+func TestCollectMedia_PhotosAndVideoTogether(t *testing.T) {
+	req := multipartRequest(t, []filePart{
+		{field: "images", filename: "a.jpg", content: smallJPEG()},
+		{field: "images", filename: "b.jpg", content: smallJPEG()},
+		{field: "images", filename: "clip.mp4", content: smallMP4()},
+		{field: "video_poster", filename: "poster.jpg", content: smallJPEG()},
+	})
+	h := &Handlers{}
+
+	items, code := h.collectMedia(req)
+	if code != "" {
+		t.Fatalf("unexpected error code: %q", code)
+	}
+	if len(items) != 3 {
+		t.Fatalf("want 3 attachments, got %d", len(items))
+	}
+	var images, videos int
+	for _, m := range items {
+		if m.IsVideo() {
+			videos++
+			if len(m.PosterData) == 0 {
+				t.Errorf("video should have its poster attached")
+			}
+		} else {
+			images++
+		}
+	}
+	if images != 2 || videos != 1 {
+		t.Fatalf("want 2 images + 1 video, got %d images + %d videos", images, videos)
+	}
+}
+
+func TestCollectMedia_TooManyVideosRejected(t *testing.T) {
+	req := multipartRequest(t, []filePart{
+		{field: "images", filename: "one.mp4", content: smallMP4()},
+		{field: "images", filename: "two.mp4", content: smallMP4()},
+	})
+	h := &Handlers{}
+
+	if _, code := h.collectMedia(req); code != "too_many_videos" {
+		t.Fatalf("want code too_many_videos, got %q", code)
 	}
 }
 

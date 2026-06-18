@@ -50,6 +50,7 @@
   {{if .User.Verified}}{{template "composemodal" .}}{{end}}
 {{end}}
 {{end}}
-{{define "scripts"}}<script src="/static/post-images.js" defer></script>
+{{define "scripts"}}<script src="/static/vendor/browser-image-compression.js" defer></script>
+<script src="/static/post-images.js" defer></script>
 <script src="/static/comments.js" defer></script>
 {{if .Owner}}<script src="/static/compose-modal.js" defer></script>{{end}}{{end}}
