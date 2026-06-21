@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/dblanc/hearth/internal/auth"
@@ -303,7 +304,7 @@ func (h *Handlers) viewProfile(w http.ResponseWriter, r *http.Request) {
 		"Connected": connected,
 		"Posts":     authorPosts,
 		"PhotoURL":  h.photoURL(p.PhotoKey),
-		"PostError": postError(r.URL.Query().Get("post_error")),
+		"PostError": postError(r.URL.Query().Get("post_error"), r.URL.Query().Get("post_error_detail")),
 	}))
 }
 
@@ -329,7 +330,10 @@ func (h *Handlers) photoURL(key string) string {
 	return h.Media.URL(key)
 }
 
-func postError(code string) string {
+// postError maps an upload error code to a user-facing message. detail carries
+// extra context for codes that support it; for "image_type" it's the offending
+// file's extension, named in the message so the user knows which file to swap.
+func postError(code, detail string) string {
 	switch code {
 	case "empty":
 		return "Your post can't be empty."
@@ -344,10 +348,28 @@ func postError(code string) string {
 	case "video_too_large":
 		return fmt.Sprintf("A video must be %d MB or smaller.", media.MaxVideoFileSize/(1024*1024))
 	case "image_type":
-		return "Only JPEG, PNG, and WebP images, and MP4 video, are supported."
+		msg := "Only JPEG, PNG, and WebP images, and MP4 or MOV video, are supported."
+		if ext := displayExtension(detail); ext != "" {
+			msg += " This file is " + ext + "."
+		}
+		return msg
 	case "image_unreadable":
 		return "One of your attachments couldn't be read. Please try again."
 	default:
 		return ""
 	}
+}
+
+// extensionPattern matches a plain file extension like ".mkv". The detail value
+// is reflected into the page from a query parameter, so we only echo it back
+// when it's a sane extension — never an arbitrary attacker-supplied string.
+var extensionPattern = regexp.MustCompile(`^\.[A-Za-z0-9]{1,8}$`)
+
+// displayExtension normalises a candidate file extension for display, returning
+// "" if it doesn't look like a real extension.
+func displayExtension(ext string) string {
+	if extensionPattern.MatchString(ext) {
+		return strings.ToLower(ext)
+	}
+	return ""
 }

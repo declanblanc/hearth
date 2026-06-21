@@ -758,3 +758,30 @@ func TestEditProfile_OversizedErrorMessage(t *testing.T) {
 	msg := fmt.Sprintf("Photo must be %d MB or smaller.", media.MaxProfilePhotoSize/(1024*1024))
 	_ = msg // just a constant-check; actual text comes from the handler
 }
+
+func TestPostError_UnsupportedTypeNamesExtension(t *testing.T) {
+	msg := postError("image_type", ".mkv")
+	if !strings.Contains(msg, "MP4 or MOV") {
+		t.Errorf("message should list the supported video formats: %q", msg)
+	}
+	if !strings.Contains(msg, "This file is .mkv.") {
+		t.Errorf("message should name the offending extension: %q", msg)
+	}
+}
+
+// The extension is reflected from a query parameter, so a non-extension detail
+// (here a crafted string) must be dropped rather than echoed into the page.
+func TestPostError_RejectsBogusDetail(t *testing.T) {
+	msg := postError("image_type", "<script>alert(1)</script>")
+	if strings.Contains(msg, "This file is") {
+		t.Errorf("bogus detail should not be echoed: %q", msg)
+	}
+}
+
+// A missing detail just omits the trailing sentence.
+func TestPostError_NoDetail(t *testing.T) {
+	msg := postError("image_type", "")
+	if strings.Contains(msg, "This file is") {
+		t.Errorf("no detail should mean no trailing sentence: %q", msg)
+	}
+}

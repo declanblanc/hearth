@@ -42,6 +42,18 @@ func smallMP4() []byte {
 	return b
 }
 
+// smallMOV returns the bytes of a minimal QuickTime "ftyp" box so
+// DetectMediaType classifies it as video/quicktime — the iPhone camera format.
+// Like smallMP4 it carries no real stream; collectMedia only sniffs and sizes.
+func smallMOV() []byte {
+	b := []byte{0x00, 0x00, 0x00, 0x14} // box size = 20
+	b = append(b, "ftyp"...)
+	b = append(b, "qt  "...)
+	b = append(b, 0x00, 0x00, 0x00, 0x00) // minor version
+	b = append(b, "qt  "...)
+	return b
+}
+
 // filePart is one multipart file field for multipartRequest.
 type filePart struct {
 	field    string
@@ -92,7 +104,7 @@ func TestCollectMedia_MultipleSmallImagesAccepted(t *testing.T) {
 	h := &Handlers{}
 	req := imagesRequest(t, [][]byte{smallJPEG(), smallJPEG(), smallJPEG()})
 
-	images, code := h.collectMedia(req)
+	images, code, _ := h.collectMedia(req)
 	if code != "" {
 		t.Fatalf("unexpected error code: %q", code)
 	}
@@ -112,7 +124,7 @@ func TestCollectMedia_PerFileImageCap(t *testing.T) {
 	req := imagesRequest(t, [][]byte{oversize})
 	h := &Handlers{}
 
-	images, code := h.collectMedia(req)
+	images, code, _ := h.collectMedia(req)
 	if code != "image_too_large" {
 		t.Fatalf("want code image_too_large, got %q (images=%d)", code, len(images))
 	}
@@ -126,7 +138,7 @@ func TestCollectMedia_TooManyImages(t *testing.T) {
 	req := imagesRequest(t, contents)
 	h := &Handlers{}
 
-	if _, code := h.collectMedia(req); code != "too_many_images" {
+	if _, code, _ := h.collectMedia(req); code != "too_many_images" {
 		t.Fatalf("want code too_many_images, got %q", code)
 	}
 }
@@ -141,7 +153,7 @@ func TestCollectMedia_VideoWithPoster(t *testing.T) {
 	})
 	h := &Handlers{}
 
-	items, code := h.collectMedia(req)
+	items, code, _ := h.collectMedia(req)
 	if code != "" {
 		t.Fatalf("unexpected error code: %q", code)
 	}
@@ -160,6 +172,48 @@ func TestCollectMedia_VideoWithPoster(t *testing.T) {
 	}
 }
 
+// An unsupported file is rejected with "image_type", and the detail carries the
+// offending extension so the message can name it (e.g. ".mkv").
+func TestCollectMedia_UnsupportedTypeReportsExtension(t *testing.T) {
+	req := multipartRequest(t, []filePart{
+		{field: "images", filename: "home-movie.mkv", content: []byte("not a supported media file")},
+	})
+	h := &Handlers{}
+
+	_, code, detail := h.collectMedia(req)
+	if code != "image_type" {
+		t.Fatalf("want code image_type, got %q", code)
+	}
+	if detail != ".mkv" {
+		t.Fatalf("want detail .mkv, got %q", detail)
+	}
+}
+
+// A MOV upload (the native iPhone format) is collected as a video, exactly like
+// an MP4 — the pipeline downstream of detection is format-agnostic.
+func TestCollectMedia_QuickTimeMOVWithPoster(t *testing.T) {
+	req := multipartRequest(t, []filePart{
+		{field: "images", filename: "clip.mov", content: smallMOV()},
+		{field: "video_poster", filename: "poster.jpg", content: smallJPEG()},
+	})
+	h := &Handlers{}
+
+	items, code, _ := h.collectMedia(req)
+	if code != "" {
+		t.Fatalf("unexpected error code: %q", code)
+	}
+	if len(items) != 1 {
+		t.Fatalf("want 1 attachment, got %d", len(items))
+	}
+	m := items[0]
+	if !m.IsVideo() || m.ContentType != "video/quicktime" || m.Ext != ".mov" {
+		t.Fatalf("attachment is not the mov: %+v", m)
+	}
+	if len(m.PosterData) == 0 || m.PosterExt != ".jpg" {
+		t.Fatalf("poster not attached: %+v", m)
+	}
+}
+
 // A video without a poster (the no-JS path) is still accepted; it just stores no
 // poster and renders without one.
 func TestCollectMedia_VideoWithoutPosterAccepted(t *testing.T) {
@@ -168,7 +222,7 @@ func TestCollectMedia_VideoWithoutPosterAccepted(t *testing.T) {
 	})
 	h := &Handlers{}
 
-	items, code := h.collectMedia(req)
+	items, code, _ := h.collectMedia(req)
 	if code != "" {
 		t.Fatalf("unexpected error code: %q", code)
 	}
@@ -188,7 +242,7 @@ func TestCollectMedia_PhotosAndVideoTogether(t *testing.T) {
 	})
 	h := &Handlers{}
 
-	items, code := h.collectMedia(req)
+	items, code, _ := h.collectMedia(req)
 	if code != "" {
 		t.Fatalf("unexpected error code: %q", code)
 	}
@@ -218,7 +272,7 @@ func TestCollectMedia_TooManyVideosRejected(t *testing.T) {
 	})
 	h := &Handlers{}
 
-	if _, code := h.collectMedia(req); code != "too_many_videos" {
+	if _, code, _ := h.collectMedia(req); code != "too_many_videos" {
 		t.Fatalf("want code too_many_videos, got %q", code)
 	}
 }

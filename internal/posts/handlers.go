@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"net/url"
+	"path/filepath"
 	"strconv"
 
 	"github.com/dblanc/hearth/internal/media"
@@ -49,9 +51,16 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, errCode := h.collectMedia(r)
+	items, errCode, errDetail := h.collectMedia(r)
 	if errCode != "" {
-		http.Redirect(w, r, profileURL+"?post_error="+errCode, http.StatusSeeOther)
+		redirect := profileURL + "?post_error=" + errCode
+		if errDetail != "" {
+			// Carry the offending file's extension so the message can name it
+			// (e.g. "This file is .mkv"). It's reflected into the page, so the
+			// display side validates it before showing it.
+			redirect += "&post_error_detail=" + url.QueryEscape(errDetail)
+		}
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
 		return
 	}
 
@@ -84,21 +93,29 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 //
 // A post may carry up to MaxImagesPerPost images and up to MaxVideosPerPost
 // videos, in any combination.
-func (h *Handlers) collectMedia(r *http.Request) ([]NewMedia, string) {
+//
+// On failure it returns a post_error code and an optional detail string. For an
+// unsupported type the detail is the offending file's extension (e.g. ".mkv"),
+// so the message can name what was rejected.
+func (h *Handlers) collectMedia(r *http.Request) (items []NewMedia, errCode, detail string) {
 	if r.MultipartForm == nil {
-		return nil, ""
+		return nil, "", ""
 	}
 	files := r.MultipartForm.File["images"]
 	if len(files) == 0 {
-		return nil, ""
+		return nil, "", ""
 	}
 
-	items := make([]NewMedia, 0, len(files))
+	items = make([]NewMedia, 0, len(files))
 	var images, videos int
 	for _, fh := range files {
-		data, ct, ext, isVideo, errCode := readMediaFile(fh)
-		if errCode != "" {
-			return nil, errCode
+		data, ct, ext, isVideo, code := readMediaFile(fh)
+		if code != "" {
+			// Name the rejected file by its extension when the type is the problem.
+			if code == "image_type" {
+				return nil, code, filepath.Ext(fh.Filename)
+			}
+			return nil, code, ""
 		}
 		if isVideo {
 			videos++
@@ -109,28 +126,28 @@ func (h *Handlers) collectMedia(r *http.Request) ([]NewMedia, string) {
 		}
 		width, height, err := media.ImageDimensions(data)
 		if err != nil {
-			return nil, "image_unreadable"
+			return nil, "image_unreadable", ""
 		}
 		images++
 		items = append(items, NewMedia{Data: data, ContentType: ct, Ext: ext, Width: width, Height: height})
 	}
 
 	if images > media.MaxImagesPerPost {
-		return nil, "too_many_images"
+		return nil, "too_many_images", ""
 	}
 	if videos > media.MaxVideosPerPost {
-		return nil, "too_many_videos"
+		return nil, "too_many_videos", ""
 	}
 
 	// Attach the client-extracted poster frame to the video. Without JavaScript
 	// no poster is sent and the video is stored without one (it still plays).
 	if videos == 1 {
-		if errCode := attachPoster(r, items); errCode != "" {
-			return nil, errCode
+		if code := attachPoster(r, items); code != "" {
+			return nil, code, ""
 		}
 	}
 
-	return items, ""
+	return items, "", ""
 }
 
 // readMediaFile reads one uploaded file, sniffing its type from the leading bytes
