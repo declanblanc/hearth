@@ -6,9 +6,9 @@
 //      through a canvas and comes out JPEG.
 //   2. Thumbnail previews of the chosen photos and a video's poster, each with a
 //      remove button that keeps the input's FileList in sync.
-//   3. Video support: pick one MP4 (≤60s) and we grab a poster frame on the
-//      client; the video and poster upload together. Photos and a video can share
-//      a post — up to 5 photos and one video.
+//   3. Video support: pick one MP4 or MOV (≤60s) and we grab a poster frame on
+//      the client; the video and poster upload together. Photos and a video can
+//      share a post — up to 5 photos and one video.
 //   4. An upload progress indicator shown after the user clicks "Post".
 //
 // All of this is progressive enhancement. Without this script the plain
@@ -44,6 +44,14 @@
   }
   function isVideo(file) {
     return file.type.indexOf("video/") === 0;
+  }
+  // The server accepts MP4 and QuickTime/MOV (sniffed from the bytes). Mirror
+  // that here so the picker rejects other containers early. Some browsers leave
+  // a .mov's type blank, so fall back to the extension when there's no MIME hint.
+  function isSupportedVideo(file) {
+    if (file.type === "video/mp4" || file.type === "video/quicktime") return true;
+    if (file.type) return false;
+    return /\.(mp4|mov)$/i.test(file.name || "");
   }
 
   function setup(form) {
@@ -218,8 +226,8 @@
     // ---- adding a video (with a client-extracted poster) --------------------
 
     function addVideo(file) {
-      if (file.type !== "video/mp4") {
-        setStatus("Only MP4 video is supported.");
+      if (!isSupportedVideo(file)) {
+        setStatus("Only MP4 or MOV video is supported.");
         return;
       }
       if (file.size > MAX_VIDEO_BYTES) {

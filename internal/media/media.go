@@ -3,7 +3,9 @@
 package media
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -51,10 +53,14 @@ var allowedImageTypes = map[string]string{
 }
 
 // allowedVideoTypes maps accepted video MIME types to canonical file extensions.
-// MP4 only: we can't transcode within the hosting budget, so anything else (e.g.
-// an iPhone .mov/HEVC) is rejected rather than stored as an unplayable file.
+// MP4 and QuickTime/MOV: we still do no server-side transcoding (the hosting
+// budget rules out ffmpeg), so the container is stored as uploaded. MOV is
+// accepted because it's the iPhone camera's native format; note that an HEVC
+// stream inside it plays in Safari but not in every browser — see Technical
+// Plan §4.5. Codecs we can neither store playably nor convert remain rejected.
 var allowedVideoTypes = map[string]string{
-	"video/mp4": ".mp4",
+	"video/mp4":       ".mp4",
+	"video/quicktime": ".mov",
 }
 
 // Store is the object storage abstraction. R2Store is the production
@@ -115,5 +121,44 @@ func DetectMediaType(data []byte) (ct string, ext string, isVideo bool, err erro
 			return mime, e, true, nil
 		}
 	}
+	// Go's content sniffer recognises the MP4 "ftyp" brand but has no signature
+	// for QuickTime/MOV, so it reports those as application/octet-stream. Detect
+	// MOV ourselves from its "ftyp" box; iPhone videos are commonly .mov.
+	if sniffQuickTime(data) {
+		return "video/quicktime", allowedVideoTypes["video/quicktime"], true, nil
+	}
 	return "", "", false, ErrUnsupportedType
+}
+
+var (
+	ftypTag        = []byte("ftyp")
+	quickTimeBrand = []byte("qt  ")
+)
+
+// sniffQuickTime reports whether data begins with a QuickTime/MOV "ftyp" box.
+// The structure mirrors the WHATWG mp4 signature that Go's stdlib sniffer uses
+// (https://mimesniff.spec.whatwg.org/#signature-for-mp4): a big-endian box size,
+// the "ftyp" tag, a major brand, a 4-byte minor version, then zero or more
+// compatible brands. We match the "qt  " brand in the major slot or any
+// compatible slot — the field stdlib's mp4 matcher checks for "mp4" instead.
+func sniffQuickTime(data []byte) bool {
+	if len(data) < 12 {
+		return false
+	}
+	boxSize := int(binary.BigEndian.Uint32(data[:4]))
+	if boxSize%4 != 0 || len(data) < boxSize {
+		return false
+	}
+	if !bytes.Equal(data[4:8], ftypTag) {
+		return false
+	}
+	for offset := 8; offset+4 <= boxSize; offset += 4 {
+		if offset == 12 {
+			continue // skip the minor-version field between major and compatible brands
+		}
+		if bytes.Equal(data[offset:offset+4], quickTimeBrand) {
+			return true
+		}
+	}
+	return false
 }

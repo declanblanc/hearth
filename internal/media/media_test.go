@@ -43,13 +43,39 @@ func TestDetectMediaType_RejectsHTMLPretendingToBeMP4(t *testing.T) {
 	}
 }
 
-func TestDetectMediaType_RejectsQuickTimeMOV(t *testing.T) {
-	// An iPhone .mov carries the "qt  " brand. We can't transcode, so it must be
-	// rejected rather than stored as an unplayable file. Its brands don't begin
-	// with "mp4", so it doesn't sniff as video/mp4 and falls outside both lists.
+func TestDetectMediaType_AcceptsQuickTimeMOV(t *testing.T) {
+	// An iPhone .mov carries the "qt  " major brand. Go's stdlib sniffer has no
+	// QuickTime signature, so DetectMediaType detects it from the "ftyp" box.
 	data := ftypBox("qt  ", "\x00\x00\x00\x00", "qt  ")
+	ct, ext, isVideo, err := DetectMediaType(data)
+	if err != nil {
+		t.Fatalf("DetectMediaType(mov): unexpected error %v", err)
+	}
+	if ct != "video/quicktime" || ext != ".mov" || !isVideo {
+		t.Fatalf("got ct=%q ext=%q isVideo=%v, want video/quicktime .mov true", ct, ext, isVideo)
+	}
+}
+
+func TestDetectMediaType_AcceptsMOVWithCompatibleBrandOnly(t *testing.T) {
+	// Some .mov files list "qt  " only among the compatible brands (after the
+	// major brand and minor-version slots), with extra brands padding the box.
+	// Detection must scan the whole brand list, not just the major-brand slot.
+	data := ftypBox("isom", "\x00\x00\x00\x00", "isom", "iso2", "qt  ")
+	ct, ext, isVideo, err := DetectMediaType(data)
+	if err != nil {
+		t.Fatalf("DetectMediaType(mov): unexpected error %v", err)
+	}
+	if ct != "video/quicktime" || ext != ".mov" || !isVideo {
+		t.Fatalf("got ct=%q ext=%q isVideo=%v, want video/quicktime .mov true", ct, ext, isVideo)
+	}
+}
+
+func TestDetectMediaType_RejectsUnsupportedVideoContainer(t *testing.T) {
+	// A 3GP "ftyp" box matches neither the mp4 brand (stdlib) nor "qt  " (ours),
+	// so an unsupported container is still refused — the allow-list is closed.
+	data := ftypBox("3gp4", "\x00\x00\x00\x00", "3gp4")
 	if _, _, _, err := DetectMediaType(data); !errors.Is(err, ErrUnsupportedType) {
-		t.Fatalf("want ErrUnsupportedType for .mov, got %v", err)
+		t.Fatalf("want ErrUnsupportedType for 3gp, got %v", err)
 	}
 }
 
