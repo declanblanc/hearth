@@ -1,6 +1,17 @@
 /* ============================================================================
-   Hearth — "The Private Hearth"
-   A warm editorial journal: paper, ember glow, hand-set typography.
+   Hearth — "The Private Hearth", redesign: "Hearthside"
+   The whole app is the firelit room from the landing page, carried across the
+   threshold of login. A glow rises from a hearth at the bottom edge of every
+   page; a single glowing ember thread runs down the feed, physically connecting
+   the posts; comments are quiet notes tucked behind a soft ember rule; post
+   avatars are ringed in ember.
+
+   Two rooms, one product:
+   - Dark theme  = the firelit room at full strength (warm-dark palette, the
+     bottom glow burning bright).
+   - Light theme = the same room by daylight (warm-paper palette kept, the
+     structural signatures present, the glow turned right down for contrast).
+
    Pure presentation. No counts, no aggregates — see CLAUDE.md §2.
    ============================================================================ */
 
@@ -47,6 +58,24 @@
   --bg-wash-1: radial-gradient(120% 80% at 82% -10%, rgba(227, 162, 90, 0.20), transparent 60%);
   --bg-wash-2: radial-gradient(120% 70% at 8% -6%, rgba(189, 75, 39, 0.10), transparent 55%);
 
+  /* The hearth — a glow rising from the bottom edge of the page, the signature
+     the whole "Hearthside" redesign is built around (it lives in a fixed layer,
+     ::after, not in body's background, so it can't tile or scroll). In daylight
+     (this light theme) it's a quiet warmth so text over it stays high-contrast;
+     the dark theme below turns it up to a full firelit blaze. Two stacked
+     radials — a broad ember wash and a tighter, brighter core — mirror the
+     landing page's "By Firelight" hearth. */
+  --hearth-glow:
+    radial-gradient(70% 42% at 50% 118%, rgba(189, 75, 39, 0.18), transparent 60%),
+    radial-gradient(48% 30% at 50% 112%, rgba(227, 162, 90, 0.16), transparent 55%);
+
+  /* The ember thread running down the feed (see .feed-group). A vertical
+     gradient that fades in at top and bottom so the line reads as a glowing
+     filament, not a hard rule. Kept legible-but-gentle in daylight. */
+  --ember-thread: linear-gradient(180deg,
+    transparent, var(--ember) 14%, var(--glow) 50%, var(--ember) 86%, transparent);
+  --ember-thread-shadow: 0 0 10px 0 rgba(227, 162, 90, 0.35);
+
   /* Selection highlight — ember tint over paper. */
   --selection-bg: rgba(189, 75, 39, 0.18);
 
@@ -61,18 +90,21 @@
    Activated by the [data-theme="dark"] attribute on <html>, set by the inline
    script in base.html before paint to prevent a flash. */
 :root[data-theme="dark"] {
-  --ink:        #f0e6d6;
-  --ink-soft:   #b29f87;
-  --paper:      #1c140e;
-  --paper-deep: #251a12;
-  --raised:     #2a1f17;
+  /* The firelit room. These match the landing page's "By Firelight" palette so
+     the interior and the front door read as one place: paper turned to near-
+     black walnut, ink to warm cream, the ember and glow pulled brighter. */
+  --ink:        #f3e7d3;
+  --ink-soft:   #b69c7f;
+  --paper:      #140c06;
+  --paper-deep: #1d130b;
+  --raised:     #241810;
 
-  --ember:      #e07a4f;
+  --ember:      #e07a45;
   --ember-deep: #c25a30;
-  --glow:       #e3a25a;
+  --glow:       #f3b56e;
 
-  --line:       #3a2a1e;
-  --line-soft:  #2f221a;
+  --line:       #3a2a1c;
+  --line-soft:  #2a1d12;
 
   --error:      #e8826b;
   --error-bg:   #3a1d15;
@@ -83,10 +115,21 @@
   --shadow-md:  0 6px 22px -8px rgba(0, 0, 0, 0.55);
   --shadow-lg:  0 18px 50px -18px rgba(0, 0, 0, 0.70);
 
-  --header-bg: rgba(28, 20, 14, 0.82);
+  /* Translucent so the bottom glow rises through the header at the bottom of a
+     short page, and the room feels continuous edge to edge. */
+  --header-bg: rgba(20, 12, 6, 0.62);
 
   --bg-wash-1: radial-gradient(120% 80% at 82% -10%, rgba(227, 162, 90, 0.10), transparent 60%);
   --bg-wash-2: radial-gradient(120% 70% at 8% -6%, rgba(189, 75, 39, 0.12), transparent 55%);
+
+  /* Hearth glow at full strength — the fire actually in the room. Brighter and
+     reaching higher up the page than the daylight version. */
+  --hearth-glow:
+    radial-gradient(80% 55% at 50% 120%, rgba(224, 122, 69, 0.42), transparent 60%),
+    radial-gradient(55% 38% at 50% 113%, rgba(243, 181, 110, 0.34), transparent 55%);
+
+  /* The ember thread glows harder against the dark room. */
+  --ember-thread-shadow: 0 0 12px 1px rgba(243, 181, 110, 0.5);
 
   --selection-bg: rgba(224, 122, 79, 0.28);
 
@@ -123,6 +166,30 @@ body::before {
   opacity: 0.5;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
 }
+
+/* The hearth — a glow rising from the bottom edge of the page, present app-wide
+   (the signature of the "Hearthside" redesign). A fixed full-viewport layer
+   pinned behind the content; the radials in --hearth-glow originate just below
+   the bottom edge (at ~112–120% y) so the warmth reads as a fire just out of
+   frame at the foot of the room. Sits above the grain (z-index -1) but the body
+   background colour still shows through its transparent upper reaches.
+   Theme-aware: a quiet warmth in daylight, a full blaze in the firelit dark. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--hearth-glow);
+  /* The fire holds still even as the page scrolls — it's the room, not the
+     content. (Disabling background-attachment:fixed isn't needed; this is its
+     own fixed element, so it's already pinned to the viewport.) */
+  transition: background-image 0.25s ease;
+}
+/* The landing page paints its own, stronger hearth (and drifting embers) in its
+   scoped "By Firelight" block; suppress the app-wide layer there so the two
+   don't stack into a muddy double glow. */
+body:has(.lp--firelight)::after { content: none; }
 
 /* ---- Headings & prose ---------------------------------------------------- */
 h1, h2, h3 {
@@ -609,7 +676,29 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 
 /* ---- Feed & posts -------------------------------------------------------- */
-.feed-group { margin-top: 2.25rem; }
+/* The feed is a single .feed-group threaded by one glowing ember line down its
+   left edge — the warm filament running between the people you keep close. The
+   posts are nudged right to make room for the thread; the thread itself is the
+   ::before below. Feed-specific by design: profile pages reuse .post but not
+   .feed-group, so they carry no thread. */
+.feed-group {
+  position: relative;
+  margin-top: 2.25rem;
+  padding-left: 1.6rem;
+}
+.feed-group::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  /* Inset a touch from the group's top and bottom so the thread starts and ends
+     inside the run of posts rather than against the heading and page edge. */
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--ember-thread);
+  box-shadow: var(--ember-thread-shadow);
+}
 .group-label {
   display: inline-block;
   margin-bottom: 0.25rem;
@@ -665,7 +754,11 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  border: 1px solid var(--line);
+  /* Ringed in ember — a small warm halo so each voice in the feed is lit by the
+     same fire. The 1px ember border plus a soft outer ring (a translucent
+     box-shadow rather than a second border, so the avatar size is unchanged). */
+  border: 1px solid var(--ember);
+  box-shadow: 0 0 0 2px rgba(224, 122, 69, 0.18);
 }
 .post-content {
   font-family: var(--display);
@@ -691,89 +784,6 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   font-size: 0.85rem;
   font-weight: 500;
 }
-
-/* ---- Comments ------------------------------------------------------------ *
-   A quiet conversation beneath each post. No bullets, no counts — comments read
-   as a stack of small notes, replies tucked one level in behind an ember rule
-   (issue #24). Threads stop at one level, so the indentation never compounds. */
-.comments {
-  margin-top: 1rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--line-soft);
-}
-.comment-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-/* Replies sit slightly inset, marked off by a soft ember rule rather than a
-   bullet — clearly subordinate without shouting. */
-.comment-replies {
-  margin-top: 0.85rem;
-  margin-left: 1.1rem;
-  padding-left: 0.95rem;
-  border-left: 2px solid var(--line);
-}
-.comment {
-  font-family: var(--sans);
-}
-.comment-head {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.1rem;
-  font-size: 0.85rem;
-}
-.comment-author {
-  font-weight: 600;
-  color: var(--ink);
-  text-decoration: none;
-}
-.comment-author:hover { color: var(--ember); }
-.comment-content {
-  margin-top: 0.2rem;
-  font-size: 0.95rem;
-  line-height: 1.55;
-  color: var(--ink);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-/* A soft-deleted comment is a faded tombstone that only anchors its replies. */
-.comment-deleted .comment-author { font-style: italic; }
-.comment-actions {
-  margin-top: 0.35rem;
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-}
-.comment-actions .linklike {
-  font-family: var(--sans);
-  font-size: 0.82rem;
-  font-weight: 500;
-}
-/* The comment and reply composers: a single quiet line that grows on focus,
-   matching the post composer's restraint. */
-.comment-form {
-  margin-top: 0.85rem;
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-}
-.comment-reply-form {
-  margin-top: 0.6rem;
-  margin-left: 1.1rem;
-}
-.comment-form textarea {
-  flex: 1;
-  resize: vertical;
-  min-height: 2.4rem;
-  font-family: var(--sans);
-  font-size: 0.95rem;
-}
-.comment-form .button-secondary { flex-shrink: 0; }
 
 /* Invitation-link modal on the connections page. A quiet card centred over a
    dimmed backdrop; adds a row that pairs the read-only link with a copy button. */
@@ -1046,10 +1056,12 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 #load-older { margin-top: 1.75rem; text-align: center; }
 
 /* ---- Comments ------------------------------------------------------------ *
-   A post is set in the serif display face and divided from its neighbours by a
-   solid hairline; its comments are deliberately the opposite — compact
-   sans-serif cards, fenced off below the post by a dashed rule and stepped
-   inward as the thread nests — so a reply is never mistaken for a post (#29). */
+   "Hearthside": comments stop being boxed cards. A post is set in the serif
+   display face and divided from its neighbours by a solid hairline; its comments
+   are the quiet opposite — compact sans-serif notes, each tucked behind a soft
+   ember rule rather than fenced in its own card, so a reply reads as a murmur
+   beside the post, never mistaken for one (#29). They step inward as the thread
+   nests, the rule carrying the warmth of the same fire down the conversation. */
 .comments { margin-top: 0.4rem; }
 /* Fence the conversation off from the post with a dashed rule — but only once
    there is a conversation (existing comments) or the add-comment box is open.
@@ -1066,22 +1078,26 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.85rem;
 }
 
+/* A note, not a card: no fill, no border box, no shadow — just a soft ember
+   rule down the left edge marking where one quiet voice begins. */
 .comment {
-  padding: 0.65rem 0.85rem;
-  background: var(--raised);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
-/* A deleted comment is a quiet placeholder, not a card — dashed and flat. */
-.comment-deleted {
   background: transparent;
-  border-style: dashed;
+  border: 0;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
   box-shadow: none;
+  padding: 0.15rem 0 0.15rem 0.9rem;
 }
+/* A deleted comment keeps the same quiet rule, just faded — it still anchors any
+   replies tucked under it. Its "[deleted]" author placeholder is italicised so
+   the tombstone reads as a stand-in, not a name. */
+.comment-deleted {
+  border-left-style: dashed;
+}
+.comment-deleted .comment-author { font-style: italic; }
 
 .comment-head {
   display: flex;
@@ -1123,11 +1139,14 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .comment-actions .linklike:hover { text-decoration: underline; }
 
-/* Nested replies step inward with a connecting rule so depth reads at a glance. */
+/* Nested replies step further inward. Each reply already carries its own ember
+   rule (every .comment does now), so the replies list just supplies the
+   indentation — no second rule of its own, which would double up against the
+   children's rules and read as a heavy bracket. */
 .comment-replies {
-  margin: 0.7rem 0 0;
+  margin: 0.85rem 0 0;
   padding-left: 0.9rem;
-  border-left: 2px solid var(--line);
+  border-left: 0;
 }
 
 /* ---- Add-comment / reply boxes (hidden until toggled by comments.js) ------ */

@@ -22,20 +22,23 @@
   <p class="muted empty">Generate an invite link to connect with someone by checking out the <a href="/connections">Connections</a> page, then their posts will appear here.</p>
 {{end}}
 
+{{/* The whole feed is one .feed-group so the glowing ember thread — the warm line
+     between the people you keep close — runs unbroken down its left edge. The
+     "Load older posts" control lives *inside* the group too, so posts fetched in
+     extend the same thread rather than dangling past its end. */}}
 {{if .Posts}}
   <section class="feed-group">
     {{range .Posts}}{{template "postcard" .}}{{end}}
+    {{if .HasMore}}
+      <div id="load-older">
+        <button type="button" class="linklike"
+                hx-get="/feed/older?before={{.NextBefore}}"
+                hx-target="#load-older" hx-swap="outerHTML">
+          Load older posts
+        </button>
+      </div>
+    {{end}}
   </section>
-{{end}}
-
-{{if .HasMore}}
-  <div id="load-older">
-    <button type="button" class="linklike"
-            hx-get="/feed/older?before={{.NextBefore}}"
-            hx-target="#load-older" hx-swap="outerHTML">
-      Load older posts
-    </button>
-  </div>
 {{end}}
 
 {{if .User.Verified}}{{template "composemodal" .}}{{end}}
