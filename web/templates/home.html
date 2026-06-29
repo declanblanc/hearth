@@ -22,10 +22,9 @@
   <p class="muted empty">Generate an invite link to connect with someone by checking out the <a href="/connections">Connections</a> page, then their posts will appear here.</p>
 {{end}}
 
-{{/* The whole feed is one .feed-group so the glowing ember thread — the warm line
-     between the people you keep close — runs unbroken down its left edge. The
-     "Load older posts" control lives *inside* the group too, so posts fetched in
-     extend the same thread rather than dangling past its end. */}}
+{{/* The whole feed is one .feed-group — a column of distinct post tiles. The
+     "Load older posts" control lives *inside* the group so posts fetched in keep
+     the same tile spacing rather than dangling past the run. */}}
 {{if .Posts}}
   <section class="feed-group">
     {{range .Posts}}{{template "postcard" .}}{{end}}

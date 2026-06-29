@@ -66,15 +66,8 @@
      radials — a broad ember wash and a tighter, brighter core — mirror the
      landing page's "By Firelight" hearth. */
   --hearth-glow:
-    radial-gradient(70% 42% at 50% 118%, rgba(189, 75, 39, 0.18), transparent 60%),
-    radial-gradient(48% 30% at 50% 112%, rgba(227, 162, 90, 0.16), transparent 55%);
-
-  /* The ember thread running down the feed (see .feed-group). A vertical
-     gradient that fades in at top and bottom so the line reads as a glowing
-     filament, not a hard rule. Kept legible-but-gentle in daylight. */
-  --ember-thread: linear-gradient(180deg,
-    transparent, var(--ember) 14%, var(--glow) 50%, var(--ember) 86%, transparent);
-  --ember-thread-shadow: 0 0 10px 0 rgba(227, 162, 90, 0.35);
+    radial-gradient(70% 42% at 50% 118%, rgba(189, 75, 39, 0.09), transparent 60%),
+    radial-gradient(48% 30% at 50% 112%, rgba(227, 162, 90, 0.08), transparent 55%);
 
   /* Selection highlight — ember tint over paper. */
   --selection-bg: rgba(189, 75, 39, 0.18);
@@ -122,14 +115,12 @@
   --bg-wash-1: radial-gradient(120% 80% at 82% -10%, rgba(227, 162, 90, 0.10), transparent 60%);
   --bg-wash-2: radial-gradient(120% 70% at 8% -6%, rgba(189, 75, 39, 0.12), transparent 55%);
 
-  /* Hearth glow at full strength — the fire actually in the room. Brighter and
-     reaching higher up the page than the daylight version. */
+  /* The fire in the room, kept gentle — a low banked glow rising from the foot of
+     the page rather than a blaze. Still brighter and reaching higher than the
+     daylight version, but deliberately understated. */
   --hearth-glow:
-    radial-gradient(80% 55% at 50% 120%, rgba(224, 122, 69, 0.42), transparent 60%),
-    radial-gradient(55% 38% at 50% 113%, rgba(243, 181, 110, 0.34), transparent 55%);
-
-  /* The ember thread glows harder against the dark room. */
-  --ember-thread-shadow: 0 0 12px 1px rgba(243, 181, 110, 0.5);
+    radial-gradient(80% 55% at 50% 120%, rgba(224, 122, 69, 0.21), transparent 60%),
+    radial-gradient(55% 38% at 50% 113%, rgba(243, 181, 110, 0.17), transparent 55%);
 
   --selection-bg: rgba(224, 122, 79, 0.28);
 
@@ -676,28 +667,13 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 
 /* ---- Feed & posts -------------------------------------------------------- */
-/* The feed is a single .feed-group threaded by one glowing ember line down its
-   left edge — the warm filament running between the people you keep close. The
-   posts are nudged right to make room for the thread; the thread itself is the
-   ::before below. Feed-specific by design: profile pages reuse .post but not
-   .feed-group, so they carry no thread. */
+/* The feed is a column of distinct post tiles, each a raised card lifted off the
+   firelit room with a little air between it and its neighbours (see .post). */
 .feed-group {
-  position: relative;
   margin-top: 2.25rem;
-  padding-left: 1.6rem;
-}
-.feed-group::before {
-  content: "";
-  position: absolute;
-  left: 3px;
-  /* Inset a touch from the group's top and bottom so the thread starts and ends
-     inside the run of posts rather than against the heading and page edge. */
-  top: 0.4rem;
-  bottom: 0.4rem;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--ember-thread);
-  box-shadow: var(--ember-thread-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
 }
 .group-label {
   display: inline-block;
@@ -723,11 +699,16 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .feed-group details[open] > summary.group-label::before { transform: rotate(90deg); }
 
+/* Each post is its own tile: a raised card with a warm hairline border, lifted
+   off the firelit room by a soft shadow. The post's comment thread lives inside
+   the same tile, so a post and its conversation read as one contained unit. */
 .post {
-  padding: 1.4rem 0;
-  border-bottom: 1px solid var(--line);
+  padding: 1.3rem 1.4rem;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
-.post:last-child { border-bottom: 0; }
 .post-meta {
   font-family: var(--sans);
   font-size: 0.85rem;
@@ -1210,7 +1191,12 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   border: 3px solid var(--raised);
   box-shadow: var(--shadow-md), 0 0 0 1px var(--line);
 }
-.profile-posts { margin-top: 2rem; }
+.profile-posts {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
 
 /* ---- Profile photo field + cropper --------------------------------------- */
 .avatar-field { display: block; margin-bottom: 1rem; }
