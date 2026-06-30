@@ -257,11 +257,14 @@
 </section>
 {{end}}
 
-{{/* commentnode renders one comment and, recursively, its replies. Expects a
-     posts.Comment. A soft-deleted comment shows a "[deleted]" placeholder but
-     keeps its replies so the thread structure survives (Build Plan §2.2).
-     Reply/Delete forms target the whole post thread (#comments-<postID>);
-     comments.js toggles the reply box. */}}
+{{/* commentnode renders one comment. A top-level comment (ParentID == 0) also
+     emits its replies as a single flat list — every descendant has been
+     flattened into one tier, so only roots produce a <ul> and indentation never
+     compounds past two visual tiers. A reply shows an "@name" prefix pointing at
+     the comment it answers (.ReplyToName). A soft-deleted comment shows a
+     "[deleted]" placeholder but keeps its replies so the thread survives (Build
+     Plan §2.2). Reply/Delete forms target the whole post thread
+     (#comments-<postID>); comments.js toggles the reply box. */}}
 {{define "commentnode"}}
 <li class="comment{{if .Deleted}} comment-deleted{{end}}" id="comment-{{.ID}}">
   <div class="comment-head">
@@ -272,14 +275,12 @@
     {{end}}
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </div>
-  {{if not .Deleted}}<div class="comment-content">{{.Content}}</div>{{end}}
+  {{if not .Deleted}}<div class="comment-content">{{if .ReplyToName}}<span class="comment-mention">@{{.ReplyToName}}</span>{{end}}{{.Content}}</div>{{end}}
   {{if not .Deleted}}
   <div class="comment-actions">
-    {{/* Only top-level comments accept replies — threads stop at one level
-         (issue #24). Replies (ParentID != 0) show no reply control. */}}
-    {{if eq .ParentID 0}}
-      <button type="button" class="linklike comment-reply-toggle" data-toggle-target="reply-{{.ID}}" aria-expanded="false">Reply</button>
-    {{end}}
+    {{/* Every visible comment accepts replies now — depth is unbounded in the
+         data and flattened into one tier on render. */}}
+    <button type="button" class="linklike comment-reply-toggle" data-toggle-target="reply-{{.ID}}" aria-expanded="false">Reply</button>
     {{if .CanDelete}}
       <form method="post" action="/comments/{{.ID}}/delete" class="inline-form"
             hx-post="/comments/{{.ID}}/delete" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML"
@@ -288,7 +289,6 @@
       </form>
     {{end}}
   </div>
-  {{if eq .ParentID 0}}
   <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
         method="post" action="/comments/{{.ID}}/replies"
         hx-post="/comments/{{.ID}}/replies" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML">
@@ -300,11 +300,12 @@
     </div>
   </form>
   {{end}}
-  {{end}}
-  {{if .Children}}
+  {{/* Only roots emit the replies list — children are already flattened, so they
+       never nest a list of their own. This guarantees exactly one <ul> level. */}}
+  {{if eq .ParentID 0}}{{if .Children}}
     <ul class="comment-list comment-replies">
       {{range .Children}}{{template "commentnode" .}}{{end}}
     </ul>
-  {{end}}
+  {{end}}{{end}}
 </li>
 {{end}}

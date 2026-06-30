@@ -1120,14 +1120,22 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 }
 .comment-actions .linklike:hover { text-decoration: underline; }
 
-/* Nested replies step further inward. Each reply already carries its own ember
-   rule (every .comment does now), so the replies list just supplies the
-   indentation — no second rule of its own, which would double up against the
-   children's rules and read as a heavy bracket. */
+/* Replies step inward exactly once. All descendants are flattened into a single
+   tier under their top-level comment, so only roots emit this list — the indent
+   is a fixed step that never compounds. Each reply already carries its own ember
+   rule (every .comment does), so the list adds no second rule of its own. */
 .comment-replies {
   margin: 0.85rem 0 0;
-  padding-left: 0.9rem;
+  padding-left: 1.25rem;
   border-left: 0;
+}
+
+/* "@name" prefix marking which comment a flattened reply answers. Tinted with
+   the same ember the app uses for links, set just ahead of the reply body. */
+.comment-mention {
+  font-weight: 600;
+  margin-right: 0.35rem;
+  color: var(--ember-deep);
 }
 
 /* ---- Add-comment / reply boxes (hidden until toggled by comments.js) ------ */
