@@ -25,10 +25,6 @@ var (
 	ErrCommentTooLong   = errors.New("comments: content exceeds 1000 characters")
 	ErrCommentNotFound  = errors.New("comments: not found")
 	ErrCommentForbidden = errors.New("comments: not permitted")
-	// ErrReplyTooDeep is returned when someone tries to reply to a comment that
-	// is itself a reply. Threads are capped at one level: a top-level comment may
-	// have replies, but those replies cannot (issue #24).
-	ErrReplyTooDeep = errors.New("comments: cannot reply to a reply")
 )
 
 // Connections is the slice of the connection graph comments need: the single
@@ -78,6 +74,10 @@ type Comment struct {
 	// whether this comment may cross to a viewer who isn't connected to the author
 	// (issue: cross-network comment visibility). Joined in from users.
 	AuthorSharesExternally bool
+	// ReplyToName is the display name of the comment this one replies to; empty
+	// for top-level or when the parent is hidden/deleted. Drives the "@name"
+	// prefix once all descendants are flattened into one tier under their root.
+	ReplyToName string
 }
 
 // validateComment trims and length-checks comment content.
@@ -165,7 +165,9 @@ func (s *CommentService) Create(ctx context.Context, postID, authorID int64, con
 
 // Reply adds a reply to an existing comment and notifies that comment's author
 // (unless replying to oneself). The replier must be allowed to see the post the
-// parent belongs to, and the parent must be an active comment.
+// parent belongs to, and the parent must be an active comment. Replies may sit
+// at any depth in the data tree; rendering flattens them into a single tier (see
+// buildThreads).
 func (s *CommentService) Reply(ctx context.Context, parentID, authorID int64, content string) (*Comment, error) {
 	trimmed, err := validateComment(content)
 	if err != nil {
@@ -174,13 +176,12 @@ func (s *CommentService) Reply(ctx context.Context, parentID, authorID int64, co
 
 	var (
 		postID         int64
-		parentParentID sql.NullInt64
 		parentAuthorID int64
 		parentStatus   string
 	)
 	err = s.DB.QueryRowContext(ctx,
-		`SELECT post_id, parent_comment_id, author_id, status FROM comments WHERE id = ?`, parentID,
-	).Scan(&postID, &parentParentID, &parentAuthorID, &parentStatus)
+		`SELECT post_id, author_id, status FROM comments WHERE id = ?`, parentID,
+	).Scan(&postID, &parentAuthorID, &parentStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrCommentNotFound
 	}
@@ -190,10 +191,6 @@ func (s *CommentService) Reply(ctx context.Context, parentID, authorID int64, co
 	if parentStatus != "active" {
 		// A deleted comment is a tombstone; you can't reply to it.
 		return nil, ErrCommentNotFound
-	}
-	if parentParentID.Valid {
-		// The parent is already a reply. Threads stop at one level (issue #24).
-		return nil, ErrReplyTooDeep
 	}
 	if _, err := s.requirePostAccess(ctx, postID, authorID); err != nil {
 		return nil, err
@@ -448,13 +445,18 @@ func (s *CommentService) queryForPosts(ctx context.Context, postIDs []int64) (ma
 	return byPost, rows.Err()
 }
 
-// buildThreads assembles a flat, time-ordered comment slice into a tree of
-// top-level roots with replies nested under each parent, preserving order.
+// buildThreads assembles a flat, time-ordered comment slice into top-level roots
+// with all of their descendants FLATTENED into one time-ordered tier beneath
+// each root — the data is a true tree (each reply's ParentID is the comment it
+// answers), but rendering collapses arbitrary depth into two visual tiers so
+// indentation never compounds. Each flattened reply carries ReplyToName, the
+// display name of its immediate parent, to show who it answers ("@name").
+//
 // Comments authored by someone the viewer may not see are filtered out first
-// (issue #23, CLAUDE.md §1); replies whose parent is thereby missing are skipped
-// defensively, so a hidden comment takes its sub-thread with it. viewerID/
-// postAuthorID drive the per-comment CanDelete flag (the comment's author or the
-// post author).
+// (issue #23, CLAUDE.md §1); a reply whose parent chain can't be fully resolved
+// through visible comments is skipped, so a hidden comment takes its sub-thread
+// with it. viewerID/postAuthorID drive the per-comment CanDelete flag (the
+// comment's author or the post author).
 func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[int64]bool, viewerShowsNonConnections bool) []*Comment {
 	byID := make(map[int64]*Comment, len(flat))
 	visible := make([]*Comment, 0, len(flat))
@@ -466,6 +468,10 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 		byID[c.ID] = c
 		visible = append(visible, c)
 	}
+
+	// rootCache memoizes each comment's top-level ancestor so resolving roots
+	// stays O(n) amortized across the slice.
+	rootCache := make(map[int64]int64, len(visible))
 	var roots []*Comment
 	for _, c := range visible {
 		// A deleted comment can't be acted on; otherwise the author or the post
@@ -475,11 +481,47 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 			roots = append(roots, c)
 			continue
 		}
-		if parent, ok := byID[c.ParentID]; ok {
-			parent.Children = append(parent.Children, c)
+		rootID, ok := resolveRoot(c.ID, byID, rootCache)
+		if !ok {
+			// A hidden ancestor broke the chain; drop the reply with its lost
+			// sub-thread (matches issue #23's hide-the-subtree behavior).
+			continue
 		}
+		// "@name" points at the immediate parent — but a deleted parent is a
+		// nameless tombstone, so leave the mention empty there.
+		if parent, ok := byID[c.ParentID]; ok && !parent.Deleted {
+			c.ReplyToName = parent.AuthorName
+		}
+		// Input is already time-ordered and we append in iteration order, so each
+		// root's flat Children come out oldest-first — no re-sort needed.
+		root := byID[rootID]
+		root.Children = append(root.Children, c)
 	}
 	return pruneEmptyTombstones(roots)
+}
+
+// resolveRoot walks up the parent chain via byID until it reaches a top-level
+// comment (ParentID == 0), returning that comment's id. ok is false if any link
+// in the chain is missing from byID (a hidden ancestor). Results are memoized in
+// cache so repeated walks over a shared chain stay cheap.
+func resolveRoot(id int64, byID map[int64]*Comment, cache map[int64]int64) (int64, bool) {
+	if rootID, found := cache[id]; found {
+		return rootID, true
+	}
+	c, ok := byID[id]
+	if !ok {
+		return 0, false
+	}
+	if c.ParentID == 0 {
+		cache[id] = id
+		return id, true
+	}
+	rootID, ok := resolveRoot(c.ParentID, byID, cache)
+	if !ok {
+		return 0, false
+	}
+	cache[id] = rootID
+	return rootID, true
 }
 
 // visibleToViewer reports whether a comment may be shown to the viewer. A viewer
