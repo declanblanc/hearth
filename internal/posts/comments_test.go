@@ -160,7 +160,7 @@ func TestReply_NotifiesParentAuthorOnly(t *testing.T) {
 	}
 }
 
-func TestReply_CannotReplyToReply(t *testing.T) {
+func TestReply_AllowsArbitraryDepth(t *testing.T) {
 	d := newTestDB(t)
 	svc := newCommentSvc(d)
 	ctx := context.Background()
@@ -174,9 +174,77 @@ func TestReply_CannotReplyToReply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reply to top-level: %v", err)
 	}
-	// Threads stop at one level: replying to a reply is rejected (issue #24).
-	if _, err := svc.Reply(ctx, reply.ID, commenter, "reply to a reply"); !errors.Is(err, ErrReplyTooDeep) {
-		t.Errorf("replying to a reply should be ErrReplyTooDeep, got %v", err)
+	// Replying to a reply is now allowed: the data tree is arbitrary depth.
+	deep, err := svc.Reply(ctx, reply.ID, commenter, "reply to a reply")
+	if err != nil {
+		t.Fatalf("reply to a reply should succeed, got %v", err)
+	}
+	if deep.ParentID != reply.ID {
+		t.Errorf("deep reply parent = %d, want %d", deep.ParentID, reply.ID)
+	}
+}
+
+func TestReply_CannotReplyToTombstone(t *testing.T) {
+	d := newTestDB(t)
+	svc := newCommentSvc(d)
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+	commenter := seedUser(t, d, "commenter")
+	connect(t, d, author, commenter)
+	post := seedActivePost(t, d, author)
+
+	// Give the parent a child so deleting it soft-deletes (tombstones) it rather
+	// than removing the row.
+	parent, _ := svc.Create(ctx, post, commenter, "parent")
+	if _, err := svc.Reply(ctx, parent.ID, author, "child"); err != nil {
+		t.Fatalf("seed child: %v", err)
+	}
+	if _, err := svc.Delete(ctx, parent.ID, commenter); err != nil {
+		t.Fatalf("soft-delete parent: %v", err)
+	}
+	// Replying to a tombstone is rejected as not found.
+	if _, err := svc.Reply(ctx, parent.ID, author, "into the void"); !errors.Is(err, ErrCommentNotFound) {
+		t.Errorf("replying to a tombstone should be ErrCommentNotFound, got %v", err)
+	}
+}
+
+// TestListThread_FlattensDeepRepliesWithMention builds a 3-deep chain
+// (comment → reply → reply-to-reply) and confirms rendering flattens both
+// replies into one time-ordered tier under the root, each carrying the display
+// name of the comment it directly answers.
+func TestListThread_FlattensDeepRepliesWithMention(t *testing.T) {
+	d := newTestDB(t)
+	svc := newCommentSvc(d)
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+	commenter := seedUser(t, d, "commenter")
+	connect(t, d, author, commenter)
+	post := seedActivePost(t, d, author)
+
+	top, _ := svc.Create(ctx, post, commenter, "top-level")
+	middle, _ := svc.Reply(ctx, top.ID, author, "middle reply")
+	deep, _ := svc.Reply(ctx, middle.ID, commenter, "deep reply")
+
+	roots, err := svc.ListThread(ctx, post, author)
+	if err != nil {
+		t.Fatalf("ListThread: %v", err)
+	}
+	if len(roots) != 1 || roots[0].ID != top.ID {
+		t.Fatalf("want one root (the top-level comment), got %+v", roots)
+	}
+	root := roots[0]
+	if len(root.Children) != 2 {
+		t.Fatalf("want both replies flattened under the root, got %d", len(root.Children))
+	}
+	// Time-ordered: the middle reply precedes the deep one.
+	if root.Children[0].ID != middle.ID || root.Children[1].ID != deep.ID {
+		t.Errorf("flattened replies out of order: got %d, %d; want %d, %d",
+			root.Children[0].ID, root.Children[1].ID, middle.ID, deep.ID)
+	}
+	// The deep reply answers the middle reply, so its mention names the middle
+	// reply's author.
+	if got := root.Children[1].ReplyToName; got != middle.AuthorName {
+		t.Errorf("deep reply ReplyToName = %q, want %q", got, middle.AuthorName)
 	}
 }
 
