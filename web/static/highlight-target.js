@@ -42,6 +42,32 @@
     }, REMOVE_AFTER_MS);
   }
 
+  // Flash an element with the same fade the on-load path uses. Re-adding the
+  // class only restarts the animation after a reflow, so a rapid second click on
+  // the same target still glows.
+  function flash(target) {
+    target.classList.remove(HIGHLIGHT_CLASS);
+    void target.offsetWidth;
+    target.classList.add(HIGHLIGHT_CLASS);
+    window.setTimeout(function () {
+      target.classList.remove(HIGHLIGHT_CLASS);
+    }, REMOVE_AFTER_MS);
+  }
+
+  // A reply's reference line links to the comment it answers (#comment-N). The
+  // browser scrolls there via the anchor; we also flash it so it's clear which
+  // comment you landed on.
+  document.addEventListener("click", function (event) {
+    var link = event.target.closest && event.target.closest("a.comment-reply-ref");
+    if (!link) {
+      return;
+    }
+    var target = document.getElementById(link.getAttribute("href").slice(1));
+    if (target) {
+      flash(target);
+    }
+  });
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", highlightHashTarget);
   } else {

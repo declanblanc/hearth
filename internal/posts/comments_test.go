@@ -560,3 +560,24 @@ func TestAttachToPosts_NestsRepliesAndSetsCanDelete(t *testing.T) {
 		t.Error("author should be able to delete their own reply")
 	}
 }
+
+// TestCommentSnippet checks the reply-reference preview: whitespace collapses to
+// single spaces, short bodies pass through unchanged, and long ones truncate on
+// a rune boundary with an ellipsis.
+func TestCommentSnippet(t *testing.T) {
+	cases := []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"hello world", 90, "hello world"},
+		{"  line one\n\nline  two  ", 90, "line one line two"},
+		{"aaaaaaaaaa", 5, "aaaaa…"},  // 10 runes, cut to 5
+		{"héllo wörld", 5, "héllo…"}, // multibyte: 5 runes, not 5 bytes
+	}
+	for _, c := range cases {
+		if got := commentSnippet(c.in, c.max); got != c.want {
+			t.Errorf("commentSnippet(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
+	}
+}

@@ -75,6 +75,12 @@ type Comment struct {
 	// ReplyToSelf is true when the parent comment is the viewer's own, so the
 	// mention reads "replying to you" instead of the viewer's own name.
 	ReplyToSelf bool
+	// ReplyToID is the id of the comment this one answers; drives the in-thread
+	// jump link on the reply reference (Discord-style). 0 for top-level.
+	ReplyToID int64
+	// ReplyToSnippet is a short, single-line preview of the parent comment's
+	// content, shown beside the author name on the reply reference.
+	ReplyToSnippet string
 }
 
 // validateComment trims and length-checks comment content.
@@ -87,6 +93,18 @@ func validateComment(content string) (string, error) {
 		return "", ErrCommentTooLong
 	}
 	return trimmed, nil
+}
+
+// commentSnippet collapses a comment body to a single line and truncates it to
+// at most maxRunes runes, appending an ellipsis when it had to cut. Used for the
+// reply-reference preview shown above a reply.
+func commentSnippet(content string, maxRunes int) string {
+	flat := strings.Join(strings.Fields(content), " ")
+	runes := []rune(flat)
+	if len(runes) <= maxRunes {
+		return flat
+	}
+	return strings.TrimSpace(string(runes[:maxRunes])) + "…"
 }
 
 // requirePostAccess loads an active post's author and confirms the viewer may
@@ -481,10 +499,13 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 			// sub-thread (matches issue #23's hide-the-subtree behavior).
 			continue
 		}
-		// "@name" points at the immediate parent.
+		// The reply reference points at the immediate parent: its author, a
+		// content preview, and its id for the jump link.
 		if parent, ok := byID[c.ParentID]; ok {
+			c.ReplyToID = parent.ID
 			c.ReplyToName = parent.AuthorName
 			c.ReplyToSelf = parent.AuthorID == viewerID
+			c.ReplyToSnippet = commentSnippet(parent.Content, 90)
 		}
 		// Input is already time-ordered and we append in iteration order, so each
 		// root's flat Children come out oldest-first — no re-sort needed.

@@ -285,8 +285,9 @@
 {{/* commentnode renders one comment. A top-level comment (ParentID == 0) also
      emits its replies as a single flat list — every descendant has been
      flattened into one tier, so only roots produce a <ul> and indentation never
-     compounds past two visual tiers. A reply shows a subtle "replying to name"
-     line above its body pointing at the comment it answers (.ReplyToName).
+     compounds past two visual tiers. A reply shows a clickable reference above
+     the author's name — the answered comment's author and a snippet of its
+     content — that jumps to that comment (#comment-.ReplyToID), Discord-style.
      Deleting a comment removes it and its whole reply subtree — no tombstone is
      left behind (Build Plan §2.2). Each root comment carries one
      shared reply form, rendered after its replies so it opens at the bottom of
@@ -302,11 +303,12 @@
       <button type="submit" class="delete-icon" aria-label="Delete comment">{{template "trashicon"}}</button>
     </form>
   {{end}}
+  {{if .ReplyToID}}<a class="comment-reply-ref{{if .ReplyToSelf}} comment-reply-ref-self{{end}}" href="#comment-{{.ReplyToID}}"><span class="comment-reply-ref-author">{{if .ReplyToSelf}}you{{else}}{{.ReplyToName}}{{end}}</span><span class="comment-reply-ref-snippet">{{.ReplyToSnippet}}</span></a>{{end}}
   <div class="comment-head">
     <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </div>
-  {{if .ReplyToSelf}}<p class="comment-mention comment-mention-self">replying to <span>you</span></p>{{else if .ReplyToName}}<p class="comment-mention">replying to {{.ReplyToName}}</p>{{end}}<div class="comment-content">{{.Content}}</div>
+  <div class="comment-content">{{.Content}}</div>
   <div class="comment-actions">
     {{/* Every visible comment accepts replies — depth is unbounded in the data
          and flattened into one tier on render. There is no per-comment reply

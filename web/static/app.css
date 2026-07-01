@@ -1215,29 +1215,58 @@ button.button-danger {
   border-left: 2px solid var(--line);
 }
 
-/* "replying to name" line marking which comment a flattened reply answers. A
-   subtle, muted line set just above the reply body, distinct from the text. */
-.comment-mention {
+/* Discord-style reply reference: a single muted line above a reply body showing
+   who it answers and a preview of that comment, clickable to jump to it
+   (#comment-N). The author is emphasised; the snippet truncates with an ellipsis
+   so the line never wraps. A rounded elbow drawn in the left gutter drops from
+   the reference down toward the reply's author on the line below, connecting the
+   two the way Discord's reply spine does. */
+.comment-reply-ref {
   position: relative;
-  margin: -0.6rem 0 0.2rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0 0 0.15rem;
   padding-left: 1.1rem;
+  max-width: 100%;
   font-size: 0.8rem;
   color: var(--ink-soft);
+  text-decoration: none;
 }
-/* A corner glyph tying the mention line back up to the username above it, hung
-   in the left gutter. Inherits the line's color: muted normally, gold on
-   self-replies. */
-.comment-mention::before {
-  content: "↳";
+/* The connector: a box showing only its top and left edges, rounded where they
+   meet, so it reads as ╭ — the horizontal runs right toward the preview text,
+   the vertical drops toward the author name below. */
+.comment-reply-ref::before {
+  content: "";
   position: absolute;
-  left: 0.25rem;
+  left: 0.35rem;
+  top: 0.5em;
+  bottom: -0.45em;
+  width: 0.55rem;
+  border-left: 1.5px solid var(--line);
+  border-top: 1.5px solid var(--line);
+  border-top-left-radius: 7px;
+}
+.comment-reply-ref-author {
+  font-weight: 600;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.comment-reply-ref-snippet {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.comment-reply-ref:hover .comment-reply-ref-author,
+.comment-reply-ref:hover .comment-reply-ref-snippet {
+  color: var(--ember);
 }
 
-/* A reply to the viewer's own comment — pull it out of the muted grey so the
-   reader notices they were answered directly. */
-.comment-mention-self {
+/* A reply to the viewer's own comment — pull the author out of the muted grey so
+   the reader notices they were answered directly. */
+.comment-reply-ref-self .comment-reply-ref-author {
   color: #c9820f;
-  font-weight: 600;
   text-shadow: 0 0 7px rgba(230, 176, 74, 0.55);
 }
 
@@ -1265,7 +1294,7 @@ button.button-danger {
 .comment-toggle svg { width: 1.05rem; height: 1.05rem; flex-shrink: 0; }
 
 /* The shared reply form's "replying to name" hint (issue #58): a muted line
-   above the textarea, matching the .comment-mention marker on existing replies.
+   above the textarea, matching the .comment-reply-ref marker on existing replies.
    Hidden when the form isn't pointed at a comment. */
 .comment-reply-hint {
   margin: 0 0 0.4rem;

@@ -16,6 +16,9 @@ retroactively to mark meaningful steps, not formal releases.
 
 ### Changed
 
+- A reply now shows a preview of the comment it answers — the author's name and
+  a snippet of their words — and clicking it jumps to that comment, making the
+  conversation easier to follow.
 - Comment threads are cleaner: top-level comments no longer carry a vertical
   rule — they open with the author's name, set off by whitespace. A reply
   thread is marked by one continuous bar running down the whole group.
@@ -25,8 +28,8 @@ retroactively to mark meaningful steps, not formal releases.
   leaving a "[deleted]" placeholder in the thread.
 - The delete control on posts and comments is now a small trash icon in the
   top-right corner, replacing the "Delete" text link in the action row.
-- A reply to one of your own comments now reads "replying to you" (in a warm
-  accent, so it stands out) instead of repeating your own name.
+- When a reply answers one of your own comments, the reference shows "you" in a
+  warm accent so it stands out, instead of repeating your own name.
 - Deleting a post or comment now asks for confirmation in a styled in-app
   dialog instead of the browser's native prompt.
 - Post and comment timestamps are more compact — the year is omitted for
