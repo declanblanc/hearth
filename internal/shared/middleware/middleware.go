@@ -116,17 +116,18 @@ func RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
-// ClientIP returns the best-effort client IP. Honours Fly-Client-IP (Fly.io)
-// and X-Forwarded-For when present; otherwise falls back to RemoteAddr.
+// ClientIP returns the best-effort client IP for use as a rate-limit key.
+//
+// Only Fly-Client-IP is trusted. Fly.io is the sole supported reverse proxy,
+// and its proxy sets Fly-Client-IP to the real client address, overwriting any
+// value a client tries to supply. We deliberately do NOT read X-Forwarded-For:
+// that header is client-appendable, so trusting it would let an attacker rotate
+// spoofed IPs to evade the failed-login/password-reset throttle or pin a
+// victim's IP in the limiter. When Fly-Client-IP is absent (local dev or any
+// non-Fly path) we fall back to RemoteAddr, which cannot be spoofed.
 func ClientIP(r *http.Request) string {
 	if ip := r.Header.Get("Fly-Client-IP"); ip != "" {
 		return ip
-	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
 	}
 	host := r.RemoteAddr
 	if i := strings.LastIndexByte(host, ':'); i > 0 {
