@@ -11,6 +11,9 @@ retroactively to mark meaningful steps, not formal releases.
 
 ### Added
 
+- A "What's New" page (linked from the footer) listing recent updates in plain,
+  non-technical language, plus an in-app notification sent to everyone when a
+  new release ships, pointing them to it.
 - Opening a post or comment from a notification now briefly highlights the
   target with a fading accent glow, so the item the notification pointed to
   stands out on arrival. Comment and reply notifications now deep-link to the
