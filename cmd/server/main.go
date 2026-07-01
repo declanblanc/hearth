@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dblanc/hearth/internal/auth"
+	"github.com/dblanc/hearth/internal/changelog"
 	"github.com/dblanc/hearth/internal/connections"
 	"github.com/dblanc/hearth/internal/feed"
 	"github.com/dblanc/hearth/internal/media"
@@ -92,6 +93,11 @@ func main() {
 	// Services.
 	authSvc := auth.New(database, sender, cfg.BaseURL)
 	notifSvc := notifications.New(database)
+	// Announce the latest release to everyone the first time this version is
+	// seen. Idempotent, so it's safe to run on every startup/deploy.
+	if err := notifSvc.AnnounceRelease(context.Background(), changelog.Latest().Version); err != nil {
+		logger.Error("announce release", "err", err)
+	}
 	connSvc := connections.New(database, notifSvc, cfg.BaseURL)
 	postSvc := posts.New(database)
 	postSvc.Media = mediaStore
