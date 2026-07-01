@@ -1133,10 +1133,25 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 /* "replying to name" line marking which comment a flattened reply answers. A
    subtle, muted line set just above the reply body, distinct from the text. */
 .comment-mention {
+  position: relative;
   margin: -0.35rem 0 0.2rem;
-  padding-left: 0.25rem;
+  padding-left: 1.1rem;
   font-size: 0.8rem;
   color: var(--ink-soft);
+}
+/* A corner glyph tying the mention line back up to the username above it. It
+   hangs in the left gutter so the mention text starts at 1.1rem. Inherits the
+   line's color: muted on normal mentions, gold on self-replies. */
+.comment-mention::before {
+  content: "↳";
+  position: absolute;
+  left: 0.25rem;
+}
+/* Indent the reply body to sit between the corner glyph (0.25rem) and the
+   mention text (1.1rem), so it hangs under the connector without lining up
+   flush with either. */
+.comment-mention + .comment-content {
+  padding-left: 0.65rem;
 }
 
 /* A reply to the viewer's own comment — pull it out of the muted grey so the
