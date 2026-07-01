@@ -16,6 +16,9 @@ retroactively to mark meaningful steps, not formal releases.
 
 ### Changed
 
+- Comment threads are cleaner: top-level comments no longer carry a vertical
+  rule — they open with the author's name, set off by whitespace. A reply
+  thread is marked by one continuous bar running down the whole group.
 - Deleting a comment now removes it and all of its replies outright, instead of
   leaving a "[deleted]" placeholder in the thread.
 - The delete control on posts and comments is now a small trash icon in the

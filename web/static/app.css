@@ -1108,10 +1108,10 @@ button.button-danger {
 /* ---- Comments ------------------------------------------------------------ *
    "Hearthside": comments stop being boxed cards. A post is set in the serif
    display face and divided from its neighbours by a solid hairline; its comments
-   are the quiet opposite — compact sans-serif notes, each tucked behind a soft
-   ember rule rather than fenced in its own card, so a reply reads as a murmur
-   beside the post, never mistaken for one (#29). They step inward as the thread
-   nests, the rule carrying the warmth of the same fire down the conversation. */
+   are the quiet opposite — compact sans-serif notes with no fill, box, or rule,
+   opened by a bold name and separated by whitespace, so a reply reads as a
+   murmur beside the post, never mistaken for one (#29). Threads flatten to a
+   single reply tier, marked by one fixed indent — no bar, no nesting depth. */
 .comments { margin-top: 0.4rem; }
 /* Fence the conversation off from the post with a dashed rule — but only once
    there is a conversation (existing comments) or the add-comment box is open.
@@ -1131,19 +1131,16 @@ button.button-danger {
   gap: 0.85rem;
 }
 
-/* A note, not a card: no fill, no border box, no shadow — just a soft ember
-   rule down the left edge marking where one quiet voice begins. */
+/* A note, not a card: no fill, no box — just a bold name to open each voice and
+   whitespace between them. The name sits flush at the margin; the body hangs
+   indented beneath it (see .comment-content), so the author reads as the
+   heading of their own note. The reply tier is marked by a single bar on its
+   list (see .comment-replies), not per-comment. */
 .comment {
   position: relative;
-  background: transparent;
-  border: 0;
-  border-left: 2px solid var(--line);
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0.15rem 0 0.15rem 0.9rem;
+  padding: 0;
 }
-/* The comment sits closer to its top-right edge than a post does — its box is
-   smaller and unpadded, so the icon hugs the corner (issue #47). */
+/* The delete icon hugs the comment's top-right corner (issue #47). */
 .comment > .delete-form { top: 0.1rem; right: 0; }
 
 .comment-head {
@@ -1170,6 +1167,9 @@ button.button-danger {
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  /* Hanging indent: the body sits slightly in from the author name above it, so
+     the name reads as the heading of its own note. */
+  padding-left: .65rem;
 }
 
 .comment-actions {
@@ -1201,37 +1201,33 @@ button.button-danger {
 .comment-reply-toggle svg { width: 1rem; height: 1rem; flex-shrink: 0; }
 
 /* Replies step inward exactly once. All descendants are flattened into a single
-   tier under their top-level comment, so only roots emit this list — the indent
-   is a fixed step that never compounds. Each reply already carries its own ember
-   rule (every .comment does), so the list adds no second rule of its own. */
+   tier under their top-level comment, so only roots emit this list; the indent
+   is a fixed step that never compounds. One continuous bar runs down the whole
+   reply group — the last remnant of the old per-comment rule, kept here to mark
+   the sub-thread as one voice-and-answer exchange. The list's own left padding
+   holds the replies clear of the bar. */
 .comment-replies {
   margin: 0.85rem 0 0;
-  padding-left: 1.25rem;
-  border-left: 0;
+  padding-left: .65rem;
+  border-left: 2px solid var(--line);
 }
 
 /* "replying to name" line marking which comment a flattened reply answers. A
    subtle, muted line set just above the reply body, distinct from the text. */
 .comment-mention {
   position: relative;
-  margin: -0.35rem 0 0.2rem;
+  margin: -0.15rem 0 0.2rem;
   padding-left: 1.1rem;
   font-size: 0.8rem;
   color: var(--ink-soft);
 }
-/* A corner glyph tying the mention line back up to the username above it. It
-   hangs in the left gutter so the mention text starts at 1.1rem. Inherits the
-   line's color: muted on normal mentions, gold on self-replies. */
+/* A corner glyph tying the mention line back up to the username above it, hung
+   in the left gutter. Inherits the line's color: muted normally, gold on
+   self-replies. */
 .comment-mention::before {
   content: "↳";
   position: absolute;
   left: 0.25rem;
-}
-/* Indent the reply body to sit between the corner glyph (0.25rem) and the
-   mention text (1.1rem), so it hangs under the connector without lining up
-   flush with either. */
-.comment-mention + .comment-content {
-  padding-left: 0.65rem;
 }
 
 /* A reply to the viewer's own comment — pull it out of the muted grey so the
