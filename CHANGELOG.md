@@ -16,6 +16,8 @@ retroactively to mark meaningful steps, not formal releases.
 
 ### Changed
 
+- Jumping to a post or comment — from a notification or a reply reference — now
+  centers it in the view instead of parking it at the top under the header.
 - A reply now shows a preview of the comment it answers — the author's name and
   a snippet of their words — and clicking it jumps to that comment, making the
   conversation easier to follow.
