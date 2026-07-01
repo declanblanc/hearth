@@ -82,6 +82,13 @@ func Load() (Config, error) {
 	}
 	cfg.CookieSecret = []byte(secret)
 
+	// Fail closed in production: without Resend, email falls back to a stdout
+	// logger that prints password-reset and verification tokens. Staging may
+	// still use the stub logger.
+	if cfg.IsProd() && !cfg.ResendConfigured() {
+		return cfg, errors.New("RESEND_API_KEY is required in production")
+	}
+
 	switch cfg.Env {
 	case EnvDevelopment, EnvTest, EnvStaging, EnvProduction:
 	default:

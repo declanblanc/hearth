@@ -9,6 +9,12 @@ retroactively to mark meaningful steps, not formal releases.
 
 ## [Unreleased]
 
+### Security
+
+- Production now refuses to start if transactional email is not configured, so
+  password-reset and verification tokens can never fall back to being logged to
+  stdout. Staging and development are unaffected.
+
 ### Changed
 
 - A reply to one of your own comments now reads "replying to you" (in a warm
