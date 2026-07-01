@@ -6,17 +6,15 @@
 {{if .Items}}
   <ul class="notification-list">
     {{range .Items}}
-      {{/* Post-targeted notifications (comments, replies) deep-link to
-           the post on its author's profile, with a #post-{id} fragment that
-           scrolls to the post (anchors live in the postcard). The author's
-           username comes from the post itself, not the recipient: a
-           reply_to_comment recipient may be a commenter, not the post author.
-           If the post or its author is gone, PostAuthorUsername is empty and
-           we fall back to plain text rather than a broken link.
-
-           A reply deep-links to the reply comment itself (#comment-{id}) so the
-           thread scrolls to — and highlights — the new reply, not just the post
-           it lives under (issue #59). CommentID is the newly created comment. */}}
+      {{/* Comment and reply notifications deep-link to the new comment itself
+           (#comment-{id}) on the post author's profile, so the thread scrolls to
+           — and highlights (#59) — the comment that is the point of interest,
+           not just the post it lives under. CommentID is the newly created
+           comment. The author's username comes from the post itself, not the
+           recipient: a reply_to_comment recipient may be a commenter, not the
+           post author. If the comment is missing we fall back to #post-{id}, and
+           if the post or its author is gone, PostAuthorUsername is empty and we
+           fall back to plain text rather than a broken link. */}}
       {{$postLink := ""}}
       {{$commentLink := ""}}
       {{if and .PostID .PostAuthorUsername}}
@@ -33,7 +31,7 @@
             accepted your invitation. You're now connected.
           {{else if eq .Type "comment_on_post"}}
             {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            commented on {{if $postLink}}<a href="{{$postLink}}">your post</a>{{else}}your post{{end}}.
+            commented on {{if $commentLink}}<a href="{{$commentLink}}">your post</a>{{else if $postLink}}<a href="{{$postLink}}">your post</a>{{else}}your post{{end}}.
           {{else if eq .Type "reply_to_comment"}}
             {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
             replied to {{if $commentLink}}<a href="{{$commentLink}}">your comment</a>{{else if $postLink}}<a href="{{$postLink}}">your comment</a>{{else}}your comment{{end}}.

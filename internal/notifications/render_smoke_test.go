@@ -40,14 +40,13 @@ func TestRender_NotificationsDeepLinkAndText(t *testing.T) {
 	}
 	html := rec.Body.String()
 
-	// Comment and reply notifications deep-link into the post author's profile:
-	// a comment-on-post anchors to the post (#post-{id}); a reply anchors to the
-	// reply comment itself (#comment-{id}) so the thread highlights it (#59).
-	// The connection_accepted notification must name the accepter, link to their
-	// profile (so the inviter can disconnect), and use the "accepted your
-	// invitation" wording.
+	// Comment and reply notifications deep-link into the post author's profile,
+	// anchored to the new comment itself (#comment-{id}) so the thread scrolls to
+	// and highlights it (#59). The connection_accepted notification must name the
+	// accepter, link to their profile (so the inviter can disconnect), and use
+	// the "accepted your invitation" wording.
 	for _, want := range []string{
-		`href="/u/alice#post-7"`,    // commented-on post (author = recipient)
+		`href="/u/alice#comment-3"`, // commented-on: anchors the new comment (author = recipient)
 		`href="/u/frank#comment-5"`, // replied-to: anchors the reply comment on the POST author's profile
 		"commented on",
 		"replied to",
