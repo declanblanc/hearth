@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dblanc/hearth/internal/auth"
+	"github.com/dblanc/hearth/internal/notifications"
 )
 
 // Dev seed credentials. These exist only to make local development and manual
@@ -184,11 +185,11 @@ func seedDevContent(db *sql.DB, logger *slog.Logger, devID int64) {
 		// thread descends, so the conversation reads in a believable order.
 		commentTime := hoursAgo(p.ageHours).Add(15 * time.Minute)
 		for _, c := range p.comments {
-			commentTime = insertCommentTree(db, logger, postID, 0, c, commentTime)
+			commentTime = insertCommentTree(db, logger, postID, p.author, 0, 0, c, commentTime)
 		}
 	}
 
-	logger.Info("dev seed: created friends, posts, and comments",
+	logger.Info("dev seed: created friends, posts, comments, and notifications",
 		"friends", 3, "posts", len(posts))
 }
 
@@ -247,10 +248,12 @@ type seedPost struct {
 }
 
 // insertCommentTree inserts one comment and then, recursively, its replies.
-// parentID is 0 for a top-level comment. Each comment is timestamped a few
-// minutes after the previous one so the thread reads in conversational order;
-// the running clock is threaded through and returned so siblings advance too.
-func insertCommentTree(db *sql.DB, logger *slog.Logger, postID, parentID int64, node reply, at time.Time) time.Time {
+// parentID is 0 for a top-level comment; postAuthorID and parentAuthorID are the
+// authors of the post and of the parent comment, used to route notifications.
+// Each comment is timestamped a few minutes after the previous one so the thread
+// reads in conversational order; the running clock is threaded through and
+// returned so siblings advance too.
+func insertCommentTree(db *sql.DB, logger *slog.Logger, postID, postAuthorID, parentID, parentAuthorID int64, node reply, at time.Time) time.Time {
 	var parent any
 	if parentID != 0 {
 		parent = parentID
@@ -271,9 +274,35 @@ func insertCommentTree(db *sql.DB, logger *slog.Logger, postID, parentID int64, 
 		return at
 	}
 
+	// Mirror the real fan-out (CLAUDE.md §8) so the dev user has comment
+	// notifications to look at: a top-level comment notifies the post author, a
+	// reply notifies the parent comment's author. Never notify yourself.
+	recipient, notifType := postAuthorID, notifications.TypeCommentOnPost
+	if parentID != 0 {
+		recipient, notifType = parentAuthorID, notifications.TypeReplyToComment
+	}
+	if recipient != node.author {
+		insertNotification(db, logger, recipient, notifType, node.author, postID, commentID, at)
+	}
+
 	next := at.Add(7 * time.Minute)
 	for _, child := range node.children {
-		next = insertCommentTree(db, logger, postID, commentID, child, next)
+		next = insertCommentTree(db, logger, postID, postAuthorID, commentID, node.author, child, next)
 	}
 	return next
+}
+
+// insertNotification writes one notification row directly, bypassing the
+// service so the seeded created_at matches the comment it refers to (the service
+// always stamps time.Now()). Seeding these lets the notifications page, its
+// unread dot, and its deep-links be exercised locally.
+func insertNotification(db *sql.DB, logger *slog.Logger, userID int64, notifType string, actorID, postID, commentID int64, createdAt time.Time) {
+	_, err := db.Exec(
+		`INSERT INTO notifications (user_id, type, actor_id, post_id, comment_id, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		userID, notifType, actorID, postID, commentID, createdAt,
+	)
+	if err != nil {
+		logger.Error("dev seed: insert notification", "user", userID, "type", notifType, "err", err)
+	}
 }
