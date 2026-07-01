@@ -21,6 +21,8 @@ retroactively to mark meaningful steps, not formal releases.
 - The server now enforces read, write, and idle timeouts and caps the size of
   incoming request bodies, so slow or oversized requests can't tie up
   connections or grow unbounded.
+- State-changing requests are now rejected unless they originate from the site
+  itself (CSRF defense-in-depth on top of the SameSite session cookie).
 
 ### Changed
 

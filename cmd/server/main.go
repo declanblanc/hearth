@@ -150,8 +150,10 @@ func main() {
 		middleware.Logger(logger)(
 			middleware.Recoverer(logger)(
 				middleware.MaxBodyBytes(maxRequestBody)(
-					auth.SessionLoader(authSvc)(
-						notifH.LoadUnread(mux),
+					middleware.SameOrigin(cfg.BaseURL)(
+						auth.SessionLoader(authSvc)(
+							notifH.LoadUnread(mux),
+						),
 					),
 				),
 			),

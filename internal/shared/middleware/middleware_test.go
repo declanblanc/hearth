@@ -95,3 +95,100 @@ func TestMaxBodyBytesSkipsGET(t *testing.T) {
 		t.Fatalf("expected GET body read to succeed, got %v", readErr)
 	}
 }
+
+const trustedOrigin = "https://hearth.test"
+
+// newSameOriginHandler wraps a handler that records whether it was reached, so
+// tests can distinguish a pass-through from a 403 rejection.
+func newSameOriginHandler(reached *bool) http.Handler {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		*reached = true
+		w.WriteHeader(http.StatusOK)
+	})
+	return SameOrigin(trustedOrigin)(next)
+}
+
+func TestSameOriginGetPassesRegardlessOfOrigin(t *testing.T) {
+	var reached bool
+	h := newSameOriginHandler(&reached)
+
+	req := httptest.NewRequest(http.MethodGet, "/feed", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+
+	if !reached {
+		t.Fatal("GET should pass through even with a foreign Origin")
+	}
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rw.Code)
+	}
+}
+
+func TestSameOriginPostMatchingOriginPasses(t *testing.T) {
+	var reached bool
+	h := newSameOriginHandler(&reached)
+
+	req := httptest.NewRequest(http.MethodPost, "/posts", nil)
+	req.Header.Set("Origin", trustedOrigin)
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+
+	if !reached {
+		t.Fatal("POST with matching Origin should pass through")
+	}
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rw.Code)
+	}
+}
+
+func TestSameOriginPostForeignOriginRejected(t *testing.T) {
+	var reached bool
+	h := newSameOriginHandler(&reached)
+
+	req := httptest.NewRequest(http.MethodPost, "/posts", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+
+	if reached {
+		t.Fatal("POST with a foreign Origin should be rejected")
+	}
+	if rw.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rw.Code)
+	}
+}
+
+func TestSameOriginPostRefererFallbackPasses(t *testing.T) {
+	var reached bool
+	h := newSameOriginHandler(&reached)
+
+	// No Origin header; a matching Referer should be accepted.
+	req := httptest.NewRequest(http.MethodPost, "/posts", nil)
+	req.Header.Set("Referer", trustedOrigin+"/feed")
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+
+	if !reached {
+		t.Fatal("POST with matching Referer and no Origin should pass through")
+	}
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rw.Code)
+	}
+}
+
+func TestSameOriginPostNoHeadersRejected(t *testing.T) {
+	var reached bool
+	h := newSameOriginHandler(&reached)
+
+	req := httptest.NewRequest(http.MethodPost, "/posts", nil)
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+
+	if reached {
+		t.Fatal("POST with neither Origin nor Referer should be rejected")
+	}
+	if rw.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rw.Code)
+	}
+}
