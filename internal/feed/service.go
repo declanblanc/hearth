@@ -106,5 +106,10 @@ func (s *Service) queryPosts(ctx context.Context, userID, before int64) ([]posts
 	if err := posts.LoadMedia(ctx, s.DB, out); err != nil {
 		return nil, err
 	}
+	// Mark the viewer's own posts so the feed shows a delete control on them
+	// (issue #47).
+	for i := range out {
+		out[i].CanDelete = out[i].AuthorID == userID
+	}
 	return out, nil
 }

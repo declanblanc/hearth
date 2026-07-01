@@ -64,6 +64,10 @@ type Post struct {
 	// populated per-request by CommentService.AttachToPosts for the feed and
 	// profile views. Nil until attached; never a count (CLAUDE.md §2).
 	Comments []*Comment
+	// CanDelete is true when the viewer authored this post, so the feed can show
+	// the delete control on their own posts (issue #47). Only the author may
+	// delete a post — Delete enforces the same rule server-side.
+	CanDelete bool
 }
 
 // PostMedia is one attachment on a post — an image, or a video with a poster.

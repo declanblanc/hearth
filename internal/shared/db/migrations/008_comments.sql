@@ -6,11 +6,11 @@
 -- read or add comments, enforced in the service via IsConnected (CLAUDE.md §1).
 -- No count is ever derived from this table (CLAUDE.md §2).
 --
--- Deletion preserves thread structure: a comment with replies is soft-deleted
--- (status='deleted', rendered as a "[deleted]" placeholder) while a leaf is
--- hard-deleted. parent_comment_id therefore cascades on delete so that
--- hard-deleting a leaf never strands rows, and dropping a post removes its whole
--- tree.
+-- Deleting a comment hard-deletes it and its entire reply subtree — no
+-- tombstone is kept (Build Plan §2.2). The service collects the subtree with a
+-- recursive CTE over parent_comment_id and deletes it explicitly; the ON DELETE
+-- CASCADE on parent_comment_id is a belt-and-suspenders backstop, and it also
+-- makes dropping a post remove its whole comment tree.
 CREATE TABLE comments (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     post_id           INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,

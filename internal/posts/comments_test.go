@@ -184,7 +184,7 @@ func TestReply_AllowsArbitraryDepth(t *testing.T) {
 	}
 }
 
-func TestReply_CannotReplyToTombstone(t *testing.T) {
+func TestReply_CannotReplyToDeletedComment(t *testing.T) {
 	d := newTestDB(t)
 	svc := newCommentSvc(d)
 	ctx := context.Background()
@@ -193,18 +193,14 @@ func TestReply_CannotReplyToTombstone(t *testing.T) {
 	connect(t, d, author, commenter)
 	post := seedActivePost(t, d, author)
 
-	// Give the parent a child so deleting it soft-deletes (tombstones) it rather
-	// than removing the row.
+	// Deleting a comment removes its row outright, so a later reply targeting it
+	// can't find a parent.
 	parent, _ := svc.Create(ctx, post, commenter, "parent")
-	if _, err := svc.Reply(ctx, parent.ID, author, "child"); err != nil {
-		t.Fatalf("seed child: %v", err)
-	}
 	if _, err := svc.Delete(ctx, parent.ID, commenter); err != nil {
-		t.Fatalf("soft-delete parent: %v", err)
+		t.Fatalf("delete parent: %v", err)
 	}
-	// Replying to a tombstone is rejected as not found.
 	if _, err := svc.Reply(ctx, parent.ID, author, "into the void"); !errors.Is(err, ErrCommentNotFound) {
-		t.Errorf("replying to a tombstone should be ErrCommentNotFound, got %v", err)
+		t.Errorf("replying to a deleted comment should be ErrCommentNotFound, got %v", err)
 	}
 }
 
@@ -367,7 +363,10 @@ func TestDelete_PermissionRules(t *testing.T) {
 	}
 }
 
-func TestDelete_SoftWhenHasRepliesHardWhenLeaf(t *testing.T) {
+// TestDelete_HardDeletesWholeSubtree confirms deleting a comment removes it and
+// every descendant (replies, replies of replies) with no tombstone left behind —
+// so the whole sub-thread disappears from the rendered thread.
+func TestDelete_HardDeletesWholeSubtree(t *testing.T) {
 	d := newTestDB(t)
 	svc := newCommentSvc(d)
 	ctx := context.Background()
@@ -376,44 +375,39 @@ func TestDelete_SoftWhenHasRepliesHardWhenLeaf(t *testing.T) {
 	connect(t, d, author, commenter)
 	post := seedActivePost(t, d, author)
 
+	// A 3-deep chain under the target, plus a sibling top-level comment that must
+	// survive the delete untouched.
 	parent, _ := svc.Create(ctx, post, commenter, "parent")
 	reply, _ := svc.Reply(ctx, parent.ID, author, "child")
+	deep, _ := svc.Reply(ctx, reply.ID, commenter, "grandchild")
+	sibling, _ := svc.Create(ctx, post, commenter, "unrelated")
 
-	// Deleting the parent (which has a reply) soft-deletes it.
 	if _, err := svc.Delete(ctx, parent.ID, commenter); err != nil {
 		t.Fatalf("Delete parent: %v", err)
 	}
-	var status, content string
-	if err := d.QueryRow(`SELECT status, content FROM comments WHERE id = ?`, parent.ID).
-		Scan(&status, &content); err != nil {
-		t.Fatalf("parent should still exist after soft delete: %v", err)
-	}
-	if status != "deleted" || content != "" {
-		t.Errorf("soft delete: status=%q content=%q", status, content)
+
+	// Every comment in the deleted subtree is gone from the table.
+	for _, id := range []int64{parent.ID, reply.ID, deep.ID} {
+		var n int
+		if err := d.QueryRow(`SELECT COUNT(*) FROM comments WHERE id = ?`, id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("comment %d in deleted subtree should be gone, found %d rows", id, n)
+		}
 	}
 
-	// The thread still renders: a [deleted] placeholder root with its reply.
+	// The unrelated sibling is untouched, and the thread renders it alone with no
+	// tombstone standing in for the deleted subtree.
 	roots, err := svc.ListThread(ctx, post, author)
 	if err != nil {
 		t.Fatalf("ListThread: %v", err)
 	}
-	if len(roots) != 1 || !roots[0].Deleted || roots[0].Content != DeletedCommentPlaceholder {
-		t.Fatalf("expected one deleted placeholder root, got %+v", roots)
+	if len(roots) != 1 || roots[0].ID != sibling.ID {
+		t.Fatalf("expected only the surviving sibling, got %+v", roots)
 	}
-	if len(roots[0].Children) != 1 || roots[0].Children[0].ID != reply.ID {
-		t.Errorf("deleted parent should keep its reply, got %+v", roots[0].Children)
-	}
-
-	// Deleting the leaf reply hard-deletes the row.
-	if _, err := svc.Delete(ctx, reply.ID, author); err != nil {
-		t.Fatalf("Delete leaf: %v", err)
-	}
-	var n int
-	if err := d.QueryRow(`SELECT COUNT(*) FROM comments WHERE id = ?`, reply.ID).Scan(&n); err != nil {
-		t.Fatal(err)
-	}
-	if n != 0 {
-		t.Errorf("leaf comment should be hard-deleted, found %d rows", n)
+	if len(roots[0].Children) != 0 {
+		t.Errorf("surviving sibling should have no replies, got %+v", roots[0].Children)
 	}
 }
 

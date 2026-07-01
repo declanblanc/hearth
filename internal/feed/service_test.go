@@ -273,4 +273,13 @@ func TestFeed_OwnPostsAlongsideConnections(t *testing.T) {
 			t.Errorf("position %d: want %q, got %q (full: %v)", i, want[i], got[i], got)
 		}
 	}
+
+	// CanDelete marks only the viewer's own posts, so the feed shows the delete
+	// control on them and not on a connection's posts (issue #47).
+	for _, p := range res.Posts {
+		wantDelete := p.AuthorID == viewer
+		if p.CanDelete != wantDelete {
+			t.Errorf("post %q CanDelete = %v, want %v", p.Content, p.CanDelete, wantDelete)
+		}
+	}
 }

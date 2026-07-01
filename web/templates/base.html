@@ -36,6 +36,7 @@
 <script src="/static/htmx.min.js" defer></script>
 <script src="/static/nav-toggle.js" defer></script>
 <script src="/static/theme-toggle.js" defer></script>
+<script src="/static/confirm-dialog.js" defer></script>
 <script src="/static/post-lightbox.js" defer></script>
 <script src="/static/post-image-skeleton.js" defer></script>
 <script src="/static/localtime.js" defer></script>
@@ -92,6 +93,19 @@
   <p>Hearth — a small, private place for the people you keep close.</p>
   <p class="footer-links"><a href="/about">About Hearth</a> · <a href="/changelog">What's New</a></p>
 </footer>
+{{/* Shared confirmation dialog for destructive actions (post/comment delete).
+     confirm-dialog.js intercepts the submit of any form carrying data-confirm,
+     drops that form's message into this dialog, and only lets the form submit
+     for real once the user presses Delete. Present on every page so the delete
+     forms on the feed and profile can reuse it; harmless when no such form is
+     shown. */}}
+<dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-dialog-message">
+  <p id="confirm-dialog-message" class="confirm-dialog-message"></p>
+  <div class="confirm-dialog-actions">
+    <button type="button" class="button-secondary" data-confirm-cancel>Cancel</button>
+    <button type="button" class="button-danger" data-confirm-ok>Delete</button>
+  </div>
+</dialog>
 {{block "scripts" .}}{{end}}
 </body>
 </html>{{end}}
@@ -122,8 +136,18 @@
 {{end}}
 
 {{/* postcard renders a single post. Expects a posts.Post as its data. */}}
+{{/* trashicon — the delete glyph used by the post and comment delete controls.
+     Icon-only; the surrounding button carries the accessible label. */}}
+{{define "trashicon"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M10 11v6M14 11v6"/></svg>{{end}}
+
 {{define "postcard"}}
 <article class="post" id="post-{{.ID}}">
+  {{if .CanDelete}}
+    <form method="post" action="/posts/{{.ID}}/delete" class="delete-form"
+          data-confirm="Delete this post? This cannot be undone.">
+      <button type="submit" class="delete-icon" aria-label="Delete post">{{template "trashicon"}}</button>
+    </form>
+  {{end}}
   <header class="post-meta">
     {{/* Author avatar to the left of their name (issue #40). AuthorPhotoURL is a
          short-lived signed URL minted at render time; when the author has no
@@ -262,25 +286,27 @@
      emits its replies as a single flat list — every descendant has been
      flattened into one tier, so only roots produce a <ul> and indentation never
      compounds past two visual tiers. A reply shows a subtle "replying to name"
-     line above its body pointing at the comment it answers (.ReplyToName). A
-     soft-deleted comment shows a "[deleted]" placeholder but keeps its replies
-     so the thread survives (Build Plan §2.2). Each root comment carries one
+     line above its body pointing at the comment it answers (.ReplyToName).
+     Deleting a comment removes it and its whole reply subtree — no tombstone is
+     left behind (Build Plan §2.2). Each root comment carries one
      shared reply form, rendered after its replies so it opens at the bottom of
      that comment's sub-thread — not the bottom of the whole post (#58).
      Reply/Delete forms target the whole post thread (#comments-<postID>);
      comments.js toggles the reply box. */}}
 {{define "commentnode"}}
-<li class="comment{{if .Deleted}} comment-deleted{{end}}" id="comment-{{.ID}}">
+<li class="comment" id="comment-{{.ID}}">
+  {{if .CanDelete}}
+    <form method="post" action="/comments/{{.ID}}/delete" class="delete-form"
+          hx-post="/comments/{{.ID}}/delete" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML"
+          data-confirm="Delete this comment? This cannot be undone.">
+      <button type="submit" class="delete-icon" aria-label="Delete comment">{{template "trashicon"}}</button>
+    </form>
+  {{end}}
   <div class="comment-head">
-    {{if .Deleted}}
-      <span class="muted comment-author">[deleted]</span>
-    {{else}}
-      <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
-    {{end}}
+    <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </div>
-  {{if not .Deleted}}{{if .ReplyToSelf}}<p class="comment-mention comment-mention-self">replying to <span>you</span></p>{{else if .ReplyToName}}<p class="comment-mention">replying to {{.ReplyToName}}</p>{{end}}<div class="comment-content">{{.Content}}</div>{{end}}
-  {{if not .Deleted}}
+  {{if .ReplyToSelf}}<p class="comment-mention comment-mention-self">replying to <span>you</span></p>{{else if .ReplyToName}}<p class="comment-mention">replying to {{.ReplyToName}}</p>{{end}}<div class="comment-content">{{.Content}}</div>
   <div class="comment-actions">
     {{/* Every visible comment accepts replies — depth is unbounded in the data
          and flattened into one tier on render. There is no per-comment reply
@@ -288,18 +314,17 @@
          comment's root thread and points it at this comment (issue #58).
          data-reply-to carries the parent id used to build the reply URL;
          data-reply-to-name is the attribution shown in the form's hint. */}}
-    <button type="button" class="linklike comment-reply-toggle"
+    <button type="button" class="comment-reply-toggle"
             data-reply-to="{{.ID}}" data-reply-to-name="{{.AuthorName}}"
-            aria-expanded="false">Reply</button>
-    {{if .CanDelete}}
-      <form method="post" action="/comments/{{.ID}}/delete" class="inline-form"
-            hx-post="/comments/{{.ID}}/delete" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML"
-            onsubmit="return confirm('Delete this comment? This cannot be undone.');">
-        <button type="submit" class="linklike danger">Delete</button>
-      </form>
-    {{end}}
+            aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 17l-6-6 6-6"/>
+        <path d="M3 11h9a8 8 0 0 1 8 8v1"/>
+      </svg>
+      <span>Reply</span>
+    </button>
   </div>
-  {{end}}
   {{/* Only roots emit the replies list — children are already flattened, so they
        never nest a list of their own. This guarantees exactly one <ul> level. */}}
   {{if eq .ParentID 0}}

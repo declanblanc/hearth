@@ -9,10 +9,21 @@ retroactively to mark meaningful steps, not formal releases.
 
 ## [Unreleased]
 
+### Added
+
+- Your own posts in the home feed now show a delete control, so you can
+  remove a post without visiting your profile page.
+
 ### Changed
 
+- Deleting a comment now removes it and all of its replies outright, instead of
+  leaving a "[deleted]" placeholder in the thread.
+- The delete control on posts and comments is now a small trash icon in the
+  top-right corner, replacing the "Delete" text link in the action row.
 - A reply to one of your own comments now reads "replying to you" (in a warm
   accent, so it stands out) instead of repeating your own name.
+- Deleting a post or comment now asks for confirmation in a styled in-app
+  dialog instead of the browser's native prompt.
 
 ## [0.10.0] - 2026-06-30
 

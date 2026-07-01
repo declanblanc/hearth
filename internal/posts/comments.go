@@ -15,11 +15,6 @@ import (
 // post content cap.
 const MaxCommentLen = 1000
 
-// DeletedCommentPlaceholder is shown in place of a soft-deleted comment's
-// content, so a deleted parent still anchors its surviving replies (Build Plan
-// §2.2).
-const DeletedCommentPlaceholder = "[deleted]"
-
 var (
 	ErrCommentEmpty     = errors.New("comments: content is empty")
 	ErrCommentTooLong   = errors.New("comments: content exceeds 1000 characters")
@@ -63,7 +58,6 @@ type Comment struct {
 	AuthorUsername string
 	AuthorName     string
 	Content        string
-	Deleted        bool
 	CreatedAt      time.Time
 	Children       []*Comment
 	// CanDelete is true when the current viewer may delete this comment (its
@@ -192,7 +186,9 @@ func (s *CommentService) Reply(ctx context.Context, parentID, authorID int64, co
 		return nil, err
 	}
 	if parentStatus != "active" {
-		// A deleted comment is a tombstone; you can't reply to it.
+		// Defensive: only active comments accept replies. Deleting a comment now
+		// removes its row outright (see Delete), so a deleted parent surfaces as
+		// ErrCommentNotFound above rather than here.
 		return nil, ErrCommentNotFound
 	}
 	if _, err := s.requirePostAccess(ctx, postID, authorID); err != nil {
@@ -230,11 +226,16 @@ func (s *CommentService) Reply(ctx context.Context, parentID, authorID int64, co
 	return s.loadOne(ctx, commentID)
 }
 
-// Delete removes a comment. It is permitted for the comment's author or the
-// post's author (Build Plan §2.2). A comment that has replies is soft-deleted —
-// status='deleted', content cleared — so its thread survives as a "[deleted]"
-// placeholder; a leaf comment is hard-deleted. Returns the post id so callers
-// can re-render the affected thread.
+// Delete removes a comment and its entire reply subtree — replies, replies of
+// replies, arbitrarily deep — leaving no tombstone behind (Build Plan §2.2).
+// It is permitted for the comment's author or the post's author. Returns the
+// post id so callers can re-render the affected thread.
+//
+// The subtree is collected with a recursive CTE over parent_comment_id and
+// deleted explicitly rather than relying on the ON DELETE CASCADE foreign key:
+// the delete is deterministic and self-documenting, and doesn't depend on the
+// SQLite recursive-cascade behaviour being enabled. The whole delete runs in one
+// BEGIN IMMEDIATE write transaction (CLAUDE.md write convention).
 func (s *CommentService) Delete(ctx context.Context, commentID, userID int64) (postID int64, err error) {
 	var commentAuthorID int64
 	err = s.DB.QueryRowContext(ctx,
@@ -257,21 +258,19 @@ func (s *CommentService) Delete(ctx context.Context, commentID, userID int64) (p
 		return 0, ErrCommentForbidden
 	}
 
-	var hasChild int
-	err = s.DB.QueryRowContext(ctx,
-		`SELECT 1 FROM comments WHERE parent_comment_id = ? LIMIT 1`, commentID,
-	).Scan(&hasChild)
-	hasReplies := err == nil
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
-	}
-
-	if hasReplies {
-		_, err = s.DB.ExecContext(ctx,
-			`UPDATE comments SET status = 'deleted', content = '' WHERE id = ?`, commentID)
-	} else {
-		_, err = s.DB.ExecContext(ctx, `DELETE FROM comments WHERE id = ?`, commentID)
-	}
+	err = db.WithImmediate(ctx, s.DB, func(conn *sql.Conn) error {
+		// subtree walks parent_comment_id from the target comment down through
+		// every descendant, then deletes the whole set in one statement.
+		_, err := conn.ExecContext(ctx, `
+			WITH RECURSIVE subtree(id) AS (
+				SELECT ?
+				UNION ALL
+				SELECT c.id FROM comments c
+				  JOIN subtree s ON c.parent_comment_id = s.id
+			)
+			DELETE FROM comments WHERE id IN (SELECT id FROM subtree)`, commentID)
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -370,24 +369,23 @@ func (s *CommentService) viewerShowsNonConnections(ctx context.Context, viewerID
 }
 
 // loadOne reads a single comment with its author display fields. Newly created
-// comments are always active and viewer-deletable by their author, so CanDelete
-// is set true here for the immediate re-render.
+// comments are always viewer-deletable by their author, so CanDelete is set true
+// here for the immediate re-render.
 func (s *CommentService) loadOne(ctx context.Context, commentID int64) (*Comment, error) {
 	var (
 		c           Comment
 		parent      sql.NullInt64
-		status      string
 		first, last string
 	)
 	err := s.DB.QueryRowContext(ctx, `
 		SELECT c.id, c.post_id, c.parent_comment_id, c.author_id,
-		       u.username, u.first_name, u.last_name, c.content, c.status, c.created_at,
+		       u.username, u.first_name, u.last_name, c.content, c.created_at,
 		       u.share_comments_with_non_connections
 		  FROM comments c
 		  JOIN users u ON u.id = c.author_id
 		 WHERE c.id = ?`, commentID,
 	).Scan(&c.ID, &c.PostID, &parent, &c.AuthorID, &c.AuthorUsername,
-		&first, &last, &c.Content, &status, &c.CreatedAt, &c.AuthorSharesExternally)
+		&first, &last, &c.Content, &c.CreatedAt, &c.AuthorSharesExternally)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +393,6 @@ func (s *CommentService) loadOne(ctx context.Context, commentID int64) (*Comment
 		c.ParentID = parent.Int64
 	}
 	c.AuthorName = fullName(first, last)
-	c.Deleted = status == "deleted"
 	c.CanDelete = true
 	return &c, nil
 }
@@ -412,7 +409,7 @@ func (s *CommentService) queryForPosts(ctx context.Context, postIDs []int64) (ma
 	}
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT c.id, c.post_id, c.parent_comment_id, c.author_id,
-		       u.username, u.first_name, u.last_name, c.content, c.status, c.created_at,
+		       u.username, u.first_name, u.last_name, c.content, c.created_at,
 		       u.share_comments_with_non_connections
 		  FROM comments c
 		  JOIN users u ON u.id = c.author_id
@@ -428,21 +425,16 @@ func (s *CommentService) queryForPosts(ctx context.Context, postIDs []int64) (ma
 		var (
 			c           Comment
 			parent      sql.NullInt64
-			status      string
 			first, last string
 		)
 		if err := rows.Scan(&c.ID, &c.PostID, &parent, &c.AuthorID, &c.AuthorUsername,
-			&first, &last, &c.Content, &status, &c.CreatedAt, &c.AuthorSharesExternally); err != nil {
+			&first, &last, &c.Content, &c.CreatedAt, &c.AuthorSharesExternally); err != nil {
 			return nil, err
 		}
 		if parent.Valid {
 			c.ParentID = parent.Int64
 		}
 		c.AuthorName = fullName(first, last)
-		c.Deleted = status == "deleted"
-		if c.Deleted {
-			c.Content = DeletedCommentPlaceholder
-		}
 		byPost[c.PostID] = append(byPost[c.PostID], &c)
 	}
 	return byPost, rows.Err()
@@ -477,9 +469,8 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 	rootCache := make(map[int64]int64, len(visible))
 	var roots []*Comment
 	for _, c := range visible {
-		// A deleted comment can't be acted on; otherwise the author or the post
-		// owner may delete it.
-		c.CanDelete = !c.Deleted && (viewerID == c.AuthorID || viewerID == postAuthorID)
+		// The comment's author or the post owner may delete it.
+		c.CanDelete = viewerID == c.AuthorID || viewerID == postAuthorID
 		if c.ParentID == 0 {
 			roots = append(roots, c)
 			continue
@@ -490,9 +481,8 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 			// sub-thread (matches issue #23's hide-the-subtree behavior).
 			continue
 		}
-		// "@name" points at the immediate parent — but a deleted parent is a
-		// nameless tombstone, so leave the mention empty there.
-		if parent, ok := byID[c.ParentID]; ok && !parent.Deleted {
+		// "@name" points at the immediate parent.
+		if parent, ok := byID[c.ParentID]; ok {
 			c.ReplyToName = parent.AuthorName
 			c.ReplyToSelf = parent.AuthorID == viewerID
 		}
@@ -501,7 +491,7 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 		root := byID[rootID]
 		root.Children = append(root.Children, c)
 	}
-	return pruneEmptyTombstones(roots)
+	return roots
 }
 
 // resolveRoot walks up the parent chain via byID until it reaches a top-level
@@ -530,36 +520,15 @@ func resolveRoot(id int64, byID map[int64]*Comment, cache map[int64]int64) (int6
 
 // visibleToViewer reports whether a comment may be shown to the viewer. A viewer
 // always sees their own comments and the post author's; anyone else's are visible
-// if the viewer is connected to that author (issue #23). A deleted comment is a
-// tombstone carrying no author or content, so it stays visible to anchor any
-// replies the viewer *can* see — pruneEmptyTombstones drops it later if none do.
+// if the viewer is connected to that author (issue #23).
 //
 // Beyond direct connections, a non-connection's comment crosses to the viewer only
 // when both sides have opted in: the viewer enabled "display comments from
 // non-connections" (viewerShowsNonConnections) AND the author enabled "share my
 // comments with non-connections" (AuthorSharesExternally). Symmetric consent.
 func visibleToViewer(c *Comment, viewerID, postAuthorID int64, connected map[int64]bool, viewerShowsNonConnections bool) bool {
-	if c.Deleted {
-		return true
-	}
 	if c.AuthorID == viewerID || c.AuthorID == postAuthorID || connected[c.AuthorID] {
 		return true
 	}
 	return viewerShowsNonConnections && c.AuthorSharesExternally
-}
-
-// pruneEmptyTombstones removes deleted placeholder comments that have no visible
-// replies left beneath them, so hiding a non-connected author's comment doesn't
-// leave a bare "[deleted]" node behind (issue #23). It works bottom-up so a
-// tombstone whose only children were themselves pruned is removed too.
-func pruneEmptyTombstones(nodes []*Comment) []*Comment {
-	kept := nodes[:0]
-	for _, n := range nodes {
-		n.Children = pruneEmptyTombstones(n.Children)
-		if n.Deleted && len(n.Children) == 0 {
-			continue
-		}
-		kept = append(kept, n)
-	}
-	return kept
 }

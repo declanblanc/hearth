@@ -24,20 +24,18 @@
   {{if .Posts}}
     {{range .Posts}}
       <article class="post" id="post-{{.ID}}">
+        {{if $.Owner}}
+          <form method="post" action="/posts/{{.ID}}/delete" class="delete-form"
+                data-confirm="Delete this post? This cannot be undone.">
+            <button type="submit" class="delete-icon" aria-label="Delete post">{{template "trashicon"}}</button>
+          </form>
+        {{end}}
         <header class="post-meta">
           <span class="muted"><time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
         </header>
         {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
         {{template "postmedia" .}}
-        <div class="post-actions">
-          {{if $.Owner}}
-            <form method="post" action="/posts/{{.ID}}/delete" class="inline-form"
-                  onsubmit="return confirm('Delete this post? This cannot be undone.');">
-              <button type="submit" class="linklike danger">Delete</button>
-            </form>
-          {{end}}
-          {{template "commenttrigger" .}}
-        </div>
+        <div class="post-actions">{{template "commenttrigger" .}}</div>
         {{template "commentthread" .}}
       </article>
     {{end}}

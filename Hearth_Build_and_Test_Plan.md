@@ -616,8 +616,7 @@ Added after MVP (originally out of scope). Reuses the image pipeline's storage, 
 - `POST /posts/{id}/comments`: creates a top-level comment.
 - `POST /comments/{id}/replies`: creates a reply (sets `parent_comment_id`).
 - `DELETE /comments/{id}`: allowed for the comment author or the post owner.
-  - If the comment has any direct or descendant replies: set `status = 'deleted'`, render as a `[deleted]` placeholder preserving thread structure.
-  - If no replies: hard-delete the row.
+  - Hard-deletes the comment **and its entire reply subtree** (replies, replies of replies, arbitrarily deep). No `[deleted]` tombstone is left behind — the whole sub-thread disappears. The subtree is collected with a recursive CTE over `parent_comment_id` and deleted in one `BEGIN IMMEDIATE` transaction.
 - Comment counts are not rendered anywhere.
 - Notification triggers:
   - New top-level comment → notify post author (`comment_on_post`).
