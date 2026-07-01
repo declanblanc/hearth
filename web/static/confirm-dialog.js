@@ -78,7 +78,12 @@
       }
 
       // First pass: suppress the submit and ask for confirmation.
+      // preventDefault() alone only cancels the browser's native submit; htmx
+      // has its own submit listener on the form that would still fire the
+      // hx-post. Stop propagation here in the capture phase so htmx never sees
+      // this unconfirmed submit. The confirmed re-submit propagates normally.
       event.preventDefault();
+      event.stopImmediatePropagation();
       pendingForm = form;
       openDialog(form.getAttribute("data-confirm") || "Are you sure?");
     },
