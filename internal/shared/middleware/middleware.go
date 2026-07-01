@@ -116,6 +116,22 @@ func RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// MaxBodyBytes caps the size of request bodies for methods that carry one
+// (everything except GET/HEAD). Bodies over the limit fail when a handler reads
+// them, so multipart parsing and form decoding error out instead of buffering
+// unbounded data to memory or disk. The limit must sit comfortably above the
+// 8 MiB per-image cap so legitimate uploads still succeed.
+func MaxBodyBytes(limit int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				r.Body = http.MaxBytesReader(w, r.Body, limit)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // ClientIP returns the best-effort client IP for use as a rate-limit key.
 //
 // Only Fly-Client-IP is trusted. Fly.io is the sole supported reverse proxy,

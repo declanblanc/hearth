@@ -142,11 +142,17 @@ func main() {
 	// Background sweep: hourly hard-delete of expired soft-deleted users.
 	go runHardDeleteSweep(logger, profileSvc)
 
+	// 12 MiB sits above the 8 MiB per-image upload cap so multipart uploads still
+	// succeed, while stopping any request body from growing unbounded.
+	const maxRequestBody = 12 << 20
+
 	chain := middleware.RequestID(
 		middleware.Logger(logger)(
 			middleware.Recoverer(logger)(
-				auth.SessionLoader(authSvc)(
-					notifH.LoadUnread(mux),
+				middleware.MaxBodyBytes(maxRequestBody)(
+					auth.SessionLoader(authSvc)(
+						notifH.LoadUnread(mux),
+					),
 				),
 			),
 		),
@@ -156,6 +162,11 @@ func main() {
 		Addr:              cfg.Addr,
 		Handler:           chain,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// WriteTimeout is generous: media/image responses can be slow over poor
+		// connections, and too tight a value would truncate legitimate downloads.
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {

@@ -18,6 +18,9 @@ retroactively to mark meaningful steps, not formal releases.
   Fly's authoritative client IP (or the direct connection address) is used, so
   an attacker can no longer rotate forged IPs to evade login/password-reset
   throttling or pin a victim's IP.
+- The server now enforces read, write, and idle timeouts and caps the size of
+  incoming request bodies, so slow or oversized requests can't tie up
+  connections or grow unbounded.
 
 ### Changed
 
