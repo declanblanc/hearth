@@ -74,6 +74,15 @@ No likes/reactions of any kind, no user search/discovery, no algorithmic ranking
 - Testing: stdlib `testing` + `testify`; `net/http/httptest` for handlers; in-memory SQLite for unit/integration, file-based for migration tests; Playwright for E2E; stub email in tests.
 - Defaults: username `[a-z0-9_]` 3–30 chars (immutable), display name 1–50, bio ≤1000, pronouns ≤50, password ≥12 chars argon2id, sessions 30d sliding, email verify 24h, password reset 1h, soft-delete retained 30d.
 
+## Changelog
+
+Keep [CHANGELOG.md](CHANGELOG.md) current. Any change that a user would notice — a new feature, a behavior change, a removal, or a user-facing fix — gets a bullet under `## [Unreleased]` (create that section at the top if it's missing), in the matching Keep a Changelog group (`Added`, `Changed`, `Fixed`, `Removed`). Skip purely internal churn (refactors, test-only changes, dependency bumps with no visible effect). Write the bullet for the reader, not the diff. When work ships under a version, rename `[Unreleased]` to that version with today's date and add a release link at the bottom.
+
+`CHANGELOG.md` is the **developer** log. There is a separate **user-facing** "What's New" page at `/changelog`, sourced from a hand-curated Go slice in [internal/changelog/changelog.go](internal/changelog/changelog.go) (newest-first, plain non-technical language, grouped by date). The two do not sync automatically — keep them aligned by hand:
+
+- When you cut a release, add a `Release` entry at the top of `Releases` with that release's date and plain-language bullets covering **only** what a user would notice. Translate out the jargon (no table names, file types, or internal mechanics).
+- The entry's `Version` field is the key that fires a one-time in-app "new release" notification to every user on the next startup (`notifications.Service.AnnounceRelease`). It must be unique per release and should match the `CHANGELOG.md` version. Editing an existing entry's text does **not** re-notify; only a new `Version` does.
+
 ## Build phases (gates, not estimates)
 
 - **Phase 0:** signup → verify → login → profile edit → account deletion, end-to-end in prod.
