@@ -15,7 +15,9 @@
            commenter, not the author. When the target is gone we render a
            non-clickable item (an <a> without href) rather than a dead link. */}}
       {{$link := ""}}
-      {{if eq .Type "connection_accepted"}}
+      {{if eq .Type "new_release"}}
+        {{$link = "/changelog"}}
+      {{else if eq .Type "connection_accepted"}}
         {{if .ActorUsername}}{{$link = printf "/u/%s" .ActorUsername}}{{end}}
       {{else if and .PostID .PostAuthorUsername}}
         {{if .CommentID}}{{$link = printf "/u/%s#comment-%d" .PostAuthorUsername .CommentID}}{{else}}{{$link = printf "/u/%s#post-%d" .PostAuthorUsername .PostID}}{{end}}
@@ -23,7 +25,9 @@
       <a class="notification-item{{if not .Read}} unread{{end}}"{{if $link}} href="{{$link}}"{{end}}>
         <span class="notification-text">
           {{$actor := "Someone"}}{{if .ActorUsername}}{{$actor = .ActorName}}{{end}}
-          {{if eq .Type "connection_accepted"}}
+          {{if eq .Type "new_release"}}
+            <strong class="notification-actor">Hearth</strong> has some new updates — see what's changed.
+          {{else if eq .Type "connection_accepted"}}
             <strong class="notification-actor">{{$actor}}</strong> accepted your invitation. You're now connected.
           {{else if eq .Type "comment_on_post"}}
             <strong class="notification-actor">{{$actor}}</strong> commented on your post.
