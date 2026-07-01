@@ -1161,6 +1161,16 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 .comment-toggle[aria-expanded="true"] { color: var(--ember); }
 .comment-toggle svg { width: 1.05rem; height: 1.05rem; flex-shrink: 0; }
 
+/* The shared reply form's "replying to name" hint (issue #58): a muted line
+   above the textarea, matching the .comment-mention marker on existing replies.
+   Hidden when the form isn't pointed at a comment. */
+.comment-reply-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.comment-reply-hint[hidden] { display: none; }
+
 .comment-form { margin-top: 0.6rem; }
 /* display is set on .comment-form below; restore the UA [hidden] behaviour. */
 .comment-form[hidden] { display: none; }

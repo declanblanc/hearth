@@ -239,6 +239,22 @@
       {{range .Comments}}{{template "commentnode" .}}{{end}}
     </ul>
   {{end}}
+  {{/* One shared reply form for the whole thread (issue #58). It sits at the
+       bottom, below every existing reply, and stays hidden until a comment's
+       Reply button is clicked. comments.js then points its action/hx-post at
+       the chosen parent comment (/comments/<id>/replies), fills the "replying
+       to" hint, and reveals it. Because the whole section is swapped after a
+       reply posts, this form re-renders hidden again with a blank hint. */}}
+  <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
+        method="post" action="" hx-post="" hx-target="#comments-{{.ID}}" hx-swap="outerHTML">
+    <p class="comment-reply-hint" hidden></p>
+    <label for="reply-input-{{.ID}}" class="visually-hidden">Write a reply</label>
+    <textarea id="reply-input-{{.ID}}" name="content" rows="2" maxlength="1000"
+              placeholder="Write a reply…" required></textarea>
+    <div class="comment-form-actions">
+      <button type="submit" class="button-secondary">Reply</button>
+    </div>
+  </form>
   {{/* The add-comment box opens here, below any existing comments, when the
        "Comment" button up in the post's action row is clicked (issue #29).
        That button (the "commenttrigger" template) targets this
@@ -280,8 +296,14 @@
   {{if not .Deleted}}
   <div class="comment-actions">
     {{/* Every visible comment accepts replies now — depth is unbounded in the
-         data and flattened into one tier on render. */}}
-    <button type="button" class="linklike comment-reply-toggle" data-toggle-target="reply-{{.ID}}" aria-expanded="false">Reply</button>
+         data and flattened into one tier on render. There is no per-comment
+         reply form: clicking Reply reveals the single shared reply form at the
+         bottom of the thread and points it at this comment (issue #58).
+         data-reply-to carries the parent id used to build the reply URL;
+         data-reply-to-name is the attribution shown in the form's hint. */}}
+    <button type="button" class="linklike comment-reply-toggle"
+            data-reply-to="{{.ID}}" data-reply-to-name="{{.AuthorName}}"
+            aria-expanded="false">Reply</button>
     {{if .CanDelete}}
       <form method="post" action="/comments/{{.ID}}/delete" class="inline-form"
             hx-post="/comments/{{.ID}}/delete" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML"
@@ -290,16 +312,6 @@
       </form>
     {{end}}
   </div>
-  <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
-        method="post" action="/comments/{{.ID}}/replies"
-        hx-post="/comments/{{.ID}}/replies" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML">
-    <label for="reply-input-{{.ID}}" class="visually-hidden">Write a reply</label>
-    <textarea id="reply-input-{{.ID}}" name="content" rows="2" maxlength="1000"
-              placeholder="Write a reply…" required></textarea>
-    <div class="comment-form-actions">
-      <button type="submit" class="button-secondary">Reply</button>
-    </div>
-  </form>
   {{end}}
   {{/* Only roots emit the replies list — children are already flattened, so they
        never nest a list of their own. This guarantees exactly one <ul> level. */}}
