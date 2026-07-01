@@ -1806,3 +1806,35 @@ span.invite-url { box-shadow: none; }
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---- Notification target highlight (issue #59) --------------------------- */
+/* When a notification link deep-links to a post (#post-N) or a reply comment
+   (#comment-N), the page scrolls there but nothing marks which one was meant.
+   highlight-target.js adds this class to the anchored element on load; a short
+   accent glow fades out so the target stands out on arrival, then leaves the
+   element visually normal.
+   The animation fills backwards/forwards so the tint is present from frame one
+   even before scroll settles. */
+.highlight-target {
+  animation: highlight-fade 2s ease-out forwards;
+}
+@keyframes highlight-fade {
+  0% {
+    background-color: color-mix(in srgb, var(--ember) 22%, transparent);
+    box-shadow: 0 0 0 2px var(--ember);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+/* Reduced-motion: the global rule above collapses the fade to nothing, so give
+   these viewers a brief static tint instead. highlight-target.js removes the
+   class after the timeout, which clears the tint without any animation. */
+@media (prefers-reduced-motion: reduce) {
+  .highlight-target {
+    animation: none;
+    background-color: color-mix(in srgb, var(--ember) 18%, transparent);
+    box-shadow: 0 0 0 2px var(--ember);
+  }
+}

@@ -12,9 +12,17 @@
            username comes from the post itself, not the recipient: a
            reply_to_comment recipient may be a commenter, not the post author.
            If the post or its author is gone, PostAuthorUsername is empty and
-           we fall back to plain text rather than a broken link. */}}
+           we fall back to plain text rather than a broken link.
+
+           A reply deep-links to the reply comment itself (#comment-{id}) so the
+           thread scrolls to — and highlights — the new reply, not just the post
+           it lives under (issue #59). CommentID is the newly created comment. */}}
       {{$postLink := ""}}
-      {{if and .PostID .PostAuthorUsername}}{{$postLink = printf "/u/%s#post-%d" .PostAuthorUsername .PostID}}{{end}}
+      {{$commentLink := ""}}
+      {{if and .PostID .PostAuthorUsername}}
+        {{$postLink = printf "/u/%s#post-%d" .PostAuthorUsername .PostID}}
+        {{if .CommentID}}{{$commentLink = printf "/u/%s#comment-%d" .PostAuthorUsername .CommentID}}{{end}}
+      {{end}}
       <li class="notification-item{{if not .Read}} unread{{end}}">
         <span class="notification-text">
           {{if eq .Type "connection_accepted"}}
@@ -28,7 +36,7 @@
             commented on {{if $postLink}}<a href="{{$postLink}}">your post</a>{{else}}your post{{end}}.
           {{else if eq .Type "reply_to_comment"}}
             {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            replied to {{if $postLink}}<a href="{{$postLink}}">your comment</a>{{else}}your comment{{end}}.
+            replied to {{if $commentLink}}<a href="{{$commentLink}}">your comment</a>{{else if $postLink}}<a href="{{$postLink}}">your comment</a>{{else}}your comment{{end}}.
           {{else}}
             You have a new notification.
           {{end}}

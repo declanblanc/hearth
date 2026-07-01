@@ -9,6 +9,13 @@ retroactively to mark meaningful steps, not formal releases.
 
 ## [Unreleased]
 
+### Added
+
+- Opening a post or comment from a notification now briefly highlights the
+  target with a fading accent glow, so the item the notification pointed to
+  stands out on arrival. Reply notifications now deep-link to the reply itself
+  rather than just the post it lives under.
+
 ### Changed
 
 - Comments can now be replied to at any depth; replies appear in a single flat
