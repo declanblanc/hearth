@@ -12,7 +12,8 @@ retroactively to mark meaningful steps, not formal releases.
 ### Changed
 
 - Comments can now be replied to at any depth; replies appear in a single flat
-  tier under the top-level comment, each labeled with who it answers.
+  tier under the top-level comment, each prefaced by a subtle "replying to
+  {username}" line showing who it answers.
 
 ## [0.9.0] - 2026-06-29
 

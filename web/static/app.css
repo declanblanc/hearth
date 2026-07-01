@@ -1130,12 +1130,12 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   border-left: 0;
 }
 
-/* "@name" prefix marking which comment a flattened reply answers. Tinted with
-   the same ember the app uses for links, set just ahead of the reply body. */
+/* "replying to name" line marking which comment a flattened reply answers. A
+   subtle, muted line set just above the reply body, distinct from the text. */
 .comment-mention {
-  font-weight: 600;
-  margin-right: 0.35rem;
-  color: var(--ember-deep);
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
 }
 
 /* ---- Add-comment / reply boxes (hidden until toggled by comments.js) ------ */

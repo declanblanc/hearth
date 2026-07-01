@@ -260,9 +260,10 @@
 {{/* commentnode renders one comment. A top-level comment (ParentID == 0) also
      emits its replies as a single flat list — every descendant has been
      flattened into one tier, so only roots produce a <ul> and indentation never
-     compounds past two visual tiers. A reply shows an "@name" prefix pointing at
-     the comment it answers (.ReplyToName). A soft-deleted comment shows a
-     "[deleted]" placeholder but keeps its replies so the thread survives (Build
+     compounds past two visual tiers. A reply shows a subtle "replying to name"
+     line above its body pointing at the comment it answers (.ReplyToName). A
+     soft-deleted comment shows a "[deleted]" placeholder but keeps its replies
+     so the thread survives (Build
      Plan §2.2). Reply/Delete forms target the whole post thread
      (#comments-<postID>); comments.js toggles the reply box. */}}
 {{define "commentnode"}}
@@ -275,7 +276,7 @@
     {{end}}
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </div>
-  {{if not .Deleted}}<div class="comment-content">{{if .ReplyToName}}<span class="comment-mention">@{{.ReplyToName}}</span>{{end}}{{.Content}}</div>{{end}}
+  {{if not .Deleted}}{{if .ReplyToName}}<p class="comment-mention">replying to {{.ReplyToName}}</p>{{end}}<div class="comment-content">{{.Content}}</div>{{end}}
   {{if not .Deleted}}
   <div class="comment-actions">
     {{/* Every visible comment accepts replies now — depth is unbounded in the
