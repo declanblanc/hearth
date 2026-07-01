@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/dblanc/hearth/internal/shared/db"
 )
 
 // Notification types. Phase 1 uses the first two; the comment types arrive in
@@ -18,6 +20,9 @@ const (
 	TypeConnectionAccepted = "connection_accepted"
 	TypeCommentOnPost      = "comment_on_post"
 	TypeReplyToComment     = "reply_to_comment"
+	// TypeNewRelease is a release announcement sent to every user. It has no
+	// actor or post — the /notifications view links it straight to /changelog.
+	TypeNewRelease = "new_release"
 )
 
 type Service struct {
@@ -144,6 +149,38 @@ func (s *Service) HasUnread(ctx context.Context, userID int64) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// AnnounceRelease posts an in-app new-release notification to every active user
+// the first time it sees a given version. It is idempotent across restarts and
+// deploys: the announced_releases marker records each version, so a second call
+// with the same version is a no-op. Runs at startup after migrations.
+//
+// ponytail: in-app only — no email preference flag. Email dispatch is Phase 3
+// and no code reads notification_preferences yet; add a new_releases flag when
+// email lands.
+func (s *Service) AnnounceRelease(ctx context.Context, version string) error {
+	return db.WithImmediate(ctx, s.DB, func(conn *sql.Conn) error {
+		// Claim the version. INSERT OR IGNORE returns 0 rows affected if it was
+		// already announced, which is our signal to stop.
+		res, err := conn.ExecContext(ctx,
+			`INSERT OR IGNORE INTO announced_releases (version, announced_at) VALUES (?, ?)`,
+			version, s.Now())
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return nil // already announced
+		}
+
+		// Fan out to every active user in a single statement (fine at ~1,000
+		// users). Soft-deleted accounts are skipped.
+		_, err = conn.ExecContext(ctx,
+			`INSERT INTO notifications (user_id, type, created_at)
+			 SELECT id, ?, ? FROM users WHERE deleted_at IS NULL`,
+			TypeNewRelease, s.Now())
+		return err
+	})
 }
 
 func nullID(id int64) any {

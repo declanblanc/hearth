@@ -237,3 +237,56 @@ func TestHasUnreadAndMarkRead(t *testing.T) {
 		t.Error("notification should still exist and be marked read")
 	}
 }
+
+func TestAnnounceReleaseIsIdempotent(t *testing.T) {
+	d := newTestDB(t)
+	svc := New(d)
+	ctx := context.Background()
+
+	active := seedUser(t, d, "active_one")
+	seedUser(t, d, "active_two")
+
+	// A soft-deleted user should not be notified.
+	deleted := seedUser(t, d, "gone")
+	if _, err := d.Exec(`UPDATE users SET deleted_at = ? WHERE id = ?`, time.Now(), deleted); err != nil {
+		t.Fatalf("soft-delete user: %v", err)
+	}
+
+	countReleases := func() int {
+		var n int
+		if err := d.QueryRow(
+			`SELECT COUNT(*) FROM notifications WHERE type = ?`, TypeNewRelease,
+		).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		return n
+	}
+
+	if err := svc.AnnounceRelease(ctx, "1.0.0"); err != nil {
+		t.Fatalf("AnnounceRelease: %v", err)
+	}
+	if got := countReleases(); got != 2 {
+		t.Fatalf("want one notification per active user (2), got %d", got)
+	}
+	// The active user got it; the deleted one did not.
+	items, _ := svc.List(ctx, active)
+	if len(items) != 1 || items[0].Type != TypeNewRelease {
+		t.Fatalf("active user should have one new_release notification, got %v", items)
+	}
+
+	// Announcing the same version again is a no-op.
+	if err := svc.AnnounceRelease(ctx, "1.0.0"); err != nil {
+		t.Fatalf("AnnounceRelease (repeat): %v", err)
+	}
+	if got := countReleases(); got != 2 {
+		t.Fatalf("repeat announce should add nothing, got %d", got)
+	}
+
+	// A new version announces afresh.
+	if err := svc.AnnounceRelease(ctx, "1.1.0"); err != nil {
+		t.Fatalf("AnnounceRelease (new version): %v", err)
+	}
+	if got := countReleases(); got != 4 {
+		t.Fatalf("new version should notify both active users again (4), got %d", got)
+	}
+}
