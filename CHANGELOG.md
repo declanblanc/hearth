@@ -7,7 +7,7 @@ All notable changes to Hearth are documented here. Format follows
 Versions are pre-1.0 development milestones; numbers are assigned
 retroactively to mark meaningful steps, not formal releases.
 
-## [Unreleased]
+## [0.10.0] - 2026-06-30
 
 ### Added
 
@@ -179,6 +179,7 @@ retroactively to mark meaningful steps, not formal releases.
 - Base layout, auth and profile templates, minimal CSS.
 - Litestream sidecar for streaming WAL backups.
 
+[0.10.0]: https://github.com/declanblanc/hearth/releases/tag/v0.10.0
 [0.9.0]: https://github.com/declanblanc/hearth/releases/tag/v0.9.0
 [0.8.0]: https://github.com/declanblanc/hearth/releases/tag/v0.8.0
 [0.7.0]: https://github.com/declanblanc/hearth/releases/tag/v0.7.0
