@@ -8,6 +8,7 @@ package pages
 import (
 	"net/http"
 
+	"github.com/dblanc/hearth/internal/changelog"
 	"github.com/dblanc/hearth/internal/shared/middleware"
 	"github.com/dblanc/hearth/internal/shared/render"
 )
@@ -28,11 +29,13 @@ func NewHandlers(r *render.Renderer, feedRoot http.Handler, baseURL string) *Han
 	return &Handlers{Renderer: r, FeedRoot: feedRoot, BaseURL: baseURL}
 }
 
-// Mount registers the public root and the About page. Both are bare (no
-// RequireAuth): root does its own auth branch, and About is readable by anyone.
+// Mount registers the public root, About, and What's New pages. All are bare
+// (no RequireAuth): root does its own auth branch, and About and the changelog
+// are readable by anyone.
 func (h *Handlers) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /{$}", h.root)
 	mux.HandleFunc("GET /about", h.about)
+	mux.HandleFunc("GET /changelog", h.changelog)
 }
 
 // root serves the home feed to signed-in viewers and the landing page to
@@ -53,4 +56,11 @@ func (h *Handlers) about(w http.ResponseWriter, r *http.Request) {
 	// whether or not the reader is signed in.
 	u := middleware.UserFrom(r.Context())
 	h.Renderer.HTML(w, "about.html", render.Page(u, nil))
+}
+
+// changelog serves the public "What's New" page — the plain-language, user-facing
+// list of recent changes (distinct from the developer-facing CHANGELOG.md).
+func (h *Handlers) changelog(w http.ResponseWriter, r *http.Request) {
+	u := middleware.UserFrom(r.Context())
+	h.Renderer.HTML(w, "changelog.html", render.Page(u, render.M{"Releases": changelog.Releases}))
 }

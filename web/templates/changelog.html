@@ -1,0 +1,17 @@
+{{define "changelog.html"}}{{template "base" .}}{{end}}
+{{define "title"}}What's New — Hearth{{end}}
+{{define "content"}}
+<section class="changelog">
+  <h1>What's New</h1>
+  <p class="muted">The latest updates to Hearth, newest first.</p>
+
+  {{range .Releases}}
+    <div class="changelog-release">
+      <h2>{{.Date}}</h2>
+      <ul class="changelog-changes">
+        {{range .Changes}}<li>{{.}}</li>{{end}}
+      </ul>
+    </div>
+  {{end}}
+</section>
+{{end}}
