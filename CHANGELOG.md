@@ -7,6 +7,13 @@ All notable changes to Hearth are documented here. Format follows
 Versions are pre-1.0 development milestones; numbers are assigned
 retroactively to mark meaningful steps, not formal releases.
 
+## [Unreleased]
+
+### Changed
+
+- A reply to one of your own comments now reads "replying to you" (in a warm
+  accent, so it stands out) instead of repeating your own name.
+
 ## [0.10.0] - 2026-06-30
 
 ### Added

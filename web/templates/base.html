@@ -279,7 +279,7 @@
     {{end}}
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </div>
-  {{if not .Deleted}}{{if .ReplyToName}}<p class="comment-mention">replying to {{.ReplyToName}}</p>{{end}}<div class="comment-content">{{.Content}}</div>{{end}}
+  {{if not .Deleted}}{{if .ReplyToSelf}}<p class="comment-mention comment-mention-self">replying to <span>you</span></p>{{else if .ReplyToName}}<p class="comment-mention">replying to {{.ReplyToName}}</p>{{end}}<div class="comment-content">{{.Content}}</div>{{end}}
   {{if not .Deleted}}
   <div class="comment-actions">
     {{/* Every visible comment accepts replies — depth is unbounded in the data

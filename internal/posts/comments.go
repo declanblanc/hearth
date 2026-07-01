@@ -78,6 +78,9 @@ type Comment struct {
 	// for top-level or when the parent is hidden/deleted. Drives the "@name"
 	// prefix once all descendants are flattened into one tier under their root.
 	ReplyToName string
+	// ReplyToSelf is true when the parent comment is the viewer's own, so the
+	// mention reads "replying to you" instead of the viewer's own name.
+	ReplyToSelf bool
 }
 
 // validateComment trims and length-checks comment content.
@@ -491,6 +494,7 @@ func buildThreads(flat []*Comment, viewerID, postAuthorID int64, connected map[i
 		// nameless tombstone, so leave the mention empty there.
 		if parent, ok := byID[c.ParentID]; ok && !parent.Deleted {
 			c.ReplyToName = parent.AuthorName
+			c.ReplyToSelf = parent.AuthorID == viewerID
 		}
 		// Input is already time-ordered and we append in iteration order, so each
 		// root's flat Children come out oldest-first — no re-sort needed.

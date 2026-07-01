@@ -1138,6 +1138,17 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   color: var(--ink-soft);
 }
 
+/* A reply to the viewer's own comment — pull it out of the muted grey so the
+   reader notices they were answered directly. */
+.comment-mention-self {
+  color: var(--ember-deep);
+  font-weight: 600;
+}
+.comment-mention-self span {
+  color: var(--ember);
+  text-shadow: 0 0 6px rgba(189, 75, 39, 0.35);
+}
+
 /* ---- Add-comment / reply boxes (hidden until toggled by comments.js) ------ */
 
 /* The "Comment" entry point lives in the post's action row — a small icon +

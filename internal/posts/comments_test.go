@@ -248,6 +248,45 @@ func TestListThread_FlattensDeepRepliesWithMention(t *testing.T) {
 	}
 }
 
+// TestListThread_ReplyToSelf confirms a reply's ReplyToSelf flag is set only
+// when the comment it answers belongs to the viewer, so the mention can read
+// "replying to you" instead of the viewer's own name.
+func TestListThread_ReplyToSelf(t *testing.T) {
+	d := newTestDB(t)
+	svc := newCommentSvc(d)
+	ctx := context.Background()
+	author := seedUser(t, d, "author")
+	commenter := seedUser(t, d, "commenter")
+	connect(t, d, author, commenter)
+	post := seedActivePost(t, d, author)
+
+	top, _ := svc.Create(ctx, post, author, "top-level by author")
+	reply, _ := svc.Reply(ctx, top.ID, commenter, "commenter answers author")
+	deep, _ := svc.Reply(ctx, reply.ID, author, "author answers commenter")
+
+	// Viewing as the author: the commenter's reply answers the author's own
+	// comment, so it's a self-reply; the author's deep reply answers the
+	// commenter, so it is not.
+	roots, err := svc.ListThread(ctx, post, author)
+	if err != nil {
+		t.Fatalf("ListThread: %v", err)
+	}
+	root := roots[0]
+	if root.ReplyToSelf {
+		t.Error("top-level comment should not be marked ReplyToSelf")
+	}
+	byID := map[int64]*Comment{}
+	for _, c := range root.Children {
+		byID[c.ID] = c
+	}
+	if !byID[reply.ID].ReplyToSelf {
+		t.Error("reply to the viewer's own comment should be ReplyToSelf")
+	}
+	if byID[deep.ID].ReplyToSelf {
+		t.Error("reply to another user's comment should not be ReplyToSelf")
+	}
+}
+
 // TestListThread_HidesNonConnectedAuthors is issue #23's exact scenario: Bob
 // comments on Alice's post; Eve is connected to Alice but not Bob, so Eve must
 // not see Bob's comment — and any reply nested under it goes with it.
