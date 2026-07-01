@@ -13,15 +13,29 @@
   "use strict";
 
   // Matches the human-readable fallback produced by the server's `datetime`
-  // template helper, e.g. "Jan 2, 2006, 3:04 PM". We mirror that shape so a
-  // localized timestamp reads identically apart from the timezone it reflects.
-  var DISPLAY_OPTIONS = {
-    year: "numeric",
+  // template helper, e.g. "Jan 2, 3:04 PM". We mirror that shape so a localized
+  // timestamp reads identically apart from the timezone it reflects — including
+  // dropping the year for timestamps in the current year (see optionsFor).
+  var BASE_OPTIONS = {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   };
+
+  // Show the year only when the timestamp isn't in the current year, matching
+  // the server's compact format. A fresh Date() each call keeps it correct
+  // across a midnight/new-year boundary on a long-lived page.
+  function optionsFor(parsed) {
+    if (parsed.getFullYear() === new Date().getFullYear()) {
+      return BASE_OPTIONS;
+    }
+    var withYear = { year: "numeric" };
+    for (var key in BASE_OPTIONS) {
+      withYear[key] = BASE_OPTIONS[key];
+    }
+    return withYear;
+  }
 
   // Localize a single <time> element. Idempotent: once converted, an element is
   // flagged so repeat passes (e.g. after an htmx swap that re-includes it) skip
@@ -43,7 +57,7 @@
     }
 
     try {
-      timeElement.textContent = parsed.toLocaleString(undefined, DISPLAY_OPTIONS);
+      timeElement.textContent = parsed.toLocaleString(undefined, optionsFor(parsed));
     } catch (e) {
       // Intl unavailable or options rejected — keep the server fallback.
       return;

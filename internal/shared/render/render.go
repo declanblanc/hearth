@@ -125,20 +125,35 @@ func (r *Renderer) Error(w http.ResponseWriter, status int) {
 	_ = t.ExecuteTemplate(w, "error.html", map[string]any{"Status": status, "Message": http.StatusText(status)})
 }
 
+// humanDatetime formats t as a compact human-readable UTC string. The year is
+// dropped when t falls in the same year as now — the common case in a feed of
+// recent posts — and kept only for older cross-year timestamps, so the date
+// stays unambiguous without wasting space on a redundant year. Returns "" for
+// the zero time. now is passed in (rather than read from the clock) so the
+// format is deterministic under test.
+func humanDatetime(t, now time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	t = t.UTC()
+	layout := "Jan 2, 3:04 PM"
+	if t.Year() != now.UTC().Year() {
+		layout = "Jan 2, 2006, 3:04 PM"
+	}
+	return t.Format(layout) + " UTC"
+}
+
 func funcMap() template.FuncMap {
 	return template.FuncMap{
 		"safe": func(s string) template.HTML { return template.HTML(s) }, //nolint:gosec
 		// datetime renders a human-readable fallback for a timestamp, e.g.
-		// "Jan 2, 2006, 3:04 PM UTC". Timestamps are stored in UTC, so we
-		// format in UTC and label it as such — this is the text shown when the
-		// client-side localtime.js enhancement does not run. When it does run,
-		// this text is replaced with the value converted to the viewer's local
-		// timezone (see web/static/localtime.js).
+		// "Jan 2, 3:04 PM UTC" (or with the year for older posts). Timestamps
+		// are stored in UTC, so we format in UTC and label it as such — this is
+		// the text shown when the client-side localtime.js enhancement does not
+		// run. When it does run, this text is replaced with the value converted
+		// to the viewer's local timezone (see web/static/localtime.js).
 		"datetime": func(t time.Time) string {
-			if t.IsZero() {
-				return ""
-			}
-			return t.UTC().Format("Jan 2, 2006, 3:04 PM") + " UTC"
+			return humanDatetime(t, time.Now())
 		},
 		// isodatetime renders a machine-readable ISO-8601 timestamp in UTC,
 		// suitable for a <time datetime="..."> attribute. The trailing "Z"

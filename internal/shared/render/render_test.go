@@ -31,16 +31,22 @@ func TestDatetimeRendersUTCFallback(t *testing.T) {
 	}
 	ts := time.Date(2026, time.June, 7, 20, 8, 0, 0, eastern) // 20:08 EDT == 00:08 UTC next day
 
-	got := callStringFunc(t, "datetime", ts)
-	want := "Jun 8, 2026, 12:08 AM UTC"
-	if got != want {
-		t.Errorf("datetime(%v) = %q, want %q", ts, got, want)
+	// Viewed within the same year, the year is dropped for compactness.
+	sameYear := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	if got, want := humanDatetime(ts, sameYear), "Jun 8, 12:08 AM UTC"; got != want {
+		t.Errorf("humanDatetime(%v, same year) = %q, want %q", ts, got, want)
+	}
+
+	// Viewed in a later year, the year is kept so the date stays unambiguous.
+	laterYear := time.Date(2027, time.January, 2, 0, 0, 0, 0, time.UTC)
+	if got, want := humanDatetime(ts, laterYear), "Jun 8, 2026, 12:08 AM UTC"; got != want {
+		t.Errorf("humanDatetime(%v, later year) = %q, want %q", ts, got, want)
 	}
 }
 
 func TestDatetimeZeroIsEmpty(t *testing.T) {
-	if got := callStringFunc(t, "datetime", time.Time{}); got != "" {
-		t.Errorf("datetime(zero) = %q, want empty string", got)
+	if got := humanDatetime(time.Time{}, time.Now()); got != "" {
+		t.Errorf("humanDatetime(zero) = %q, want empty string", got)
 	}
 }
 

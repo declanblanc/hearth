@@ -22,6 +22,9 @@
   /* Warm ink on warm paper — nothing is pure black or pure white. */
   --ink:        #2c2018;
   --ink-soft:   #7a6a5b;
+  /* Fainter still than --ink-soft, for post/comment timestamps that should
+     recede behind the surrounding text and controls. */
+  --ink-faint:  #b3a593;
   --paper:      #f4eee2;
   --paper-deep: #ece3d2;
   --raised:     #fffdf8;
@@ -88,6 +91,7 @@
      black walnut, ink to warm cream, the ember and glow pulled brighter. */
   --ink:        #f3e7d3;
   --ink-soft:   #b69c7f;
+  --ink-faint:  #786246;
   --paper:      #140c06;
   --paper-deep: #1d130b;
   --raised:     #241810;
@@ -474,6 +478,9 @@ textarea:focus {
 /* ---- Messaging ----------------------------------------------------------- */
 .error { color: var(--error); }
 .muted { color: var(--ink-soft); }
+/* Post and comment timestamps sit a step fainter than other muted text. */
+.post-meta .muted,
+.comment-head .muted { color: var(--ink-faint); }
 small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 
 .banner {

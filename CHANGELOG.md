@@ -24,6 +24,8 @@ retroactively to mark meaningful steps, not formal releases.
   accent, so it stands out) instead of repeating your own name.
 - Deleting a post or comment now asks for confirmation in a styled in-app
   dialog instead of the browser's native prompt.
+- Post and comment timestamps are more compact — the year is omitted for
+  posts from the current year — and rendered in a fainter tone.
 
 ## [0.10.0] - 2026-06-30
 
