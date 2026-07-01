@@ -24,6 +24,9 @@ retroactively to mark meaningful steps, not formal releases.
 - Clicking "Reply" on any comment now opens a single reply box at the bottom of
   that comment's thread, below its existing replies, instead of an inline box
   under each comment. The box shows which comment you're replying to.
+- Each notification is now a single clickable row that opens its point of
+  interest directly — the comment for a comment or reply, the person's profile
+  for a new connection — instead of embedding several links in the text.
 
 ## [0.9.0] - 2026-06-29
 

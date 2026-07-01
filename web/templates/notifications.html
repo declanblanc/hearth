@@ -4,45 +4,39 @@
 <h1>Notifications</h1>
 
 {{if .Items}}
-  <ul class="notification-list">
+  <div class="notification-list">
     {{range .Items}}
-      {{/* Comment and reply notifications deep-link to the new comment itself
-           (#comment-{id}) on the post author's profile, so the thread scrolls to
-           — and highlights (#59) — the comment that is the point of interest,
-           not just the post it lives under. CommentID is the newly created
-           comment. The author's username comes from the post itself, not the
-           recipient: a reply_to_comment recipient may be a commenter, not the
-           post author. If the comment is missing we fall back to #post-{id}, and
-           if the post or its author is gone, PostAuthorUsername is empty and we
-           fall back to plain text rather than a broken link. */}}
-      {{$postLink := ""}}
-      {{$commentLink := ""}}
-      {{if and .PostID .PostAuthorUsername}}
-        {{$postLink = printf "/u/%s#post-%d" .PostAuthorUsername .PostID}}
-        {{if .CommentID}}{{$commentLink = printf "/u/%s#comment-%d" .PostAuthorUsername .CommentID}}{{end}}
+      {{/* The whole notification is one link to its point of interest. A comment
+           or reply points at the comment on the post author's profile
+           (#comment-{id}), so the thread scrolls to and highlights it (#59),
+           falling back to the post if the comment id is gone. A connection
+           points at the connected person's profile. PostAuthorUsername comes
+           from the post, not the recipient: a reply recipient may be a
+           commenter, not the author. When the target is gone we render a
+           non-clickable item (an <a> without href) rather than a dead link. */}}
+      {{$link := ""}}
+      {{if eq .Type "connection_accepted"}}
+        {{if .ActorUsername}}{{$link = printf "/u/%s" .ActorUsername}}{{end}}
+      {{else if and .PostID .PostAuthorUsername}}
+        {{if .CommentID}}{{$link = printf "/u/%s#comment-%d" .PostAuthorUsername .CommentID}}{{else}}{{$link = printf "/u/%s#post-%d" .PostAuthorUsername .PostID}}{{end}}
       {{end}}
-      <li class="notification-item{{if not .Read}} unread{{end}}">
+      <a class="notification-item{{if not .Read}} unread{{end}}"{{if $link}} href="{{$link}}"{{end}}>
         <span class="notification-text">
+          {{$actor := "Someone"}}{{if .ActorUsername}}{{$actor = .ActorName}}{{end}}
           {{if eq .Type "connection_accepted"}}
-            {{/* Sent to the inviter when their invitation is accepted. The
-                 actor link lets them open the new connection's profile and
-                 disconnect there if they didn't mean to connect. */}}
-            {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            accepted your invitation. You're now connected.
+            <strong class="notification-actor">{{$actor}}</strong> accepted your invitation. You're now connected.
           {{else if eq .Type "comment_on_post"}}
-            {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            commented on {{if $commentLink}}<a href="{{$commentLink}}">your post</a>{{else if $postLink}}<a href="{{$postLink}}">your post</a>{{else}}your post{{end}}.
+            <strong class="notification-actor">{{$actor}}</strong> commented on your post.
           {{else if eq .Type "reply_to_comment"}}
-            {{if .ActorUsername}}<a href="/u/{{.ActorUsername}}">{{.ActorName}}</a>{{else}}Someone{{end}}
-            replied to {{if $commentLink}}<a href="{{$commentLink}}">your comment</a>{{else if $postLink}}<a href="{{$postLink}}">your comment</a>{{else}}your comment{{end}}.
+            <strong class="notification-actor">{{$actor}}</strong> replied to your comment.
           {{else}}
             You have a new notification.
           {{end}}
         </span>
         <span class="muted notification-time"><time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
-      </li>
+      </a>
     {{end}}
-  </ul>
+  </div>
 {{else}}
   <p class="muted empty">Nothing here yet.</p>
 {{end}}

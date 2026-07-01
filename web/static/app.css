@@ -1391,20 +1391,33 @@ span.invite-url { box-shadow: none; }
 }
 
 /* ---- Notifications ------------------------------------------------------- */
+/* Each notification is one block-level link to its point of interest (a comment
+   or a connection's profile). The horizontal padding + negative margin give the
+   whole row a hover target that bleeds to the list edge. An item whose target is
+   gone renders as an <a> without href — [href] scopes the clickable affordances
+   so it stays inert. */
 .notification-item {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.9rem 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-.notification-item.unread {
-  position: relative;
-  background: linear-gradient(90deg, rgba(227, 162, 90, 0.14), transparent 70%);
   margin: 0 -1rem;
   padding: 0.9rem 1rem;
   border-radius: 8px;
+  border-bottom: 1px solid var(--line-soft);
+  text-decoration: none;
+  color: var(--ink);
+  transition: background 0.15s ease;
+}
+.notification-item[href] { cursor: pointer; }
+.notification-item[href]:hover { background: var(--paper-deep); }
+.notification-actor { font-weight: 600; }
+.notification-item.unread {
+  position: relative;
+  background: linear-gradient(90deg, rgba(227, 162, 90, 0.14), transparent 70%);
   border-bottom-color: transparent;
+}
+.notification-item.unread[href]:hover {
+  background: linear-gradient(90deg, rgba(227, 162, 90, 0.2), transparent 70%);
 }
 .notification-item.unread::before {
   content: "";

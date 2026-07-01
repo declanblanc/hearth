@@ -11,11 +11,11 @@ import (
 	"github.com/dblanc/hearth/web"
 )
 
-// TestRender_NotificationsDeepLinkAndText is a render-path smoke test for issue
-// #22: it renders the real notifications.html template through the production
-// renderer and asserts (a) comment/reply notifications produce a deep link to
-// the post and meaningful text, and (b) the generic "You have a new
-// notification" fallback is never reached for known types.
+// TestRender_NotificationsDeepLinkAndText renders the real notifications.html
+// template through the production renderer and asserts each notification is a
+// single block-level link to its point of interest — a comment/reply to the
+// comment on the post author's profile, a connection to the connected person's
+// profile — with meaningful text and no separate inner links.
 func TestRender_NotificationsDeepLinkAndText(t *testing.T) {
 	r, err := render.NewFromEmbed(web.TemplatesFS, "templates", true)
 	if err != nil {
@@ -61,5 +61,14 @@ func TestRender_NotificationsDeepLinkAndText(t *testing.T) {
 	// The generic fallback must never appear for these known types.
 	if strings.Contains(html, "You have a new notification") {
 		t.Errorf("generic fallback text leaked for a known notification type\n---\n%s", html)
+	}
+
+	// The whole item is the only link: the actor's name must NOT be a separate
+	// profile link, and there should be exactly one anchor per notification.
+	if strings.Contains(html, `href="/u/carol"`) || strings.Contains(html, `href="/u/dave"`) {
+		t.Errorf("actor name should not be a separate link; only the item links\n---\n%s", html)
+	}
+	if n := strings.Count(html, `class="notification-item`); n != len(items) {
+		t.Errorf("expected exactly one notification-item anchor per notification (%d), got %d\n---\n%s", len(items), n, html)
 	}
 }
