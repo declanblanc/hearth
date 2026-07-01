@@ -33,6 +33,34 @@ func TestStagingRequiresCookieSecret(t *testing.T) {
 	}
 }
 
+func TestProductionRequiresResendKey(t *testing.T) {
+	t.Setenv("HEARTH_COOKIE_SECRET", "a-sufficiently-long-cookie-secret-value")
+
+	t.Run("production without Resend key fails", func(t *testing.T) {
+		t.Setenv("HEARTH_ENV", "production")
+		t.Setenv("RESEND_API_KEY", "")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() = nil error, want error when production has no Resend key")
+		}
+	})
+
+	t.Run("production with Resend key succeeds", func(t *testing.T) {
+		t.Setenv("HEARTH_ENV", "production")
+		t.Setenv("RESEND_API_KEY", "re_test_key")
+		if _, err := Load(); err != nil {
+			t.Fatalf("Load() returned error for production with Resend key: %v", err)
+		}
+	})
+
+	t.Run("development without Resend key succeeds", func(t *testing.T) {
+		t.Setenv("HEARTH_ENV", "development")
+		t.Setenv("RESEND_API_KEY", "")
+		if _, err := Load(); err != nil {
+			t.Fatalf("Load() returned error for development without Resend key: %v", err)
+		}
+	})
+}
+
 func TestSeedAndDeployMatrix(t *testing.T) {
 	cases := []struct {
 		env          Env

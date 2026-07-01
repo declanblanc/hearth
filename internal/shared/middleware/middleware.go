@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -116,17 +117,98 @@ func RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
-// ClientIP returns the best-effort client IP. Honours Fly-Client-IP (Fly.io)
-// and X-Forwarded-For when present; otherwise falls back to RemoteAddr.
+// MaxBodyBytes caps the size of request bodies for methods that carry one
+// (everything except GET/HEAD). Bodies over the limit fail when a handler reads
+// them, so multipart parsing and form decoding error out instead of buffering
+// unbounded data to memory or disk. The limit must sit comfortably above the
+// 8 MiB per-image cap so legitimate uploads still succeed.
+func MaxBodyBytes(limit int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				r.Body = http.MaxBytesReader(w, r.Body, limit)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// SameOrigin rejects state-changing requests (anything but GET/HEAD/OPTIONS)
+// that don't originate from the site itself. It's CSRF defence-in-depth on top
+// of the SameSite=Lax session cookie: a stateless Origin/Referer check with no
+// per-form tokens to plumb through templates or htmx.
+//
+// trustedOrigin is the site's own base URL (cfg.BaseURL); its scheme+host is the
+// only origin we accept for mutations. htmx sends the Origin header, so it's
+// covered automatically.
+func SameOrigin(trustedOrigin string) func(http.Handler) http.Handler {
+	// Precompute the trusted scheme://host once at startup.
+	want := originOf(trustedOrigin)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isSafeMethod(r.Method) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !originAllowed(r, want) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// isSafeMethod reports whether the method is read-only and thus exempt from the
+// origin check. These methods must never mutate state.
+func isSafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+// originAllowed checks that a state-changing request came from the trusted
+// origin. It prefers the Origin header; when absent (some legitimate requests
+// omit it) it falls back to the Referer's scheme+host. A request with neither a
+// matching Origin nor a matching Referer is rejected — for a browser-only htmx
+// app that's the safe default, since real browsers always send at least one on
+// same-origin form posts and fetches.
+func originAllowed(r *http.Request, want string) bool {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		return originOf(origin) == want
+	}
+	if referer := r.Header.Get("Referer"); referer != "" {
+		return originOf(referer) == want
+	}
+	return false
+}
+
+// originOf reduces a URL to its "scheme://host" form for comparison, dropping
+// any path, query, or fragment. Returns "" if the input can't be parsed or
+// lacks a scheme/host.
+func originOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// ClientIP returns the best-effort client IP for use as a rate-limit key.
+//
+// Only Fly-Client-IP is trusted. Fly.io is the sole supported reverse proxy,
+// and its proxy sets Fly-Client-IP to the real client address, overwriting any
+// value a client tries to supply. We deliberately do NOT read X-Forwarded-For:
+// that header is client-appendable, so trusting it would let an attacker rotate
+// spoofed IPs to evade the failed-login/password-reset throttle or pin a
+// victim's IP in the limiter. When Fly-Client-IP is absent (local dev or any
+// non-Fly path) we fall back to RemoteAddr, which cannot be spoofed.
 func ClientIP(r *http.Request) string {
 	if ip := r.Header.Get("Fly-Client-IP"); ip != "" {
 		return ip
-	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
 	}
 	host := r.RemoteAddr
 	if i := strings.LastIndexByte(host, ':'); i > 0 {

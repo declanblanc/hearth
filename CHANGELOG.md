@@ -9,6 +9,21 @@ retroactively to mark meaningful steps, not formal releases.
 
 ## [Unreleased]
 
+### Security
+
+- Production now refuses to start if transactional email is not configured, so
+  password-reset and verification tokens can never fall back to being logged to
+  stdout. Staging and development are unaffected.
+- Rate limiting no longer trusts the spoofable X-Forwarded-For header; only
+  Fly's authoritative client IP (or the direct connection address) is used, so
+  an attacker can no longer rotate forged IPs to evade login/password-reset
+  throttling or pin a victim's IP.
+- The server now enforces read, write, and idle timeouts and caps the size of
+  incoming request bodies, so slow or oversized requests can't tie up
+  connections or grow unbounded.
+- State-changing requests are now rejected unless they originate from the site
+  itself (CSRF defense-in-depth on top of the SameSite session cookie).
+
 ### Changed
 
 - A reply to one of your own comments now reads "replying to you" (in a warm
