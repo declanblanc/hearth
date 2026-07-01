@@ -1141,12 +1141,9 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
 /* A reply to the viewer's own comment — pull it out of the muted grey so the
    reader notices they were answered directly. */
 .comment-mention-self {
-  color: var(--ember-deep);
+  color: #c9820f;
   font-weight: 600;
-}
-.comment-mention-self span {
-  color: var(--ember);
-  text-shadow: 0 0 6px rgba(189, 75, 39, 0.35);
+  text-shadow: 0 0 7px rgba(230, 176, 74, 0.55);
 }
 
 /* ---- Add-comment / reply boxes (hidden until toggled by comments.js) ------ */
