@@ -13,17 +13,17 @@ retroactively to mark meaningful steps, not formal releases.
 
 - Opening a post or comment from a notification now briefly highlights the
   target with a fading accent glow, so the item the notification pointed to
-  stands out on arrival. Reply notifications now deep-link to the reply itself
-  rather than just the post it lives under.
+  stands out on arrival. Comment and reply notifications now deep-link to the
+  comment itself rather than just the post it lives under.
 
 ### Changed
 
 - Comments can now be replied to at any depth; replies appear in a single flat
   tier under the top-level comment, each prefaced by a subtle "replying to
   {username}" line showing who it answers.
-- Clicking "Reply" on any comment now opens one shared reply box at the bottom
-  of the thread, below every existing reply, instead of an inline box under
-  each comment. The box shows which comment you're replying to.
+- Clicking "Reply" on any comment now opens a single reply box at the bottom of
+  that comment's thread, below its existing replies, instead of an inline box
+  under each comment. The box shows which comment you're replying to.
 
 ## [0.9.0] - 2026-06-29
 

@@ -240,22 +240,6 @@
       {{range .Comments}}{{template "commentnode" .}}{{end}}
     </ul>
   {{end}}
-  {{/* One shared reply form for the whole thread (issue #58). It sits at the
-       bottom, below every existing reply, and stays hidden until a comment's
-       Reply button is clicked. comments.js then points its action/hx-post at
-       the chosen parent comment (/comments/<id>/replies), fills the "replying
-       to" hint, and reveals it. Because the whole section is swapped after a
-       reply posts, this form re-renders hidden again with a blank hint. */}}
-  <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
-        method="post" action="" hx-post="" hx-target="#comments-{{.ID}}" hx-swap="outerHTML">
-    <p class="comment-reply-hint" hidden></p>
-    <label for="reply-input-{{.ID}}" class="visually-hidden">Write a reply</label>
-    <textarea id="reply-input-{{.ID}}" name="content" rows="2" maxlength="1000"
-              placeholder="Write a reply…" required></textarea>
-    <div class="comment-form-actions">
-      <button type="submit" class="button-secondary">Reply</button>
-    </div>
-  </form>
   {{/* The add-comment box opens here, below any existing comments, when the
        "Comment" button up in the post's action row is clicked (issue #29).
        That button (the "commenttrigger" template) targets this
@@ -280,9 +264,11 @@
      compounds past two visual tiers. A reply shows a subtle "replying to name"
      line above its body pointing at the comment it answers (.ReplyToName). A
      soft-deleted comment shows a "[deleted]" placeholder but keeps its replies
-     so the thread survives (Build
-     Plan §2.2). Reply/Delete forms target the whole post thread
-     (#comments-<postID>); comments.js toggles the reply box. */}}
+     so the thread survives (Build Plan §2.2). Each root comment carries one
+     shared reply form, rendered after its replies so it opens at the bottom of
+     that comment's sub-thread — not the bottom of the whole post (#58).
+     Reply/Delete forms target the whole post thread (#comments-<postID>);
+     comments.js toggles the reply box. */}}
 {{define "commentnode"}}
 <li class="comment{{if .Deleted}} comment-deleted{{end}}" id="comment-{{.ID}}">
   <div class="comment-head">
@@ -296,10 +282,10 @@
   {{if not .Deleted}}{{if .ReplyToName}}<p class="comment-mention">replying to {{.ReplyToName}}</p>{{end}}<div class="comment-content">{{.Content}}</div>{{end}}
   {{if not .Deleted}}
   <div class="comment-actions">
-    {{/* Every visible comment accepts replies now — depth is unbounded in the
-         data and flattened into one tier on render. There is no per-comment
-         reply form: clicking Reply reveals the single shared reply form at the
-         bottom of the thread and points it at this comment (issue #58).
+    {{/* Every visible comment accepts replies — depth is unbounded in the data
+         and flattened into one tier on render. There is no per-comment reply
+         form: clicking Reply reveals the shared reply form belonging to this
+         comment's root thread and points it at this comment (issue #58).
          data-reply-to carries the parent id used to build the reply URL;
          data-reply-to-name is the attribution shown in the form's hint. */}}
     <button type="button" class="linklike comment-reply-toggle"
@@ -316,10 +302,28 @@
   {{end}}
   {{/* Only roots emit the replies list — children are already flattened, so they
        never nest a list of their own. This guarantees exactly one <ul> level. */}}
-  {{if eq .ParentID 0}}{{if .Children}}
+  {{if eq .ParentID 0}}
+    {{if .Children}}
     <ul class="comment-list comment-replies">
       {{range .Children}}{{template "commentnode" .}}{{end}}
     </ul>
-  {{end}}{{end}}
+    {{end}}
+    {{/* The shared reply form for this whole sub-thread (issue #58), placed
+         after the replies so it opens at the bottom of this comment's group.
+         Starts hidden; comments.js points its action/hx-post at the chosen
+         parent comment (/comments/<id>/replies), fills the "replying to" hint,
+         and reveals it. The section swap after a reply posts re-renders it
+         hidden again with a blank hint. */}}
+    <form class="comment-form comment-reply-form" id="reply-{{.ID}}" hidden
+          method="post" action="" hx-post="" hx-target="#comments-{{.PostID}}" hx-swap="outerHTML">
+      <p class="comment-reply-hint" hidden></p>
+      <label for="reply-input-{{.ID}}" class="visually-hidden">Write a reply</label>
+      <textarea id="reply-input-{{.ID}}" name="content" rows="2" maxlength="1000"
+                placeholder="Write a reply…" required></textarea>
+      <div class="comment-form-actions">
+        <button type="submit" class="button-secondary">Reply</button>
+      </div>
+    </form>
+  {{end}}
 </li>
 {{end}}

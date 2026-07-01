@@ -7,13 +7,14 @@
 //     pointing directly at that thread's add-comment form. Clicking shows the
 //     form and focuses its textarea; clicking again hides it.
 //
-//   * Each comment's "Reply" button (.comment-reply-toggle) shares ONE reply
-//     form that lives at the bottom of the thread, below every reply (#58).
-//     The button carries data-reply-to (the parent comment id) and
-//     data-reply-to-name (its author). Clicking points the shared form at
-//     /comments/<id>/replies, fills the "replying to" hint, and reveals it.
-//     Clicking a different Reply re-points the same form; clicking the same
-//     Reply again hides it.
+//   * Each comment's "Reply" button (.comment-reply-toggle) shares the reply
+//     form on its ROOT comment, which sits after that comment's replies — so
+//     the box opens at the bottom of that sub-thread, not the whole post (#58).
+//     A Reply on a flattened child climbs to the same root form. The button
+//     carries data-reply-to (the parent comment id) and data-reply-to-name (its
+//     author). Clicking points the form at /comments/<id>/replies, fills the
+//     "replying to" hint, and reveals it. Clicking a different Reply in the same
+//     sub-thread re-points that form; clicking the same Reply again hides it.
 //
 // A single delegated listener covers forms and buttons that arrive later via
 // htmx swaps.
@@ -37,12 +38,25 @@
     form.setAttribute("hidden", "");
   }
 
-  // The shared reply form for a Reply button, found within the same thread
-  // section. Its id is reply-<postID> (see the "commentthread" template).
-  function replyFormFor(button) {
-    var section = button.closest(".comments");
-    if (!section) return null;
-    return section.querySelector(".comment-reply-form");
+  // The outermost .comment <li> containing a Reply button. Replies are
+  // flattened one tier under a root comment, so a Reply on a child still
+  // belongs to that root's sub-thread — climb past any nesting to reach it.
+  function rootCommentOf(button) {
+    var li = button.closest(".comment");
+    if (!li) return null;
+    var ancestor = li.parentElement && li.parentElement.closest(".comment");
+    while (ancestor) {
+      li = ancestor;
+      ancestor = li.parentElement && li.parentElement.closest(".comment");
+    }
+    return li;
+  }
+
+  // The shared reply form for a Reply button lives on its root comment, after
+  // that comment's replies, so it opens at the bottom of that sub-thread — not
+  // the bottom of the whole post (#58). Its id is reply-<rootCommentID>.
+  function replyFormFor(root) {
+    return root ? root.querySelector(":scope > .comment-reply-form") : null;
   }
 
   // Point the shared reply form at a parent comment and fill its attribution
@@ -69,7 +83,8 @@
   document.addEventListener("click", function (event) {
     var replyToggle = event.target.closest(".comment-reply-toggle");
     if (replyToggle) {
-      var form = replyFormFor(replyToggle);
+      var root = rootCommentOf(replyToggle);
+      var form = replyFormFor(root);
       if (!form) return;
 
       var parentID = replyToggle.getAttribute("data-reply-to");
@@ -81,13 +96,11 @@
         !form.hasAttribute("hidden") &&
         form.getAttribute("action") === "/comments/" + parentID + "/replies";
 
-      // Reset every Reply button's expanded state, then mark this one.
-      var section = replyToggle.closest(".comments");
-      if (section) {
-        section.querySelectorAll(".comment-reply-toggle").forEach(function (btn) {
-          btn.setAttribute("aria-expanded", "false");
-        });
-      }
+      // Reset this sub-thread's Reply buttons, then mark the clicked one. Scoped
+      // to the root so other comments' open reply boxes are left untouched.
+      root.querySelectorAll(".comment-reply-toggle").forEach(function (btn) {
+        btn.setAttribute("aria-expanded", "false");
+      });
 
       if (alreadyThis) {
         hide(form);
