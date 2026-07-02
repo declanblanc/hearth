@@ -1247,9 +1247,12 @@ button.button-danger {
   border-top: 1.5px solid var(--line);
   border-top-left-radius: 7px;
 }
+/* The referenced author carries a faded ember tint — enough warmth to read as
+   distinct from the plain --ink author name of the reply right below it, but
+   dimmed well back so the whole line stays a quiet aside, not an accent. */
 .comment-reply-ref-author {
   font-weight: 600;
-  color: var(--ink);
+  color: color-mix(in srgb, var(--ember) 45%, var(--ink-soft));
   flex-shrink: 0;
 }
 .comment-reply-ref-snippet {
@@ -1258,8 +1261,8 @@ button.button-danger {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.comment-reply-ref:hover .comment-reply-ref-author,
-.comment-reply-ref:hover .comment-reply-ref-snippet {
+/* Hover gives the line a gentle warm lift without ever reaching full ember. */
+.comment-reply-ref:hover .comment-reply-ref-author {
   color: var(--ember);
 }
 
