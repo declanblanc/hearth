@@ -303,6 +303,10 @@
       <button type="submit" class="delete-icon" aria-label="Delete comment">{{template "trashicon"}}</button>
     </form>
   {{end}}
+  {{/* .comment-main wraps only this comment's own rows. A top-level comment's
+       <li> also contains its nested reply <ul>, so the deep-link highlight is
+       scoped to this wrapper — never the whole reply thread. */}}
+  <div class="comment-main">
   {{if .ReplyToID}}<a class="comment-reply-ref{{if .ReplyToSelf}} comment-reply-ref-self{{end}}" href="#comment-{{.ReplyToID}}"><span class="comment-reply-ref-author">{{if .ReplyToSelf}}you{{else}}{{.ReplyToName}}{{end}}</span><span class="comment-reply-ref-snippet">{{.ReplyToSnippet}}</span></a>{{end}}
   <div class="comment-head">
     <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
@@ -326,6 +330,7 @@
       <span>Reply</span>
     </button>
   </div>
+  </div>{{/* /.comment-main */}}
   {{/* Only roots emit the replies list — children are already flattened, so they
        never nest a list of their own. This guarantees exactly one <ul> level. */}}
   {{if eq .ParentID 0}}

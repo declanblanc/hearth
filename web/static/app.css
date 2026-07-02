@@ -1983,3 +1983,25 @@ span.invite-url { box-shadow: none; }
     box-shadow: 0 0 0 2px var(--ember);
   }
 }
+
+/* A top-level comment's <li> also wraps its whole nested reply thread, so
+   glowing the <li> itself would light up the entire subtree. Redirect the
+   highlight onto the comment's own rows (.comment-main), and neutralise it on
+   the <li> so only the clicked comment is marked. */
+.comment.highlight-target {
+  animation: none;
+  background-color: transparent;
+  box-shadow: none;
+}
+.comment.highlight-target > .comment-main {
+  animation: highlight-fade 2s ease-out forwards;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .comment.highlight-target > .comment-main {
+    animation: none;
+    background-color: color-mix(in srgb, var(--ember) 18%, transparent);
+    box-shadow: 0 0 0 2px var(--ember);
+    border-radius: 6px;
+  }
+}
