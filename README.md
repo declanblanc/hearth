@@ -31,3 +31,15 @@ See `Appendix A` of the Build & Test Plan. The actual tree mirrors it.
 
 `Dockerfile` produces a static distroless image. `fly.toml` is a Fly.io
 template. Litestream config in `litestream.yml`.
+
+## Contributing
+
+Hearth is a personal project shared as reference. You're welcome to fork and
+adapt it under the license below, but I'm not accepting pull requests or
+feature requests.
+
+## License
+
+Licensed under the GNU Affero General Public License v3.0 — see
+[LICENSE](LICENSE). If you run a modified version as a network service, AGPL
+§13 requires you to offer its source to your users.
