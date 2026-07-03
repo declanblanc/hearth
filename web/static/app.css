@@ -758,6 +758,17 @@ small.error { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Inline GIF embedded from a link in post/comment text. Capped so a large
+   animation doesn't dominate the card; comment GIFs share this rule. */
+.post-gif {
+  display: block;
+  max-width: 100%;
+  max-height: 22rem;
+  width: auto;
+  height: auto;
+  margin-top: 0.4rem;
+  border-radius: var(--radius, 8px);
+}
 .post-actions {
   margin-top: 0.6rem;
   display: flex;

@@ -11,6 +11,8 @@ retroactively to mark meaningful steps, not formal releases.
 
 ### Added
 
+- Links in posts and comments are now clickable, and links to a GIF are
+  embedded so the animation plays inline.
 - Your own posts in the home feed now show a delete control, so you can
   remove a post without visiting your profile page.
 

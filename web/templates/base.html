@@ -159,7 +159,7 @@
     </a>
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </header>
-  {{if .Content}}<div class="post-content">{{.Content}}</div>{{end}}
+  {{if .Content}}<div class="post-content">{{richtext .Content}}</div>{{end}}
   {{template "postmedia" .}}
   <div class="post-actions">{{template "commenttrigger" .}}</div>
   {{template "commentthread" .}}
@@ -312,7 +312,7 @@
     <a href="/u/{{.AuthorUsername}}" class="comment-author">{{.AuthorName}}</a>
     <span class="muted"> · <time datetime="{{isodatetime .CreatedAt}}">{{datetime .CreatedAt}}</time></span>
   </div>
-  <div class="comment-content">{{.Content}}</div>
+  <div class="comment-content">{{richtext .Content}}</div>
   <div class="comment-actions">
     {{/* Every visible comment accepts replies — depth is unbounded in the data
          and flattened into one tier on render. There is no per-comment reply

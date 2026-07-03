@@ -79,3 +79,50 @@ func TestISODatetimeZeroIsEmpty(t *testing.T) {
 		t.Errorf("isodatetime(zero) = %q, want empty string", got)
 	}
 }
+
+func TestRichtext(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "plain text is escaped, not treated as markup",
+			in:   "hello <b>world</b> & friends",
+			want: "hello &lt;b&gt;world&lt;/b&gt; &amp; friends",
+		},
+		{
+			name: "bare url becomes a link",
+			in:   "see https://example.com/page for more",
+			want: `see <a href="https://example.com/page" target="_blank" rel="noopener nofollow">https://example.com/page</a> for more`,
+		},
+		{
+			name: "trailing sentence punctuation stays outside the link",
+			in:   "go to https://example.com.",
+			want: `go to <a href="https://example.com" target="_blank" rel="noopener nofollow">https://example.com</a>.`,
+		},
+		{
+			name: "gif link is embedded as an image",
+			in:   "look https://media.example.com/cat.gif",
+			want: `look <img src="https://media.example.com/cat.gif" alt="" class="post-gif" loading="lazy">`,
+		},
+		{
+			name: "gif with query string still embeds",
+			in:   "https://media.example.com/cat.GIF?v=2",
+			want: `<img src="https://media.example.com/cat.GIF?v=2" alt="" class="post-gif" loading="lazy">`,
+		},
+		{
+			name: "url query params are escaped in the href",
+			in:   "https://example.com/?a=1&b=2",
+			want: `<a href="https://example.com/?a=1&amp;b=2" target="_blank" rel="noopener nofollow">https://example.com/?a=1&amp;b=2</a>`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(richtext(tc.in))
+			if got != tc.want {
+				t.Errorf("richtext(%q):\n got: %s\nwant: %s", tc.in, got, tc.want)
+			}
+		})
+	}
+}

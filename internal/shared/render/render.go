@@ -17,6 +17,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -143,9 +145,57 @@ func humanDatetime(t, now time.Time) string {
 	return t.Format(layout) + " UTC"
 }
 
+// urlPattern matches http(s) URLs in post/comment text. The character class
+// deliberately excludes whitespace and angle brackets so it stops at word
+// boundaries; trailing punctuation is trimmed separately in richtext.
+var urlPattern = regexp.MustCompile(`https?://[^\s<>]+`)
+
+// richtext turns plain user-submitted text into safe HTML: URLs become clickable
+// links, and links to a .gif are embedded as an image so the animation shows
+// inline. Everything is HTML-escaped first, so the input is never treated as
+// markup — only the links we construct are.
+func richtext(raw string) template.HTML {
+	var out strings.Builder
+	lastIndex := 0
+	for _, loc := range urlPattern.FindAllStringIndex(raw, -1) {
+		start, end := loc[0], loc[1]
+		// Escape the plain text preceding this URL.
+		out.WriteString(template.HTMLEscapeString(raw[lastIndex:start]))
+
+		// Trailing punctuation (a period ending a sentence, a closing paren)
+		// usually isn't part of the URL, so push it back into the plain text.
+		url := raw[start:end]
+		trimmed := strings.TrimRight(url, ".,;:!?)]}'\"")
+		trailing := url[len(trimmed):]
+		url = trimmed
+
+		escaped := template.HTMLEscapeString(url)
+		if isGIF(url) {
+			out.WriteString(`<img src="` + escaped + `" alt="" class="post-gif" loading="lazy">`)
+		} else {
+			out.WriteString(`<a href="` + escaped + `" target="_blank" rel="noopener nofollow">` + escaped + `</a>`)
+		}
+		out.WriteString(template.HTMLEscapeString(trailing))
+		lastIndex = end
+	}
+	out.WriteString(template.HTMLEscapeString(raw[lastIndex:]))
+	return template.HTML(out.String()) //nolint:gosec // all dynamic parts are escaped above
+}
+
+// isGIF reports whether a URL points at a .gif file, ignoring any query string
+// or fragment (e.g. "https://host/cat.gif?v=2").
+func isGIF(url string) bool {
+	path := url
+	if i := strings.IndexAny(path, "?#"); i >= 0 {
+		path = path[:i]
+	}
+	return strings.HasSuffix(strings.ToLower(path), ".gif")
+}
+
 func funcMap() template.FuncMap {
 	return template.FuncMap{
-		"safe": func(s string) template.HTML { return template.HTML(s) }, //nolint:gosec
+		"richtext": richtext,
+		"safe":     func(s string) template.HTML { return template.HTML(s) }, //nolint:gosec
 		// datetime renders a human-readable fallback for a timestamp, e.g.
 		// "Jan 2, 3:04 PM UTC" (or with the year for older posts). Timestamps
 		// are stored in UTC, so we format in UTC and label it as such — this is
